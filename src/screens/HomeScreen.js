@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, TextInput, Alert } from 'react-native'
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, TextInput, Alert, Image } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -66,7 +66,10 @@ export default function HomeScreen({ navigation }) {
           const profit = getProfit(p)
           return (
             <TouchableOpacity style={s.card} onPress={() => navigation.navigate('ProjectDetail', {projectId:p.id, onReturn:load})}>
-              <View style={s.cardIcon}><Text style={{fontSize:28}}>{ICONS[p.category]||'📦'}</Text></View>
+            {p.photo
+              ? <Image source={{ uri: p.photo }} style={s.cardPhoto} resizeMode="cover" />
+              : <View style={s.cardIcon}><Text style={{fontSize:28}}>{ICONS[p.category]||'📦'}</Text></View>
+            }
               <View style={s.cardBody}>
                 <Text style={s.cardCat}>{p.category}</Text>
                 <Text style={s.cardTitle} numberOfLines={1}>{p.title}</Text>
@@ -110,7 +113,8 @@ const s = StyleSheet.create({
   searchWrap:{flexDirection:'row',alignItems:'center',marginHorizontal:16,marginTop:10,backgroundColor:'#fff',borderRadius:10,borderWidth:1,borderColor:'#E8E4DE',paddingHorizontal:10},
   searchInput:{flex:1,paddingVertical:10,fontSize:14,color:'#1A1917'},
   card:{flexDirection:'row',alignItems:'center',backgroundColor:'#fff',borderRadius:12,marginBottom:10,marginTop:4,padding:14,shadowColor:'#000',shadowOpacity:0.04,shadowRadius:8,shadowOffset:{width:0,height:2},elevation:2},
-  cardIcon:{width:48,height:48,borderRadius:12,backgroundColor:'#F5F2EE',alignItems:'center',justifyContent:'center',marginRight:12},
+  cardIcon:{width:56,height:56,borderRadius:12,backgroundColor:'#F5F2EE',alignItems:'center',justifyContent:'center',marginRight:12},
+  cardPhoto:{width:56,height:56,borderRadius:12,marginRight:12},
   cardBody:{flex:1},cardCat:{fontSize:10,color:'#A8A49E',textTransform:'uppercase',letterSpacing:0.5,marginBottom:2},
   cardTitle:{fontSize:16,fontWeight:'700',color:'#1A1917',marginBottom:4},
   cardMeta:{flexDirection:'row',alignItems:'center',gap:8},cardInvested:{fontSize:13,color:'#8C8880'},

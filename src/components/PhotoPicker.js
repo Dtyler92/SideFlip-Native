@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 
 export default function PhotoPicker({ userId, photoUrl, onUploaded }) {
   const [uploading, setUploading] = useState(false)
+  const [imgError, setImgError] = useState(false)
 
   async function pick(useCamera) {
     const permFn = useCamera
@@ -18,19 +19,26 @@ export default function PhotoPicker({ userId, photoUrl, onUploaded }) {
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.7 })
 
     if (result.canceled) return
-    const uri = result.assets[0].uri
-    await upload(uri)
+    await upload(result.assets[0])
   }
 
-  async function upload(uri) {
+  async function upload(asset) {
     setUploading(true)
+    setImgError(false)
     try {
-      const ext = uri.split('.').pop().toLowerCase() || 'jpg'
-      const path = `${userId}/${Date.now()}.${ext}`
-      const response = await fetch(uri)
-      const blob = await response.blob()
-      const { error } = await supabase.storage.from('project-photos').upload(path, blob, { contentType: `image/${ext}`, upsert: true })
+      const path = `${userId}/${Date.now()}.jpg`
+
+      // Use fetch + arraybuffer for reliable upload with correct content type
+      const response = await fetch(asset.uri)
+      const arrayBuffer = await response.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
+
+      const { error } = await supabase.storage
+        .from('project-photos')
+        .upload(path, uint8Array, { contentType: 'image/jpeg', upsert: true })
+
       if (error) throw error
+
       const { data } = supabase.storage.from('project-photos').getPublicUrl(path)
       onUploaded(data.publicUrl)
     } catch (err) {
@@ -44,26 +52,37 @@ export default function PhotoPicker({ userId, photoUrl, onUploaded }) {
     Alert.alert('Add Photo', '', [
       { text: 'Take Photo', onPress: () => pick(true) },
       { text: 'Choose from Library', onPress: () => pick(false) },
+      photoUrl ? { text: 'Remove Photo', style: 'destructive', onPress: () => { onUploaded(null); setImgError(false) } } : null,
       { text: 'Cancel', style: 'cancel' },
-    ])
+    ].filter(Boolean))
   }
 
+  const showImage = photoUrl && !imgError && !uploading
+
   return (
-    <TouchableOpacity style={s.container} onPress={showOptions} disabled={uploading}>
-      {photoUrl ? (
+    <TouchableOpacity style={s.container} onPress={showOptions} disabled={uploading} activeOpacity={0.85}>
+      {showImage ? (
         <>
-          <Image source={{ uri: photoUrl }} style={s.image} />
+          <Image
+            source={{ uri: photoUrl }}
+            style={s.image}
+            resizeMode="cover"
+            onError={() => setImgError(true)}
+          />
           <View style={s.changeOverlay}>
-            <Text style={s.changeText}>{uploading ? '⏳ Uploading…' : '✏️ Change Photo'}</Text>
+            <Text style={s.changeText}>✏️ Change Photo</Text>
           </View>
         </>
       ) : (
         <View style={s.placeholder}>
           {uploading
-            ? <ActivityIndicator color="#C8402F" />
+            ? <>
+                <ActivityIndicator color="#C8402F" size="large" />
+                <Text style={s.placeholderText}>Uploading…</Text>
+              </>
             : <>
                 <Text style={s.placeholderIcon}>📷</Text>
-                <Text style={s.placeholderText}>Tap to add a photo</Text>
+                <Text style={s.placeholderText}>{imgError ? 'Tap to retry photo' : 'Tap to add a photo'}</Text>
               </>
           }
         </View>
@@ -73,11 +92,11 @@ export default function PhotoPicker({ userId, photoUrl, onUploaded }) {
 }
 
 const s = StyleSheet.create({
-  container: { borderRadius: 12, overflow: 'hidden', marginBottom: 20, backgroundColor: '#F0EDE8' },
-  image: { width: '100%', height: 200, resizeMode: 'cover' },
+  container: { borderRadius: 12, overflow: 'hidden', marginBottom: 20, backgroundColor: '#F0EDE8', minHeight: 140 },
+  image: { width: '100%', height: 220 },
   changeOverlay: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   changeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  placeholder: { height: 140, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  placeholderIcon: { fontSize: 28 },
+  placeholder: { height: 140, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  placeholderIcon: { fontSize: 32 },
   placeholderText: { fontSize: 13, color: '#8C8880' },
 })
