@@ -9,11 +9,12 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FAFAF7"
+      "backgroundColor": "#1A1917"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sideflip.app",
+      "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "SideFlip uses your camera to take photos of your projects.",
         "NSPhotoLibraryUsageDescription": "SideFlip uses your photo library to attach photos to your projects."
@@ -22,9 +23,10 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FAFAF7"
+        "backgroundColor": "#1A1917"
       },
-      "package": "com.sideflip.app"
+      "package": "com.sideflip.app",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,6 +41,11 @@
           "cameraPermission": "SideFlip uses your camera to take photos of your projects."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "sideflip"
+      }
+    }
   }
 }
