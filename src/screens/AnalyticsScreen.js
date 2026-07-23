@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -22,6 +23,7 @@ function StatCard({ label, value, sub, color }) {
 }
 
 export default function AnalyticsScreen() {
+  const insets = useSafeAreaInsets()
   const { user } = useAuth()
   const [projects, setProjects] = useState([])
   const [refreshing, setRefreshing] = useState(false)
@@ -75,7 +77,7 @@ export default function AnalyticsScreen() {
   return (
     <ScrollView
       style={s.root}
-      contentContainerStyle={s.content}
+      contentContainerStyle={[s.content, { paddingTop: insets.top + 20 }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load() }} tintColor={ACCENT} />}
     >
       <Text style={s.heading}>Analytics</Text>

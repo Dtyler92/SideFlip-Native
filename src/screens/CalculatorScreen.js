@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -14,6 +15,7 @@ const PRESETS = [
 ]
 
 export default function CalculatorScreen() {
+  const insets = useSafeAreaInsets()
   const [invested, setInvested] = useState('')
   const [targetPct, setTargetPct] = useState('50')
   const [fees, setFees] = useState('10') // platform fees %
@@ -35,7 +37,7 @@ export default function CalculatorScreen() {
   })
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+    <ScrollView style={s.root} contentContainerStyle={[s.content, { paddingTop: insets.top + 20 }]} keyboardShouldPersistTaps="handled">
       <Text style={s.heading}>List Price Calculator</Text>
       <Text style={s.sub}>Find out exactly what to list for to hit your profit goal.</Text>
 
