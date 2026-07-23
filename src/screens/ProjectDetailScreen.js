@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator, Share } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
-import PhotoPicker from '../components/PhotoPicker'
+import MultiPhotoPicker from '../components/MultiPhotoPicker'
 
 const ACCENT = '#C8402F'
+const GREEN = '#2D7A4F'
 const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
 
@@ -22,6 +23,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [showAddExpense, setShowAddExpense] = useState(false)
   const [expense, setExpense] = useState({ description: '', amount: '', category: 'parts' })
   const [saving, setSaving] = useState(false)
+  const [generatingListing, setGeneratingListing] = useState(false)
 
   async function load() {
     const { data } = await supabase.from('projects').select('*, expenses(*)').eq('id', projectId).single()
@@ -30,6 +32,13 @@ export default function ProjectDetailScreen({ navigation, route }) {
   }
 
   useEffect(() => { load() }, [projectId])
+
+  async function handlePhotosUpdate(urls) {
+    const photo = urls[0] || null
+    const photos = urls
+    await supabase.from('projects').update({ photo, photos }).eq('id', projectId)
+    setProject(p => ({ ...p, photo, photos }))
+  }
 
   async function handleAddExpense() {
     if (!expense.description.trim() || !expense.amount) return Alert.alert('Fill in description and amount')
@@ -67,11 +76,43 @@ export default function ProjectDetailScreen({ navigation, route }) {
     ])
   }
 
+  async function generateListing() {
+    setGeneratingListing(true)
+    try {
+      const totalInvested = getTotalInvested(project)
+      const res = await fetch('https://sideflip.org/api/generate-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: project.title,
+          category: project.category,
+          purchasePrice: project.purchase_price,
+          expenses: project.expenses || [],
+          totalInvested,
+          notes: project.notes,
+          salePrice: project.sale_price,
+        })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.listing) throw new Error(data.error || 'Could not generate listing')
+
+      Alert.alert('Your FB Listing', data.listing, [
+        { text: 'Share', onPress: () => Share.share({ message: data.listing }) },
+        { text: 'Close', style: 'cancel' }
+      ])
+    } catch (err) {
+      Alert.alert('Could not generate listing', err.message)
+    } finally {
+      setGeneratingListing(false)
+    }
+  }
+
   if (loading) return <View style={{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#FAFAF7'}}><ActivityIndicator color={ACCENT} /></View>
   if (!project) return <View style={{flex:1,padding:24}}><Text>Project not found.</Text></View>
 
   const totalInvested = getTotalInvested(project)
   const profit = project.sale_price ? Number(project.sale_price) - totalInvested : null
+  const photos = project.photos || (project.photo ? [project.photo] : [])
 
   return (
     <View style={s.root}>
@@ -86,15 +127,8 @@ export default function ProjectDetailScreen({ navigation, route }) {
       </View>
 
       <ScrollView contentContainerStyle={s.content}>
-        {/* Photo */}
-        <PhotoPicker
-          userId={user.id}
-          photoUrl={project.photo}
-          onUploaded={async (url) => {
-            await supabase.from('projects').update({ photo: url }).eq('id', projectId)
-            load()
-          }}
-        />
+        {/* Multi Photo */}
+        <MultiPhotoPicker userId={user.id} photos={photos} onUpdate={handlePhotosUpdate} />
 
         {/* Stats */}
         <View style={s.statsCard}>
@@ -181,14 +215,39 @@ export default function ProjectDetailScreen({ navigation, route }) {
                 <Text style={[s.btnText,{color:'#1A1917'}]}>+ Add Expense</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={[s.btn,{backgroundColor:'#2D7A4F'}]}
+
+            {/* AI Listing Generator */}
+            <TouchableOpacity
+              style={[s.btn, {backgroundColor:'#1A1917', marginBottom:10}, generatingListing && s.btnDisabled]}
+              onPress={generateListing}
+              disabled={generatingListing}
+            >
+              {generatingListing
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={s.btnText}>✨ Generate FB Listing</Text>
+              }
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[s.btn,{backgroundColor:GREEN}]}
               onPress={() => navigation.navigate('SellProject', {projectId, project, onReturn:()=>{onReturn?.();load()}})}>
               <Text style={s.btnText}>💰 Mark as Sold</Text>
             </TouchableOpacity>
           </>
         )}
         {project.status === 'sold' && (
-          <View style={s.soldBadge}><Text style={s.soldText}>✅ Sold for {fmt(project.sale_price)}</Text></View>
+          <>
+            <TouchableOpacity
+              style={[s.btn, {backgroundColor:'#1A1917', marginBottom:10}, generatingListing && s.btnDisabled]}
+              onPress={generateListing}
+              disabled={generatingListing}
+            >
+              {generatingListing
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={s.btnText}>✨ Generate FB Listing</Text>
+              }
+            </TouchableOpacity>
+            <View style={s.soldBadge}><Text style={s.soldText}>✅ Sold for {fmt(project.sale_price)}</Text></View>
+          </>
         )}
       </ScrollView>
     </View>

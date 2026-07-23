@@ -66,8 +66,8 @@ export default function HomeScreen({ navigation }) {
           const profit = getProfit(p)
           return (
             <TouchableOpacity style={s.card} onPress={() => navigation.navigate('ProjectDetail', {projectId:p.id, onReturn:load})}>
-            {p.photo
-              ? <Image source={{ uri: p.photo }} style={s.cardPhoto} resizeMode="cover" />
+          {p.photo || (p.photos && p.photos[0])
+              ? <Image source={{ uri: p.photo || p.photos[0] }} style={s.cardPhoto} resizeMode="cover" />
               : <View style={s.cardIcon}><Text style={{fontSize:28}}>{ICONS[p.category]||'📦'}</Text></View>
             }
               <View style={s.cardBody}>
