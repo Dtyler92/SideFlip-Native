@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert,
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import PhotoPicker from '../components/PhotoPicker'
 
 const CATEGORIES = [
   {value:'mower',label:'🚜 Lawn Mower'},{value:'car',label:'🚗 Car'},
@@ -20,6 +21,7 @@ export default function NewProjectScreen({ navigation, route }) {
   const [category, setCategory] = useState('mower')
   const [purchasePrice, setPurchasePrice] = useState('')
   const [notes, setNotes] = useState('')
+  const [photo, setPhoto] = useState(null)
   const [saving, setSaving] = useState(false)
   const [showCats, setShowCats] = useState(false)
 
@@ -33,6 +35,7 @@ export default function NewProjectScreen({ navigation, route }) {
         category,
         purchase_price: Number(purchasePrice) || 0,
         notes: notes.trim() || null,
+        photo: photo || null,
         status: 'active',
       })
       onReturn?.()
@@ -57,6 +60,8 @@ export default function NewProjectScreen({ navigation, route }) {
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+        <PhotoPicker userId={user.id} photoUrl={photo} onUploaded={setPhoto} />
+
         <Text style={s.label}>Project Name *</Text>
         <TextInput style={s.input} placeholder="e.g. Honda HRR216 Mower" placeholderTextColor="#A8A49E"
           value={title} onChangeText={setTitle} autoFocus />

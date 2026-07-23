@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
+import PhotoPicker from '../components/PhotoPicker'
 
 const ACCENT = '#C8402F'
 const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
@@ -85,6 +86,16 @@ export default function ProjectDetailScreen({ navigation, route }) {
       </View>
 
       <ScrollView contentContainerStyle={s.content}>
+        {/* Photo */}
+        <PhotoPicker
+          userId={user.id}
+          photoUrl={project.photo}
+          onUploaded={async (url) => {
+            await supabase.from('projects').update({ photo: url }).eq('id', projectId)
+            load()
+          }}
+        />
+
         {/* Stats */}
         <View style={s.statsCard}>
           <View style={s.statRow}>

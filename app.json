@@ -1,32 +1,44 @@
 {
   "expo": {
-    "name": "sideflip-native",
-    "slug": "sideflip-native",
+    "name": "SideFlip",
+    "slug": "sideflip",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FAFAF7"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sideflip.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "SideFlip uses your camera to take photos of your projects.",
+        "NSPhotoLibraryUsageDescription": "SideFlip uses your photo library to attach photos to your projects."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      }
+        "backgroundColor": "#FAFAF7"
+      },
+      "package": "com.sideflip.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-secure-store",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SideFlip uses your photo library to attach photos to your projects.",
+          "cameraPermission": "SideFlip uses your camera to take photos of your projects."
+        }
+      ]
     ]
   }
 }
