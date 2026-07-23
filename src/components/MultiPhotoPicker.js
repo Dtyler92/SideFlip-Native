@@ -14,8 +14,8 @@ export default function MultiPhotoPicker({ userId, photos = [], onUpdate }) {
     if (!granted) return Alert.alert('Permission required', 'Photo access is needed.')
 
     const result = useCamera
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.7 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.7, allowsMultipleSelection: true })
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.7 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, allowsMultipleSelection: true })
 
     if (result.canceled) return
     await uploadAll(result.assets)
@@ -77,7 +77,7 @@ export default function MultiPhotoPicker({ userId, photos = [], onUpdate }) {
           }
         </TouchableOpacity>
       </ScrollView>
-      {photos.length > 0 && <Text style={s.hint}>Tap a photo to remove it · First photo is main</Text>}
+      {photos.length > 0 && <Text style={s.hint}>Tap a photo to remove · First photo is main</Text>}
     </View>
   )
 }
