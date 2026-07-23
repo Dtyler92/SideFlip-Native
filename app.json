@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "SideFlip",
+    "name": "SideFlip: Flip Tracker",
     "slug": "sideflip",
+    "owner": "dtyler92",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -17,7 +18,8 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "SideFlip uses your camera to take photos of your projects.",
-        "NSPhotoLibraryUsageDescription": "SideFlip uses your photo library to attach photos to your projects."
+        "NSPhotoLibraryUsageDescription": "SideFlip uses your photo library to attach photos to your projects.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -28,10 +30,11 @@
       "package": "com.sideflip.app",
       "versionCode": 1,
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "READ_MEDIA_IMAGES"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
       ],
       "googleServicesFile": "./google-services.json"
     },
@@ -51,7 +54,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "sideflip"
+        "projectId": "5a788085-4849-4264-a346-e459e1bd005d"
       }
     }
   }
