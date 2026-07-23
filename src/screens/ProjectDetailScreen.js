@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator, Share } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator, Share, Modal, KeyboardAvoidingView, Platform } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
@@ -24,6 +24,8 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [expense, setExpense] = useState({ description: '', amount: '', category: 'parts' })
   const [saving, setSaving] = useState(false)
   const [generatingListing, setGeneratingListing] = useState(false)
+  const [listingText, setListingText] = useState('')
+  const [showListingModal, setShowListingModal] = useState(false)
 
   async function load() {
     const { data } = await supabase.from('projects').select('*, expenses(*)').eq('id', projectId).single()
@@ -79,27 +81,20 @@ export default function ProjectDetailScreen({ navigation, route }) {
   async function generateListing() {
     setGeneratingListing(true)
     try {
-      const totalInvested = getTotalInvested(project)
       const res = await fetch('https://sideflip.org/api/generate-listing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: project.title,
           category: project.category,
-          purchasePrice: project.purchase_price,
           expenses: project.expenses || [],
-          totalInvested,
           notes: project.notes,
-          salePrice: project.sale_price,
         })
       })
       const data = await res.json()
       if (!res.ok || !data.listing) throw new Error(data.error || 'Could not generate listing')
-
-      Alert.alert('Your FB Listing', data.listing, [
-        { text: 'Share', onPress: () => Share.share({ message: data.listing }) },
-        { text: 'Close', style: 'cancel' }
-      ])
+      setListingText(data.listing)
+      setShowListingModal(true)
     } catch (err) {
       Alert.alert('Could not generate listing', err.message)
     } finally {
@@ -250,6 +245,39 @@ export default function ProjectDetailScreen({ navigation, route }) {
           </>
         )}
       </ScrollView>
+
+      {/* Listing Editor Modal */}
+      <Modal visible={showListingModal} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={s.modalRoot}>
+            <View style={s.modalHeader}>
+              <TouchableOpacity onPress={() => setShowListingModal(false)}>
+                <Text style={s.modalCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={s.modalTitle}>FB Listing</Text>
+              <TouchableOpacity onPress={() => Share.share({ message: listingText })}>
+                <Text style={s.modalShare}>Share ↗</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={s.modalHint}>Edit the listing below before sharing</Text>
+            <TextInput
+              style={s.listingInput}
+              value={listingText}
+              onChangeText={setListingText}
+              multiline
+              autoFocus
+              scrollEnabled
+              textAlignVertical="top"
+            />
+            <TouchableOpacity
+              style={s.modalShareBtn}
+              onPress={() => Share.share({ message: listingText })}
+            >
+              <Text style={s.modalShareBtnText}>📋 Share / Copy Listing</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   )
 }
@@ -284,4 +312,13 @@ const s = StyleSheet.create({
   btnDisabled:{opacity:0.6},btnText:{color:'#fff',fontSize:15,fontWeight:'700'},
   soldBadge:{backgroundColor:'#E8F5EE',borderRadius:10,padding:16,alignItems:'center'},
   soldText:{fontSize:15,fontWeight:'700',color:'#2D7A4F'},
+  modalRoot:{flex:1,backgroundColor:'#FAFAF7',padding:20},
+  modalHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:8,paddingTop:8},
+  modalTitle:{fontSize:17,fontWeight:'700',color:'#1A1917'},
+  modalCancel:{fontSize:15,color:'#8C8880'},
+  modalShare:{fontSize:15,fontWeight:'700',color:'#C8402F'},
+  modalHint:{fontSize:12,color:'#A8A49E',marginBottom:12},
+  listingInput:{flex:1,backgroundColor:'#fff',borderRadius:12,borderWidth:1,borderColor:'#E8E4DE',padding:16,fontSize:15,color:'#1A1917',lineHeight:22},
+  modalShareBtn:{backgroundColor:'#C8402F',borderRadius:12,padding:16,alignItems:'center',marginTop:16},
+  modalShareBtnText:{color:'#fff',fontSize:16,fontWeight:'700'},
 })
