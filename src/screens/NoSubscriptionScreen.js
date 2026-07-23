@@ -8,9 +8,9 @@ export default function NoSubscriptionScreen() {
       <View style={s.inner}>
         <Text style={s.logo}><Text style={s.logoSide}>Side</Text><Text style={s.logoFlip}>Flip</Text></Text>
         <Text style={s.title}>Subscription Required</Text>
-        <Text style={s.body}>Your account ({user?.email}) doesn't have an active subscription.{'\n\n'}Visit sideflip.org to start your 7-day free trial, then sign in here.</Text>
+        <Text style={s.body}>Your account ({user?.email}) doesn't have an active subscription.{'\n\n'}Visit sideflip.org to manage your account.</Text>
         <TouchableOpacity style={s.btn} onPress={() => Linking.openURL('https://sideflip.org')}>
-          <Text style={s.btnText}>Go to sideflip.org →</Text>
+          <Text style={s.btnText}>Go to sideflip.org</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.signOutLink} onPress={signOut}>
           <Text style={s.link}>Sign out</Text>
