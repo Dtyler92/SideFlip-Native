@@ -83,6 +83,17 @@ export default function ProjectDetailScreen({ navigation, route }) {
     ])
   }
 
+  async function handleUndoSold() {
+    Alert.alert('Undo Sale', 'Move this project back to active?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Undo Sale', style: 'destructive', onPress: async () => {
+        await supabase.from('projects').update({ sale_price: null, sold_at: null, status: 'active' }).eq('id', projectId)
+        onReturn?.()
+        load()
+      }}
+    ])
+  }
+
   async function generateListing() {
     setGeneratingListing(true)
     try {
@@ -247,6 +258,9 @@ export default function ProjectDetailScreen({ navigation, route }) {
               }
             </TouchableOpacity>
             <View style={s.soldBadge}><Text style={s.soldText}>✅ Sold for {fmt(project.sale_price)}</Text></View>
+            <TouchableOpacity style={s.undoBtn} onPress={handleUndoSold}>
+              <Text style={s.undoText}>Undo Sale</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -318,6 +332,8 @@ const s = StyleSheet.create({
   btnDisabled:{opacity:0.6},btnText:{color:'#fff',fontSize:15,fontWeight:'700'},
   soldBadge:{backgroundColor:'#E8F5EE',borderRadius:10,padding:16,alignItems:'center'},
   soldText:{fontSize:15,fontWeight:'700',color:'#2D7A4F'},
+  undoBtn:{alignItems:'center',paddingVertical:10},
+  undoText:{fontSize:13,color:'#A8A49E',fontWeight:'600',textDecorationLine:'underline'},
   modalRoot:{flex:1,backgroundColor:'#FAFAF7',padding:20},
   modalHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:8,paddingTop:8},
   modalTitle:{fontSize:17,fontWeight:'700',color:'#1A1917'},
