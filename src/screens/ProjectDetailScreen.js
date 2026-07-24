@@ -31,7 +31,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
   async function load() {
     const { data } = await supabase.from('projects').select('*, expenses(*)').eq('id', projectId).single()
     setProject(data)
-    setPhotos(data?.photos || (data?.photo ? [data.photo] : []))
+    setPhotos((data?.photos?.length > 0) ? data.photos : (data?.photo ? [data.photo] : []))
     setLoading(false)
   }
 
