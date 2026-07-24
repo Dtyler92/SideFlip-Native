@@ -62,9 +62,6 @@ export default function SettingsScreen() {
       <Text style={s.sectionTitle}>Account</Text>
       <View style={s.card}>
         <Text style={s.accountEmail}>{user?.email}</Text>
-        <TouchableOpacity onPress={() => Linking.openURL('https://sideflip.org')}>
-          <Text style={s.manageLink}>Manage Subscription →</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Currency */}
@@ -108,6 +105,11 @@ export default function SettingsScreen() {
       {/* Sign Out */}
       <TouchableOpacity style={s.signOutBtn} onPress={confirmSignOut}>
         <Text style={s.signOutText}>Sign Out</Text>
+      </TouchableOpacity>
+
+      {/* Manage Subscription */}
+      <TouchableOpacity onPress={() => Linking.openURL('https://sideflip.org')} style={{ alignItems: 'center', marginBottom: 20 }}>
+        <Text style={s.manageLink}>Manage Subscription →</Text>
       </TouchableOpacity>
 
       {/* Version */}
