@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Linking } from 'react-native'
 import { useState } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
@@ -62,10 +62,7 @@ export default function SettingsScreen() {
       <Text style={s.sectionTitle}>Account</Text>
       <View style={s.card}>
         <Text style={s.accountEmail}>{user?.email}</Text>
-        <TouchableOpacity onPress={() => Alert.alert('Manage Subscription', 'Visit sideflip.org to manage your subscription.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open sideflip.org', onPress: () => {} },
-        ])}>
+        <TouchableOpacity onPress={() => Linking.openURL('https://sideflip.org')}>
           <Text style={s.manageLink}>Manage Subscription →</Text>
         </TouchableOpacity>
       </View>
