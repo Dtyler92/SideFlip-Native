@@ -121,6 +121,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
+      <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'}>
       <ScrollView contentContainerStyle={s.content}>
         {/* Multi Photo */}
         <MultiPhotoPicker userId={user.id} photos={photos} onUpdate={handlePhotosUpdate} />
@@ -245,6 +246,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Listing Editor Modal */}
       <Modal visible={showListingModal} animationType="slide" presentationStyle="pageSheet">

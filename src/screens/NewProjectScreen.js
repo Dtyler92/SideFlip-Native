@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -59,6 +59,7 @@ export default function NewProjectScreen({ navigation, route }) {
         <View style={{width:60}} />
       </View>
 
+      <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'}>
       <ScrollView style={s.scroll} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         <PhotoPicker userId={user.id} photoUrl={photo} onUploaded={setPhoto} />
 
@@ -94,6 +95,7 @@ export default function NewProjectScreen({ navigation, route }) {
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Create Project →</Text>}
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   )
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
 import { supabase } from '../lib/supabase'
 
 const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
@@ -45,7 +45,8 @@ export default function SellProjectScreen({ navigation, route }) {
         <View style={{width:60}} />
       </View>
 
-      <View style={s.content}>
+      <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'}>
+      <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         <View style={s.card}>
           <Text style={s.projectLabel}>Project</Text>
           <Text style={s.projectTitle}>{project.title}</Text>
@@ -75,7 +76,8 @@ export default function SellProjectScreen({ navigation, route }) {
         <TouchableOpacity style={s.cancelBtn} onPress={() => navigation.goBack()}>
           <Text style={s.cancelText}>Cancel</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   )
 }
