@@ -26,10 +26,12 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [generatingListing, setGeneratingListing] = useState(false)
   const [listingText, setListingText] = useState('')
   const [showListingModal, setShowListingModal] = useState(false)
+  const [photos, setPhotos] = useState([])
 
   async function load() {
     const { data } = await supabase.from('projects').select('*, expenses(*)').eq('id', projectId).single()
     setProject(data)
+    setPhotos(data?.photos || (data?.photo ? [data.photo] : []))
     setLoading(false)
   }
 
@@ -37,9 +39,12 @@ export default function ProjectDetailScreen({ navigation, route }) {
 
   async function handlePhotosUpdate(urls) {
     const photo = urls[0] || null
-    const photos = urls
-    await supabase.from('projects').update({ photo, photos }).eq('id', projectId)
-    setProject(p => ({ ...p, photo, photos }))
+    const { error } = await supabase.from('projects').update({ photo, photos: urls }).eq('id', projectId)
+    if (error) {
+      await supabase.from('projects').update({ photo }).eq('id', projectId)
+    }
+    setProject(p => ({ ...p, photo, photos: urls }))
+    setPhotos(urls)
   }
 
   async function handleAddExpense() {
@@ -107,7 +112,6 @@ export default function ProjectDetailScreen({ navigation, route }) {
 
   const totalInvested = getTotalInvested(project)
   const profit = project.sale_price ? Number(project.sale_price) - totalInvested : null
-  const photos = project.photos || (project.photo ? [project.photo] : [])
 
   return (
     <View style={s.root}>
