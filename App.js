@@ -13,16 +13,14 @@ import ProjectDetailScreen from './src/screens/ProjectDetailScreen'
 import SellProjectScreen from './src/screens/SellProjectScreen'
 import CalculatorScreen from './src/screens/CalculatorScreen'
 import AnalyticsScreen from './src/screens/AnalyticsScreen'
+import SettingsScreen from './src/screens/SettingsScreen'
+import OnboardingScreen from './src/screens/OnboardingScreen'
 
 const Stack = createNativeStackNavigator()
 const Tab = createBottomTabNavigator()
 
-function TabIcon({ emoji, label, focused }) {
-  return (
-    <View style={{ alignItems: 'center', gap: 2 }}>
-      <Text style={{ fontSize: focused ? 22 : 20, opacity: focused ? 1 : 0.5 }}>{emoji}</Text>
-    </View>
-  )
+function TabIcon({ emoji, focused }) {
+  return <Text style={{ fontSize: focused ? 22 : 20, opacity: focused ? 1 : 0.5 }}>{emoji}</Text>
 }
 
 function HomeTabs() {
@@ -42,27 +40,20 @@ function HomeTabs() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
-      <Tab.Screen
-        name="Projects"
-        component={HomeScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🔧" focused={focused} />, tabBarLabel: 'Projects' }}
-      />
-      <Tab.Screen
-        name="Calculator"
-        component={CalculatorScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🧮" focused={focused} />, tabBarLabel: 'Calculator' }}
-      />
-      <Tab.Screen
-        name="Analytics"
-        component={AnalyticsScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />, tabBarLabel: 'Analytics' }}
-      />
+      <Tab.Screen name="Projects" component={HomeScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🔧" focused={focused} />, tabBarLabel: 'Projects' }} />
+      <Tab.Screen name="Calculator" component={CalculatorScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🧮" focused={focused} />, tabBarLabel: 'Calculator' }} />
+      <Tab.Screen name="Analytics" component={AnalyticsScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />, tabBarLabel: 'Analytics' }} />
+      <Tab.Screen name="Settings" component={SettingsScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="⚙️" focused={focused} />, tabBarLabel: 'Settings' }} />
     </Tab.Navigator>
   )
 }
 
 function RootNavigator() {
-  const { user, loading, subscribed } = useAuth()
+  const { user, loading, subscribed, needsOnboarding, refreshProfile } = useAuth()
 
   if (loading) return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFAF7' }}>
@@ -82,6 +73,10 @@ function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="NoSubscription" component={NoSubscriptionScreen} />
     </Stack.Navigator>
+  )
+
+  if (needsOnboarding) return (
+    <OnboardingScreen onComplete={refreshProfile} />
   )
 
   return (

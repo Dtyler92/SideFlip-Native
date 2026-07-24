@@ -3,6 +3,11 @@ import { supabase, getProfile, isSubscribed } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 
+const CURRENCY_SYMBOLS = {
+  USD: '$', CAD: 'CA$', GBP: '£', EUR: '€',
+  AUD: 'A$', MXN: 'MX$', JPY: '¥', INR: '₹',
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -11,6 +16,7 @@ export function AuthProvider({ children }) {
   async function loadProfile(userId) {
     const p = await getProfile(userId)
     setProfile(p)
+    return p
   }
 
   useEffect(() => {
@@ -49,8 +55,36 @@ export function AuthProvider({ children }) {
     if (error) throw error
   }
 
+  async function refreshProfile() {
+    if (user) {
+      const p = await loadProfile(user.id)
+      return p
+    }
+  }
+
+  // Currency formatter based on user profile
+  const currency = profile?.currency || 'USD'
+  const language = profile?.language || 'en'
+  const currencySymbol = CURRENCY_SYMBOLS[currency] || '$'
+
+  function formatMoney(amount) {
+    const n = Number(amount || 0)
+    // JPY has no decimal places
+    const decimals = currency === 'JPY' ? 0 : 2
+    return currencySymbol + n.toLocaleString('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    })
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, subscribed: isSubscribed(profile), signIn, signOut, resetPassword }}>
+    <AuthContext.Provider value={{
+      user, profile, loading,
+      subscribed: isSubscribed(profile),
+      currency, language, currencySymbol, formatMoney,
+      signIn, signOut, resetPassword, refreshProfile,
+      needsOnboarding: profile && !profile.onboarded,
+    }}>
       {children}
     </AuthContext.Provider>
   )
