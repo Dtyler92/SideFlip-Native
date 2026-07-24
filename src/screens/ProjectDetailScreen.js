@@ -224,13 +224,13 @@ export default function ProjectDetailScreen({ navigation, route }) {
             >
               {generatingListing
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={s.btnText}>✨ Generate FB Listing</Text>
+                : <Text style={s.btnText}>Generate FB Listing</Text>
               }
             </TouchableOpacity>
 
             <TouchableOpacity style={[s.btn,{backgroundColor:GREEN}]}
               onPress={() => navigation.navigate('SellProject', {projectId, project, onReturn:()=>{onReturn?.();load()}})}>
-              <Text style={s.btnText}>💰 Mark as Sold</Text>
+              <Text style={s.btnText}>Mark as Sold</Text>
             </TouchableOpacity>
           </>
         )}
@@ -243,7 +243,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
             >
               {generatingListing
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={s.btnText}>✨ Generate FB Listing</Text>
+                : <Text style={s.btnText}>Generate FB Listing</Text>
               }
             </TouchableOpacity>
             <View style={s.soldBadge}><Text style={s.soldText}>✅ Sold for {fmt(project.sale_price)}</Text></View>
