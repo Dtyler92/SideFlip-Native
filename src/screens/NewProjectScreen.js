@@ -14,6 +14,8 @@ const CATEGORIES = [
   {value:'furniture',label:'🪑 Furniture'},{value:'other',label:'📦 Other'},
 ]
 
+const VIN_CATEGORIES = ['car', 'motorcycle', 'atv', 'boat']
+
 export default function NewProjectScreen({ navigation, route }) {
   const { user } = useAuth()
   const { onReturn } = route.params || {}
@@ -24,6 +26,43 @@ export default function NewProjectScreen({ navigation, route }) {
   const [photo, setPhoto] = useState(null)
   const [saving, setSaving] = useState(false)
   const [showCats, setShowCats] = useState(false)
+  const [vin, setVin] = useState('')
+  const [decoding, setDecoding] = useState(false)
+  const [vehicleYear, setVehicleYear] = useState('')
+  const [vehicleMake, setVehicleMake] = useState('')
+  const [vehicleModel, setVehicleModel] = useState('')
+
+  const showVin = VIN_CATEGORIES.includes(category)
+
+  async function decodeVin() {
+    const cleanVin = vin.trim().toUpperCase()
+    if (cleanVin.length !== 17) return Alert.alert('Invalid VIN', 'A VIN must be exactly 17 characters.')
+    setDecoding(true)
+    try {
+      const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${cleanVin}?format=json`)
+      const data = await res.json()
+      const results = data.Results || []
+      const get = (var_) => results.find(r => r.Variable === var_)?.Value || ''
+      const year = get('Model Year')
+      const make = get('Make')
+      const model = get('Model')
+      if (!year || !make || make === 'null' || make === '0') {
+        Alert.alert('VIN Not Found', 'Could not decode that VIN. Please check it and try again.')
+        return
+      }
+      setVehicleYear(year)
+      setVehicleMake(make)
+      setVehicleModel(model)
+      // Auto-fill title if empty
+      const autoTitle = `${year} ${make} ${model}`.trim()
+      if (!title) setTitle(autoTitle)
+      Alert.alert('✅ VIN Decoded!', `${year} ${make} ${model}`)
+    } catch (err) {
+      Alert.alert('Error', 'Could not reach the VIN decoder. Check your connection.')
+    } finally {
+      setDecoding(false)
+    }
+  }
 
   async function handleSave() {
     if (!title.trim()) return Alert.alert('Give your project a name')
@@ -37,6 +76,10 @@ export default function NewProjectScreen({ navigation, route }) {
         notes: notes.trim() || null,
         photo: photo || null,
         status: 'active',
+        vin: vin.trim().toUpperCase() || null,
+        vehicle_year: vehicleYear || null,
+        vehicle_make: vehicleMake || null,
+        vehicle_model: vehicleModel || null,
       })
       onReturn?.()
       navigation.goBack()
@@ -63,11 +106,7 @@ export default function NewProjectScreen({ navigation, route }) {
       <ScrollView style={s.scroll} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         <PhotoPicker userId={user.id} photoUrl={photo} onUploaded={setPhoto} />
 
-        <Text style={s.label}>Project Name *</Text>
-        <TextInput style={s.input} placeholder="e.g. Honda HRR216 Mower" placeholderTextColor="#A8A49E"
-          value={title} onChangeText={setTitle} autoFocus />
-
-        <Text style={[s.label, {marginTop:16}]}>Category</Text>
+        <Text style={s.label}>Category</Text>
         <TouchableOpacity style={s.select} onPress={() => setShowCats(!showCats)}>
           <Text style={s.selectText}>{selectedCat?.label}</Text>
           <Text style={{color:'#A8A49E'}}>{showCats ? '▲' : '▼'}</Text>
@@ -82,6 +121,39 @@ export default function NewProjectScreen({ navigation, route }) {
             ))}
           </View>
         )}
+
+        {/* VIN Decoder — vehicles only */}
+        {showVin && (
+          <View style={s.vinBox}>
+            <Text style={s.label}>VIN (optional)</Text>
+            <View style={s.vinRow}>
+              <TextInput
+                style={[s.input, s.vinInput]}
+                placeholder="17-character VIN"
+                placeholderTextColor="#A8A49E"
+                value={vin}
+                onChangeText={v => setVin(v.toUpperCase())}
+                autoCapitalize="characters"
+                maxLength={17}
+              />
+              <TouchableOpacity style={[s.decodeBtn, decoding && {opacity:0.6}]} onPress={decodeVin} disabled={decoding}>
+                {decoding
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={s.decodeBtnText}>Decode</Text>
+                }
+              </TouchableOpacity>
+            </View>
+            {vehicleYear ? (
+              <View style={s.vinResult}>
+                <Text style={s.vinResultText}>🚗 {vehicleYear} {vehicleMake} {vehicleModel}</Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        <Text style={[s.label, {marginTop:16}]}>Project Name *</Text>
+        <TextInput style={s.input} placeholder="e.g. Honda HRR216 Mower" placeholderTextColor="#A8A49E"
+          value={title} onChangeText={setTitle} />
 
         <Text style={[s.label, {marginTop:16}]}>Purchase Price</Text>
         <TextInput style={s.input} placeholder="0.00" placeholderTextColor="#A8A49E"
@@ -116,6 +188,13 @@ const s = StyleSheet.create({
   catItemActive:{backgroundColor:'#C8402F'},
   catItemText:{fontSize:14,color:'#1A1917'},
   catItemTextActive:{color:'#fff',fontWeight:'700'},
+  vinBox:{marginTop:16},
+  vinRow:{flexDirection:'row',gap:8,alignItems:'center'},
+  vinInput:{flex:1},
+  decodeBtn:{backgroundColor:'#C8402F',borderRadius:10,paddingVertical:14,paddingHorizontal:16,alignItems:'center',justifyContent:'center'},
+  decodeBtnText:{color:'#fff',fontWeight:'700',fontSize:14},
+  vinResult:{marginTop:8,backgroundColor:'#F0FFF4',borderRadius:8,padding:10,borderWidth:1,borderColor:'#86EFAC'},
+  vinResultText:{color:'#166534',fontWeight:'600',fontSize:14},
   btn:{backgroundColor:'#C8402F',borderRadius:10,padding:16,alignItems:'center',marginTop:24},
   btnDisabled:{opacity:0.6},btnText:{color:'#fff',fontSize:16,fontWeight:'700'},
 })

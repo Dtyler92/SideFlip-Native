@@ -171,6 +171,21 @@ export default function ProjectDetailScreen({ navigation, route }) {
           </>
         )}
 
+        {/* Vehicle Info */}
+        {project.vin && (
+          <>
+            <Text style={s.sectionTitle}>Vehicle Info</Text>
+            <View style={s.card}>
+              {(project.vehicle_year || project.vehicle_make || project.vehicle_model) && (
+                <Text style={[s.notesText, {fontWeight:'700', marginBottom:4}]}>
+                  {project.vehicle_year} {project.vehicle_make} {project.vehicle_model}
+                </Text>
+              )}
+              <Text style={[s.notesText, {color:'#8C8880', fontSize:13}]}>VIN: {project.vin}</Text>
+            </View>
+          </>
+        )}
+
         {/* Expenses */}
         <Text style={s.sectionTitle}>Expenses ({project.expenses?.length || 0})</Text>
         <View style={s.card}>
