@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import * as FileSystem from 'expo-file-system'
+import * as Sharing from 'expo-sharing'
 
 const ACCENT = '#C8402F'
 
@@ -33,6 +35,77 @@ export default function SettingsScreen() {
   const [language, setLanguage] = useState(profile?.language || 'en')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [exportingTax, setExportingTax] = useState(false)
+
+  async function handleTaxExport() {
+    setExportingTax(true)
+    try {
+      const year = new Date().getFullYear()
+      const { data: projects } = await supabase
+        .from('projects')
+        .select('*, expenses(*)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+
+      const { data: receipts } = await supabase
+        .from('receipts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+
+      if (!projects?.length) {
+        Alert.alert('No Data', 'No projects found to export.')
+        return
+      }
+
+      const rows = []
+      rows.push(['Type','Project','Category','Description','Amount','Date','Status','Sale Price','Profit/Loss'].join(','))
+
+      for (const p of projects) {
+        const totalExpenses = (p.expenses||[]).reduce((s,e) => s + Number(e.amount), 0)
+        const totalInvested = totalExpenses + Number(p.purchase_price || 0)
+        const profit = p.sale_price ? Number(p.sale_price) - totalInvested : ''
+        rows.push([
+          'Project', `"${p.title}"`, p.category,
+          'Purchase Price', Number(p.purchase_price||0).toFixed(2),
+          p.created_at?.split('T')[0] || '',
+          p.status, Number(p.sale_price||0).toFixed(2),
+          profit !== '' ? Number(profit).toFixed(2) : ''
+        ].join(','))
+        for (const e of (p.expenses||[])) {
+          rows.push([
+            'Expense', `"${p.title}"`, e.category,
+            `"${e.description}"`, Number(e.amount).toFixed(2),
+            e.created_at?.split('T')[0] || '',
+            '', '', ''
+          ].join(','))
+        }
+      }
+
+      for (const r of (receipts||[])) {
+        rows.push([
+          'Receipt', '', '',
+          `"${r.description}"`, Number(r.amount).toFixed(2),
+          r.created_at?.split('T')[0] || '',
+          '', '', ''
+        ].join(','))
+      }
+
+      const csv = rows.join('\n')
+      const path = FileSystem.documentDirectory + `SideFlip_Tax_Report_${year}.csv`
+      await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 })
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: `SideFlip Tax Report ${year}` })
+      } else {
+        Alert.alert('Saved', `Report saved to: ${path}`)
+      }
+    } catch (err) {
+      Alert.alert('Export failed', err.message)
+    } finally {
+      setExportingTax(false)
+    }
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -99,6 +172,15 @@ export default function SettingsScreen() {
         {saving
           ? <ActivityIndicator color="#fff" />
           : <Text style={s.btnText}>{saved ? '✓ Saved!' : 'Save Changes'}</Text>
+        }
+      </TouchableOpacity>
+
+      {/* Tax Report */}
+      <Text style={s.sectionTitle}>Tax & Reports</Text>
+      <TouchableOpacity style={[s.btn, { backgroundColor: '#1A1917' }, exportingTax && { opacity: 0.6 }]} onPress={handleTaxExport} disabled={exportingTax}>
+        {exportingTax
+          ? <ActivityIndicator color="#fff" />
+          : <Text style={s.btnText}>📊 Download Tax Report (CSV)</Text>
         }
       </TouchableOpacity>
 

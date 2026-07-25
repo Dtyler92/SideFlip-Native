@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator, Share, Modal, KeyboardAvoidingView, Platform } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator, Share, Modal, KeyboardAvoidingView, Platform, Image } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
+import * as ImagePicker from 'expo-image-picker'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -27,12 +28,19 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [listingText, setListingText] = useState('')
   const [showListingModal, setShowListingModal] = useState(false)
   const [photos, setPhotos] = useState([])
+  const [receipts, setReceipts] = useState([])
+  const [showReceiptModal, setShowReceiptModal] = useState(false)
+  const [receipt, setReceipt] = useState({ description: '', amount: '', imageUrl: null })
+  const [savingReceipt, setSavingReceipt] = useState(false)
 
   async function load() {
     const { data } = await supabase.from('projects').select('*, expenses(*)').eq('id', projectId).single()
     setProject(data)
     setPhotos((data?.photos?.length > 0) ? data.photos : (data?.photo ? [data.photo] : []))
     setLoading(false)
+    // Load receipts
+    const { data: rData } = await supabase.from('receipts').select('*').eq('project_id', projectId).order('created_at', { ascending: false })
+    setReceipts(rData || [])
   }
 
   useEffect(() => { load() }, [projectId])
@@ -116,6 +124,77 @@ export default function ProjectDetailScreen({ navigation, route }) {
     } finally {
       setGeneratingListing(false)
     }
+  }
+
+  // Receipt functions
+  async function pickReceiptImage() {
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    })
+    if (!result.canceled && result.assets[0]) {
+      const uri = result.assets[0].uri
+      // Upload to Supabase storage
+      const ext = uri.split('.').pop()
+      const path = `receipts/${user.id}/${Date.now()}.${ext}`
+      const response = await fetch(uri)
+      const blob = await response.blob()
+      const { error } = await supabase.storage.from('project-photos').upload(path, blob, { contentType: `image/${ext}` })
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('project-photos').getPublicUrl(path)
+        setReceipt(r => ({ ...r, imageUrl: urlData.publicUrl }))
+      }
+    }
+  }
+
+  async function saveReceipt() {
+    if (!receipt.description.trim() || !receipt.amount) return Alert.alert('Fill in description and amount')
+    setSavingReceipt(true)
+    try {
+      await supabase.from('receipts').insert({
+        user_id: user.id,
+        project_id: projectId,
+        description: receipt.description.trim(),
+        amount: Number(receipt.amount),
+        image_url: receipt.imageUrl || null,
+      })
+      setShowReceiptModal(false)
+      const desc = receipt.description.trim()
+      const amt = Number(receipt.amount)
+      setReceipt({ description: '', amount: '', imageUrl: null })
+      load()
+      // Ask if they want to add to expenses too
+      Alert.alert(
+        'Add to Expenses?',
+        `Do you want to also add "${desc}" (${fmt(amt)}) as a project expense?`,
+        [
+          { text: 'No Thanks', style: 'cancel' },
+          { text: 'Add to Expenses', onPress: async () => {
+            await supabase.from('expenses').insert({
+              project_id: projectId, user_id: user.id,
+              description: desc,
+              amount: amt,
+              category: 'other',
+            })
+            load()
+          }}
+        ]
+      )
+    } catch (err) {
+      Alert.alert('Error', err.message)
+    } finally {
+      setSavingReceipt(false)
+    }
+  }
+
+  async function handleDeleteReceipt(id) {
+    Alert.alert('Remove receipt?', '', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: async () => {
+        await supabase.from('receipts').delete().eq('id', id)
+        load()
+      }}
+    ])
   }
 
   if (loading) return <View style={{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#FAFAF7'}}><ActivityIndicator color={ACCENT} /></View>
@@ -233,6 +312,25 @@ export default function ProjectDetailScreen({ navigation, route }) {
           </View>
         )}
 
+        {/* Receipts */}
+        <Text style={s.sectionTitle}>Receipts ({receipts.length})</Text>
+        <View style={s.card}>
+          {receipts.length === 0 ? (
+            <Text style={s.emptyText}>No receipts yet — tap below to capture one</Text>
+          ) : (
+            receipts.map(r => (
+              <TouchableOpacity key={r.id} style={s.expenseRow} onPress={() => handleDeleteReceipt(r.id)}>
+                <View style={{flex:1}}>
+                  <Text style={s.expenseDesc}>{r.description}</Text>
+                  <Text style={s.expenseCat}>{r.image_url ? '📷 Photo attached' : 'No photo'}</Text>
+                </View>
+                <Text style={s.expenseAmount}>{fmt(r.amount)}</Text>
+                <Text style={s.expenseDelete}>🗑</Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
         {/* Actions */}
         {project.status === 'active' && (
           <>
@@ -241,6 +339,10 @@ export default function ProjectDetailScreen({ navigation, route }) {
                 <Text style={[s.btnText,{color:'#1A1917'}]}>+ Add Expense</Text>
               </TouchableOpacity>
             )}
+
+            <TouchableOpacity style={[s.btn,{backgroundColor:'#3B82F6',marginBottom:10}]} onPress={() => setShowReceiptModal(true)}>
+              <Text style={s.btnText}>📄 Capture Receipt</Text>
+            </TouchableOpacity>
 
             {/* AI Listing Generator */}
             <TouchableOpacity
@@ -262,6 +364,9 @@ export default function ProjectDetailScreen({ navigation, route }) {
         )}
         {project.status === 'sold' && (
           <>
+            <TouchableOpacity style={[s.btn,{backgroundColor:'#3B82F6',marginBottom:10}]} onPress={() => setShowReceiptModal(true)}>
+              <Text style={s.btnText}>📄 Capture Receipt</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[s.btn, {backgroundColor:'#1A1917', marginBottom:10}, generatingListing && s.btnDisabled]}
               onPress={generateListing}
@@ -313,6 +418,56 @@ export default function ProjectDetailScreen({ navigation, route }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Receipt Modal */}
+      <Modal visible={showReceiptModal} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={s.modalRoot}>
+            <View style={s.modalHeader}>
+              <TouchableOpacity onPress={() => { setShowReceiptModal(false); setReceipt({ description: '', amount: '', imageUrl: null }) }}>
+                <Text style={s.modalCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={s.modalTitle}>Capture Receipt</Text>
+              <View style={{width:60}} />
+            </View>
+
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {/* Photo */}
+              <TouchableOpacity style={s.receiptPhotoBtn} onPress={pickReceiptImage}>
+                {receipt.imageUrl ? (
+                  <Image source={{ uri: receipt.imageUrl }} style={s.receiptThumb} />
+                ) : (
+                  <View style={s.receiptPhotoPlaceholder}>
+                    <Text style={{fontSize:32}}>📷</Text>
+                    <Text style={{color:'#A8A49E',marginTop:6,fontSize:13}}>Tap to take photo</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <Text style={[s.label,{marginBottom:6,marginTop:16}]}>Description *</Text>
+              <TextInput style={s.input} placeholder="e.g. Carburetor from AutoZone"
+                placeholderTextColor="#A8A49E" value={receipt.description}
+                onChangeText={v => setReceipt(r=>({...r,description:v}))} />
+
+              <Text style={[s.label,{marginBottom:6,marginTop:12}]}>Amount *</Text>
+              <TextInput style={s.input} placeholder="0.00"
+                placeholderTextColor="#A8A49E" value={receipt.amount}
+                onChangeText={v => setReceipt(r=>({...r,amount:v}))} keyboardType="decimal-pad" />
+
+              <TouchableOpacity
+                style={[s.modalShareBtn, savingReceipt && {opacity:0.6}]}
+                onPress={saveReceipt}
+                disabled={savingReceipt}
+              >
+                {savingReceipt
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={s.modalShareBtnText}>Save Receipt</Text>
+                }
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   )
 }
@@ -358,4 +513,7 @@ const s = StyleSheet.create({
   listingInput:{flex:1,backgroundColor:'#fff',borderRadius:12,borderWidth:1,borderColor:'#E8E4DE',padding:16,fontSize:15,color:'#1A1917',lineHeight:22},
   modalShareBtn:{backgroundColor:'#C8402F',borderRadius:12,padding:16,alignItems:'center',marginTop:16},
   modalShareBtnText:{color:'#fff',fontSize:16,fontWeight:'700'},
+  receiptPhotoBtn:{width:'100%',height:180,borderRadius:12,overflow:'hidden',borderWidth:2,borderColor:'#E8E4DE',borderStyle:'dashed'},
+  receiptPhotoPlaceholder:{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:'#F5F2EE'},
+  receiptThumb:{width:'100%',height:'100%',resizeMode:'cover'},
 })
