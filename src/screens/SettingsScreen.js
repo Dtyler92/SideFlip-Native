@@ -195,7 +195,7 @@ export default function SettingsScreen() {
       </TouchableOpacity>
 
       {/* Version */}
-      <Text style={s.version}>SideFlip - Project Ledger v1.0.0</Text>
+      <Text style={s.version}>SideFlip v1.1</Text>
     </ScrollView>
   )
 }
