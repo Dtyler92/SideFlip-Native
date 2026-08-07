@@ -36,15 +36,24 @@ export default function SettingsScreen({ navigation }) {
 
   async function handleSave() {
     setSaving(true)
-    const { error } = await supabase
-      .from('profiles')
-      .update({ currency, language })
-      .eq('id', user.id)
-    setSaving(false)
-    if (error) return Alert.alert('Error saving', error.message)
-    await refreshProfile()
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Please sign in again.')
+      const response = await fetch('https://sideflip.org/api/update-profile-preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ currency, language }),
+      })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(body.error || 'Could not save preferences.')
+      await refreshProfile()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (error) {
+      Alert.alert('Error saving', error.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   function confirmSignOut() {
