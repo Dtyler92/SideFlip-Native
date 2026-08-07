@@ -2,6 +2,7 @@
   "expo": {
     "name": "SideFlip - Project Ledger",
     "slug": "sideflip",
+    "scheme": "sideflip",
     "owner": "dtyler92",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sideflip.app",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "NSCameraUsageDescription": "SideFlip uses your camera to take photos of your projects.",
         "NSPhotoLibraryUsageDescription": "SideFlip uses your photo library to attach photos to your projects.",

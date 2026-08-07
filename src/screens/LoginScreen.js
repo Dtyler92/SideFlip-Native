@@ -39,8 +39,8 @@ export default function LoginScreen({ navigation }) {
         </View>
         <View style={s.signupRow}>
           <Text style={s.mutedText}>Don't have an account? </Text>
-          <TouchableOpacity onPress={() => Linking.openURL('https://sideflip.org')}>
-            <Text style={s.link}>Sign up at sideflip.org</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
+            <Text style={s.link}>Create a free account</Text>
           </TouchableOpacity>
         </View>
         <View style={s.legalRow}>

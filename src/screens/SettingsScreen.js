@@ -26,7 +26,7 @@ const LANGUAGES = [
   { code: 'ja', label: '🇯🇵 日本語' },
 ]
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ navigation }) {
   const insets = useSafeAreaInsets()
   const { user, profile, signOut, refreshProfile } = useAuth()
   const [currency, setCurrency] = useState(profile?.currency || 'USD')
@@ -62,12 +62,8 @@ export default function SettingsScreen() {
       <Text style={s.sectionTitle}>Account</Text>
       <View style={s.card}>
         <Text style={s.accountEmail}>{user?.email}</Text>
-        <TouchableOpacity onPress={() => Alert.alert('Manage Subscription', 'Visit sideflip.org to manage your subscription.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open sideflip.org', onPress: () => {} },
-        ])}>
-          <Text style={s.manageLink}>Manage Subscription →</Text>
-        </TouchableOpacity>
+        <Text style={s.accountNote}>Use SideFlip Free, or unlock Pro features in the app.</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Pro')}><Text style={s.proLink}>View SideFlip Pro</Text></TouchableOpacity>
       </View>
 
       {/* Currency */}
@@ -112,6 +108,9 @@ export default function SettingsScreen() {
       <TouchableOpacity style={s.signOutBtn} onPress={confirmSignOut}>
         <Text style={s.signOutText}>Sign Out</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={s.deleteBtn} onPress={() => navigation.navigate('DeleteAccount')}>
+        <Text style={s.deleteText}>Delete Account</Text>
+      </TouchableOpacity>
 
       {/* Version */}
       <Text style={s.version}>SideFlip - Project Ledger v1.0.0</Text>
@@ -125,8 +124,9 @@ const s = StyleSheet.create({
   heading: { fontSize: 26, fontWeight: '800', color: '#1A1917', marginBottom: 20 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#8C8880', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 12, marginTop: 8 },
   card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  accountEmail: { fontSize: 15, color: '#1A1917', fontWeight: '500', marginBottom: 10 },
-  manageLink: { fontSize: 14, color: ACCENT, fontWeight: '600' },
+  accountEmail: { fontSize: 15, color: '#1A1917', fontWeight: '500', marginBottom: 8 },
+  accountNote: { fontSize: 13, color: '#8C8880', lineHeight: 19, marginBottom: 8 },
+  proLink: { fontSize: 14, color: ACCENT, fontWeight: '700' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
   chip: { width: '47%', borderRadius: 12, borderWidth: 1.5, borderColor: '#E8E4DE', backgroundColor: '#fff', padding: 12, alignItems: 'center' },
   chipActive: { borderColor: ACCENT, backgroundColor: '#FDF1EF' },
@@ -142,5 +142,7 @@ const s = StyleSheet.create({
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   signOutBtn: { borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1.5, borderColor: '#E8E4DE', marginBottom: 24 },
   signOutText: { color: '#5C5850', fontSize: 15, fontWeight: '600' },
+  deleteBtn: { alignItems: 'center', padding: 12, marginBottom: 20 },
+  deleteText: { color: '#B3261E', fontSize: 14, fontWeight: '700' },
   version: { textAlign: 'center', fontSize: 12, color: '#C8C4BE' },
 })

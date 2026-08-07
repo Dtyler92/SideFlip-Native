@@ -1,93 +1,71 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase, getProfile, isSubscribed } from '../lib/supabase'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import * as Linking from 'expo-linking'
+import { supabase, getProfile } from '../lib/supabase'
 
 const AuthContext = createContext(null)
+const AUTH_CALLBACK_URL = 'sideflip://auth/callback'
+const CURRENCY_SYMBOLS = { USD: '$', CAD: 'CA$', GBP: '£', EUR: '€', AUD: 'A$', MXN: 'MX$', JPY: '¥', INR: '₹' }
 
-const CURRENCY_SYMBOLS = {
-  USD: '$', CAD: 'CA$', GBP: '£', EUR: '€',
-  AUD: 'A$', MXN: 'MX$', JPY: '¥', INR: '₹',
+function tokensFromUrl(url) {
+  const query = url?.split('?')[1]?.split('#')[0] || ''
+  const fragment = url?.split('#')[1] || ''
+  const params = new URLSearchParams(`${query}&${fragment}`)
+  const access_token = params.get('access_token')
+  const refresh_token = params.get('refresh_token')
+  return access_token && refresh_token ? { access_token, refresh_token } : null
 }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const generation = useRef(0)
 
-  async function loadProfile(userId) {
-    const p = await getProfile(userId)
-    setProfile(p)
-    return p
+  async function syncSession(session) {
+    const request = ++generation.current
+    const nextUser = session?.user ?? null
+    setLoading(true)
+    setUser(nextUser)
+    setProfile(null)
+    if (!nextUser) {
+      if (request === generation.current) setLoading(false)
+      return
+    }
+    const nextProfile = await getProfile(nextUser.id)
+    if (request !== generation.current) return
+    setProfile(nextProfile)
+    setLoading(false)
+  }
+
+  async function handleAuthUrl(url) {
+    const tokens = tokensFromUrl(url)
+    if (tokens) await supabase.auth.setSession(tokens)
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const u = session?.user ?? null
-      setUser(u)
-      if (u) loadProfile(u.id).finally(() => setLoading(false))
-      else setLoading(false)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const u = session?.user ?? null
-      setUser(u)
-      if (u) loadProfile(u.id)
-      else setProfile(null)
-    })
-
-    return () => subscription.unsubscribe()
+    let mounted = true
+    supabase.auth.getSession().then(({ data: { session } }) => { if (mounted) syncSession(session) })
+    Linking.getInitialURL().then(url => { if (url) handleAuthUrl(url).catch(() => {}) })
+    const linkSubscription = Linking.addEventListener('url', ({ url }) => handleAuthUrl(url).catch(() => {}))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { if (mounted) syncSession(session) })
+    return () => { mounted = false; linkSubscription.remove(); subscription.unsubscribe() }
   }, [])
 
-  async function signIn(email, password) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+  async function signUp(email, password) {
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: AUTH_CALLBACK_URL } })
     if (error) throw error
+    return data
   }
+  async function signIn(email, password) { const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) throw error }
+  async function signOut() { await supabase.auth.signOut(); setUser(null); setProfile(null) }
+  async function resetPassword(email) { const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: AUTH_CALLBACK_URL }); if (error) throw error }
+  async function refreshProfile() { if (user) return getProfile(user.id).then(p => { setProfile(p); return p }) }
 
-  async function signOut() {
-    await supabase.auth.signOut()
-    setUser(null)
-    setProfile(null)
-  }
-
-  async function resetPassword(email) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://sideflip.org'
-    })
-    if (error) throw error
-  }
-
-  async function refreshProfile() {
-    if (user) {
-      const p = await loadProfile(user.id)
-      return p
-    }
-  }
-
-  // Currency formatter based on user profile
   const currency = profile?.currency || 'USD'
   const language = profile?.language || 'en'
   const currencySymbol = CURRENCY_SYMBOLS[currency] || '$'
+  function formatMoney(amount) { const n = Number(amount || 0); const decimals = currency === 'JPY' ? 0 : 2; return currencySymbol + n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) }
 
-  function formatMoney(amount) {
-    const n = Number(amount || 0)
-    // JPY has no decimal places
-    const decimals = currency === 'JPY' ? 0 : 2
-    return currencySymbol + n.toLocaleString('en-US', {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    })
-  }
-
-  return (
-    <AuthContext.Provider value={{
-      user, profile, loading,
-      subscribed: isSubscribed(profile),
-      currency, language, currencySymbol, formatMoney,
-      signIn, signOut, resetPassword, refreshProfile,
-      needsOnboarding: profile && !profile.onboarded,
-    }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={{ user, profile, loading, currency, language, currencySymbol, formatMoney, signUp, signIn, signOut, resetPassword, refreshProfile, needsOnboarding: profile && !profile.onboarded }}>{children}</AuthContext.Provider>
 }
-
 export function useAuth() { return useContext(AuthContext) }
