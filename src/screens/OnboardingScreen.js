@@ -26,20 +26,29 @@ const LANGUAGES = [
 ]
 
 export default function OnboardingScreen({ onComplete }) {
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
   const [currency, setCurrency] = useState('USD')
   const [language, setLanguage] = useState('en')
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
     setSaving(true)
-    const { error } = await supabase
-      .from('profiles')
-      .update({ currency, language, onboarded: true })
-      .eq('id', user.id)
-    setSaving(false)
-    if (error) return Alert.alert('Error', error.message)
-    onComplete({ currency, language })
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Please sign in again.')
+      const response = await fetch('https://sideflip.org/api/update-profile-preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ currency, language, onboarded: true }),
+      })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(body.error || 'Could not save preferences.')
+      onComplete({ currency, language })
+    } catch (error) {
+      Alert.alert('Error', error.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -83,6 +92,9 @@ export default function OnboardingScreen({ onComplete }) {
       <TouchableOpacity style={[s.btn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
         {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Get Started</Text>}
       </TouchableOpacity>
+      <TouchableOpacity onPress={signOut} style={s.backButton} disabled={saving}>
+        <Text style={s.backText}>← Back to Sign In</Text>
+      </TouchableOpacity>
     </ScrollView>
   )
 }
@@ -110,4 +122,6 @@ const s = StyleSheet.create({
   langLabel: { fontSize: 15, color: '#1A1917', fontWeight: '500' },
   btn: { backgroundColor: ACCENT, borderRadius: 12, padding: 16, alignItems: 'center' },
   btnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  backButton: { alignItems: 'center', padding: 16, marginTop: 8 },
+  backText: { color: ACCENT, fontSize: 15, fontWeight: '700' },
 })
