@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sideflip.app",
-      "buildNumber": "4",
+      "buildNumber": "5",
       "infoPlist": {
         "NSCameraUsageDescription": "SideFlip uses your camera to take photos of your projects.",
         "NSPhotoLibraryUsageDescription": "SideFlip uses your photo library to attach photos to your projects.",
