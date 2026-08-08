@@ -259,7 +259,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
                   <Text style={s.expenseAmount}>{fmt(e.amount)}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Remove ${e.description}`} onPress={() => handleDeleteExpense(e.id)}>
-                  <Text style={s.expenseRemove}>Remove</Text>
+                  <Text style={s.expenseRemove}>×</Text>
                 </TouchableOpacity>
               </View>
             ))
@@ -403,7 +403,7 @@ const s = StyleSheet.create({
   expenseEditArea:{flex:1,flexDirection:'row',alignItems:'center'},
   expenseDesc:{fontSize:14,color:'#1A1917',fontWeight:'500'},expenseCat:{fontSize:11,color:'#A8A49E',marginTop:1},
   expenseAmount:{fontSize:14,fontWeight:'700',color:'#1A1917',marginRight:10},
-  expenseRemove:{fontSize:12,color:ACCENT,fontWeight:'700',paddingVertical:8},
+  expenseRemove:{fontSize:24,lineHeight:28,color:ACCENT,fontWeight:'500',paddingVertical:6,paddingHorizontal:5},
   formTitle:{fontSize:17,fontWeight:'800',color:'#1A1917',marginBottom:14},
   label:{fontSize:13,fontWeight:'600',color:'#5C5850'},
   input:{borderWidth:1,borderColor:'#E8E4DE',borderRadius:10,padding:12,fontSize:15,color:'#1A1917',backgroundColor:'#FAFAF7'},

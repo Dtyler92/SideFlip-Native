@@ -12,6 +12,8 @@ test('project actions use requested copy and sold projects can be undone', () =>
   assert.match(detail, /rpc\('undo_goal_project_outcome'/)
   assert.match(detail, />Undo Sale</)
   assert.match(detail, /✅ Sold for/)
+  assert.match(detail, /<Text style=\{s\.expenseRemove\}>×<\/Text>/)
+  assert.doesNotMatch(detail, /<Text style=\{s\.expenseRemove\}>Remove<\/Text>/)
 })
 
 test('new projects require an explicit category selection', () => {
