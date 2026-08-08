@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -18,6 +19,7 @@ import {
   calculateGoalSummary,
   canCreateAnotherGoal,
   createMutationId,
+  progressColor,
   projectInvested,
 } from './tradeUpGoalModel'
 
@@ -44,6 +46,9 @@ export default function TradeUpGoalsScreen({ navigation }) {
   const [adjustmentType, setAdjustmentType] = useState('personal_contribution')
   const [adjustmentAmount, setAdjustmentAmount] = useState('')
   const [adjustmentNote, setAdjustmentNote] = useState('')
+  const [showAdjustment, setShowAdjustment] = useState(false)
+  const [celebrationVisible, setCelebrationVisible] = useState(false)
+  const celebratedGoalIds = useRef(new Set())
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -62,7 +67,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
           .order('created_at', { ascending: false }),
         supabase
           .from('projects')
-          .select('id,title,status,purchase_price,sale_price,goal_id,expenses(amount)')
+          .select('id,title,status,purchase_price,sale_price,goal_id,out_of_pocket_amount,expenses(amount)')
           .eq('user_id', user.id),
       ])
       if (goalResult.error) throw goalResult.error
@@ -80,7 +85,24 @@ export default function TradeUpGoalsScreen({ navigation }) {
   useFocusEffect(useCallback(() => { load() }, [load]))
 
   const selected = goals.find(goal => goal.id === selectedId)
+  const selectedSummary = selected ? calculateGoalSummary(selected, projects) : null
   const canCreate = canCreateAnotherGoal(plan, goals)
+
+  useEffect(() => {
+    if (!selected || !selectedSummary) return
+    const reachedTarget = Number(selected.target_amount) > 0 && selectedSummary.progressPercent >= 100
+    const completed = selected.status === 'completed' || reachedTarget
+    if (completed && !celebratedGoalIds.current.has(selected.id)) {
+      celebratedGoalIds.current.add(selected.id)
+      setCelebrationVisible(true)
+    }
+  }, [selected, selectedSummary?.progressPercent])
+
+  function closeSelectedGoal() {
+    setCelebrationVisible(false)
+    setShowAdjustment(false)
+    setSelectedId(null)
+  }
 
   function updateForm(key, value) {
     setForm(current => ({ ...current, [key]: value }))
@@ -205,10 +227,12 @@ export default function TradeUpGoalsScreen({ navigation }) {
   if (loading) return <View style={s.center}><ActivityIndicator size="large" color={ACCENT} /></View>
 
   if (selected) {
-    const summary = calculateGoalSummary(selected, projects)
+    const summary = selectedSummary
     const linkedProjects = projects.filter(project => project.goal_id === selected.id)
     const activeGoal = selected.status === 'active'
+    const goalComplete = selected.status === 'completed' || (Number(selected.target_amount) > 0 && summary.progressPercent >= 100)
     return (
+      <>
       <ScrollView
         style={s.root}
         contentContainerStyle={[s.content, { paddingTop: insets.top + 12 }]}
@@ -216,11 +240,11 @@ export default function TradeUpGoalsScreen({ navigation }) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={s.detailHeader}>
-          <TouchableOpacity style={s.backButton} onPress={() => setSelectedId(null)}><Text style={s.backText}>‹</Text></TouchableOpacity>
+          <TouchableOpacity style={s.backButton} onPress={closeSelectedGoal}><Text style={s.backText}>‹</Text></TouchableOpacity>
           <Text style={s.detailTitle} numberOfLines={2}>{selected.name}</Text>
         </View>
 
-        <View style={s.card}>
+        <View style={[s.card, goalComplete && s.completedGoalCard]}>
           <View style={s.rowBetween}>
             <View style={s.flex}>
               <Text style={s.eyebrow}>{selected.goal_type === 'item' ? 'Target item' : 'Target amount'}</Text>
@@ -239,22 +263,31 @@ export default function TradeUpGoalsScreen({ navigation }) {
           <Stat label="Active items" value={formatMoney(summary.activeValue)} />
           <Stat label="Current progress" value={formatMoney(summary.progressValue)} />
           <Stat label="Completed steps" value={String(summary.soldCount)} />
+          <Stat label="Out of pocket" value={formatMoney(summary.outOfPocket)} />
+          <Stat label="Flipped" value={formatMoney(summary.flipped)} />
         </View>
 
         {activeGoal && <View style={s.card}>
-          <Text style={s.sectionTitle}>Update available amount</Text>
-          <Text style={s.muted}>Track personal money added or money you have taken out.</Text>
-          <View style={s.choiceRow}>
-            <Choice label="Add Money" selected={adjustmentType === 'personal_contribution'} onPress={() => setAdjustmentType('personal_contribution')} />
-            <Choice label="Take Out" selected={adjustmentType === 'cash_out'} onPress={() => setAdjustmentType('cash_out')} />
-          </View>
-          <Field label="Amount">
-            <TextInput style={s.input} value={adjustmentAmount} onChangeText={setAdjustmentAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#A8A49E" />
-          </Field>
-          <Field label="Note (optional)">
-            <TextInput style={s.input} value={adjustmentNote} onChangeText={setAdjustmentNote} placeholder="What changed?" placeholderTextColor="#A8A49E" maxLength={160} />
-          </Field>
-          <PrimaryButton disabled={saving} label={saving ? 'Saving…' : adjustmentType === 'cash_out' ? 'Take Money Out' : 'Add to Goal'} onPress={adjustBalance} />
+          <TouchableOpacity style={s.adjustmentHeader} onPress={() => setShowAdjustment(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: showAdjustment }}>
+            <View style={s.flex}>
+              <Text style={s.sectionTitle}>Update available amount</Text>
+              <Text style={s.muted}>Track personal money added or money you have taken out.</Text>
+            </View>
+            <Text style={s.adjustmentToggle}>{showAdjustment ? 'Hide' : 'Show'}</Text>
+          </TouchableOpacity>
+          {showAdjustment && <>
+            <View style={s.choiceRow}>
+              <Choice label="Add Money" selected={adjustmentType === 'personal_contribution'} onPress={() => setAdjustmentType('personal_contribution')} />
+              <Choice label="Take Out" selected={adjustmentType === 'cash_out'} onPress={() => setAdjustmentType('cash_out')} />
+            </View>
+            <Field label="Amount">
+              <TextInput style={s.input} value={adjustmentAmount} onChangeText={setAdjustmentAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#A8A49E" />
+            </Field>
+            <Field label="Note (optional)">
+              <TextInput style={s.input} value={adjustmentNote} onChangeText={setAdjustmentNote} placeholder="What changed?" placeholderTextColor="#A8A49E" maxLength={160} />
+            </Field>
+            <PrimaryButton disabled={saving} label={saving ? 'Saving…' : adjustmentType === 'cash_out' ? 'Take Money Out' : 'Add to Goal'} onPress={adjustBalance} />
+          </>}
         </View>}
 
         <Text style={s.listHeading}>Linked projects ({linkedProjects.length})</Text>
@@ -271,6 +304,8 @@ export default function TradeUpGoalsScreen({ navigation }) {
         </TouchableOpacity>
         <TouchableOpacity style={s.deleteButton} disabled={saving} onPress={confirmDelete}><Text style={s.deleteText}>Delete Goal</Text></TouchableOpacity>
       </ScrollView>
+      <CelebrationModal visible={celebrationVisible} goalName={selected.name} onClose={() => setCelebrationVisible(false)} />
+      </>
     )
   }
 
@@ -328,7 +363,8 @@ export default function TradeUpGoalsScreen({ navigation }) {
         ? <View style={s.empty}><Text style={s.emptyTitle}>No Trade-Up Goals yet</Text><Text style={s.muted}>Create your first goal to begin tracking progress.</Text></View>
         : goals.map(goal => {
           const summary = calculateGoalSummary(goal, projects)
-          return <TouchableOpacity key={goal.id} style={s.goalCard} onPress={() => setSelectedId(goal.id)}>
+          const goalComplete = goal.status === 'completed' || (Number(goal.target_amount) > 0 && summary.progressPercent >= 100)
+          return <TouchableOpacity key={goal.id} style={[s.goalCard, goalComplete && s.completedGoalCard]} onPress={() => setSelectedId(goal.id)}>
             <View style={s.rowBetween}>
               <View style={s.flex}><Text style={s.eyebrow}>{goal.goal_type === 'item' ? goal.target_item : 'Amount goal'}</Text><Text style={s.goalName}>{goal.name}</Text></View>
               <StatusPill status={goal.status} />
@@ -359,14 +395,46 @@ function StatusPill({ status }) {
 }
 
 function Progress({ summary, target, formatMoney, compact }) {
+  const fillColor = progressColor(summary.progressPercent)
   return <View style={compact ? s.progressCompact : s.progressBlock}>
-    <View style={s.progressTrack}><View style={[s.progressFill, { width: `${summary.progressPercent}%` }]} /></View>
+    <View style={s.progressTrack}><View style={[s.progressFill, { width: `${summary.progressPercent}%`, backgroundColor: fillColor }]} /></View>
     <View style={s.rowBetween}><Text style={s.progressText}>{formatMoney(summary.progressValue)} of {formatMoney(target)}</Text><Text style={s.progressPercent}>{summary.progressPercent}%</Text></View>
   </View>
 }
 
 function Stat({ label, value }) {
   return <View style={s.stat}><Text style={s.eyebrow}>{label}</Text><Text style={s.statValue}>{value}</Text></View>
+}
+
+const CONFETTI = [
+  { left: '8%', top: '14%', backgroundColor: '#C8402F', transform: [{ rotate: '18deg' }] },
+  { left: '23%', top: '7%', backgroundColor: '#F2B84B', transform: [{ rotate: '-24deg' }] },
+  { left: '43%', top: '12%', backgroundColor: '#2D7A4F', transform: [{ rotate: '42deg' }] },
+  { right: '26%', top: '8%', backgroundColor: '#4D7FC1', transform: [{ rotate: '12deg' }] },
+  { right: '9%', top: '18%', backgroundColor: '#C8402F', transform: [{ rotate: '-38deg' }] },
+  { left: '12%', bottom: '17%', backgroundColor: '#4D7FC1', transform: [{ rotate: '55deg' }] },
+  { left: '30%', bottom: '8%', backgroundColor: '#2D7A4F', transform: [{ rotate: '-18deg' }] },
+  { right: '31%', bottom: '10%', backgroundColor: '#F2B84B', transform: [{ rotate: '29deg' }] },
+  { right: '11%', bottom: '20%', backgroundColor: '#C8402F', transform: [{ rotate: '-48deg' }] },
+]
+
+function CelebrationModal({ visible, goalName, onClose }) {
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <View style={s.celebrationOverlay}>
+      <View style={s.celebrationBurst}>
+        {CONFETTI.map((piece, index) => (
+          <View key={index} style={[s.confetti, piece]} />
+        ))}
+        <View style={s.celebrationCard}>
+          <Text style={s.celebrationTitle}>Congratulations!</Text>
+          <Text style={s.celebrationText}>You completed {goalName}. Take a moment to celebrate the win.</Text>
+          <TouchableOpacity style={s.celebrationButton} onPress={onClose} accessibilityRole="button">
+            <Text style={s.celebrationButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  </Modal>
 }
 
 const s = StyleSheet.create({
@@ -381,6 +449,7 @@ const s = StyleSheet.create({
   heroText: { color: '#D4CDC1', lineHeight: 20 },
   card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginTop: 14, marginBottom: 8, borderWidth: 1, borderColor: '#E8E4DE' },
   goalCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E8E4DE' },
+  completedGoalCard: { backgroundColor: '#DDF3E7', borderColor: GREEN, borderWidth: 2 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
   flex: { flex: 1 },
   eyebrow: { fontSize: 10, color: '#8C8880', textTransform: 'uppercase', letterSpacing: 0.7, fontWeight: '700', marginBottom: 4 },
@@ -392,8 +461,8 @@ const s = StyleSheet.create({
   statusTextCompleted: { color: GREEN },
   progressBlock: { marginTop: 18 },
   progressCompact: { marginTop: 14 },
-  progressTrack: { height: 8, backgroundColor: '#EEEAE3', borderRadius: 999, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: ACCENT, borderRadius: 999 },
+  progressTrack: { height: 8, backgroundColor: '#F5D8D3', borderRadius: 999, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 999 },
   progressText: { color: '#8C8880', fontSize: 12, marginTop: 6 },
   progressPercent: { color: '#5C5850', fontSize: 12, fontWeight: '700', marginTop: 6 },
   primaryButton: { backgroundColor: ACCENT, borderRadius: 12, padding: 15, alignItems: 'center', marginBottom: 8 },
@@ -411,6 +480,8 @@ const s = StyleSheet.create({
   choiceText: { color: '#6F6A62', fontSize: 13, fontWeight: '700' },
   choiceTextSelected: { color: ACCENT },
   sectionTitle: { color: '#1A1917', fontSize: 18, fontWeight: '800', marginBottom: 4 },
+  adjustmentHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  adjustmentToggle: { color: ACCENT, fontSize: 13, fontWeight: '800' },
   listHeading: { color: '#1A1917', fontSize: 16, fontWeight: '800', marginTop: 22, marginBottom: 10 },
   empty: { alignItems: 'center', padding: 24 },
   emptyTitle: { color: '#1A1917', fontSize: 16, fontWeight: '700', marginBottom: 5 },
@@ -440,4 +511,12 @@ const s = StyleSheet.create({
   completeText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   deleteButton: { alignItems: 'center', padding: 16, marginTop: 6 },
   deleteText: { color: ACCENT, fontWeight: '700' },
+  celebrationOverlay: { flex: 1, backgroundColor: 'rgba(26,25,23,0.62)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  celebrationBurst: { width: '100%', maxWidth: 360, minHeight: 360, alignItems: 'center', justifyContent: 'center' },
+  confetti: { position: 'absolute', width: 12, height: 30, borderRadius: 3 },
+  celebrationCard: { width: '88%', backgroundColor: '#DDF3E7', borderColor: GREEN, borderWidth: 2, borderRadius: 24, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
+  celebrationTitle: { color: GREEN, fontSize: 29, fontWeight: '900', textAlign: 'center', marginBottom: 10 },
+  celebrationText: { color: '#315942', fontSize: 16, lineHeight: 23, textAlign: 'center', marginBottom: 22 },
+  celebrationButton: { backgroundColor: GREEN, borderRadius: 12, paddingVertical: 14, paddingHorizontal: 40 },
+  celebrationButtonText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 })

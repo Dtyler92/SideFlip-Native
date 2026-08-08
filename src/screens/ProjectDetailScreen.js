@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert,
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
+import { roundLaborHours } from './laborModel'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -10,10 +11,12 @@ const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigit
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
 
 const EXPENSE_CATS = [
-  {value:'parts',label:'🔩 Parts'},{value:'supplies',label:'🧰 Supplies'},
-  {value:'labor',label:'👷 Labor'},{value:'transport',label:'🚚 Transport'},
-  {value:'fees',label:'💳 Fees'},{value:'other',label:'📦 Other'},
+  {value:'parts',label:'Parts'},{value:'supplies',label:'Supplies'},
+  {value:'labor',label:'Labor'},{value:'transport',label:'Transport'},
+  {value:'fees',label:'Fees'},{value:'other',label:'Other'},
 ]
+
+const EMPTY_EXPENSE = { description: '', amount: '', category: 'parts', laborHours: '' }
 
 export default function ProjectDetailScreen({ navigation, route }) {
   const { user, isPro } = useAuth()
@@ -21,7 +24,8 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showAddExpense, setShowAddExpense] = useState(false)
-  const [expense, setExpense] = useState({ description: '', amount: '', category: 'parts' })
+  const [editingExpenseId, setEditingExpenseId] = useState(null)
+  const [expense, setExpense] = useState(EMPTY_EXPENSE)
   const [saving, setSaving] = useState(false)
   const [generatingListing, setGeneratingListing] = useState(false)
   const [listingText, setListingText] = useState('')
@@ -48,28 +52,90 @@ export default function ProjectDetailScreen({ navigation, route }) {
     setProject(p => ({ ...p, photo, photos }))
   }
 
-  async function handleAddExpense() {
-    if (!expense.description.trim() || !expense.amount) return Alert.alert('Fill in description and amount')
-    setSaving(true)
-    await supabase.from('expenses').insert({
-      project_id: projectId, user_id: user.id,
-      description: expense.description.trim(),
-      amount: Number(expense.amount),
-      category: expense.category,
+  function beginAddExpense() {
+    setEditingExpenseId(null)
+    setExpense(EMPTY_EXPENSE)
+    setShowAddExpense(true)
+  }
+
+  function beginEditExpense(item) {
+    setEditingExpenseId(item.id)
+    setExpense({
+      description: item.description || '',
+      amount: String(item.amount ?? ''),
+      category: item.category || 'other',
+      laborHours: item.labor_hours == null ? '' : String(item.labor_hours),
     })
-    setExpense({ description: '', amount: '', category: 'parts' })
+    setShowAddExpense(true)
+  }
+
+  function cancelExpense() {
+    setEditingExpenseId(null)
+    setExpense(EMPTY_EXPENSE)
     setShowAddExpense(false)
-    setSaving(false)
-    load()
+  }
+
+  async function handleAddExpense() {
+    const amount = Number(expense.amount)
+    const laborHours = roundLaborHours(expense.laborHours)
+    if (!expense.description.trim() || !Number.isFinite(amount) || amount <= 0) {
+      return Alert.alert('Fill in expense details', 'Description and an amount greater than zero are required.')
+    }
+    if (laborHours === null) {
+      return Alert.alert('Labor time required', 'Enter the time spent. SideFlip rounds it up to the nearest 0.25 hour.')
+    }
+
+    setSaving(true)
+    try {
+      const values = {
+        description: expense.description.trim(),
+        amount,
+        category: expense.category,
+        labor_hours: laborHours,
+      }
+      const query = editingExpenseId
+        ? supabase.from('expenses').update(values).eq('id', editingExpenseId).eq('project_id', projectId).eq('user_id', user.id)
+        : supabase.from('expenses').insert({ ...values, project_id: projectId, user_id: user.id })
+      const { error } = await query
+      if (error) throw error
+      cancelExpense()
+      await load()
+    } catch (error) {
+      Alert.alert(editingExpenseId ? 'Could not update expense' : 'Could not add expense', error.message || 'Please try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleDeleteExpense(id) {
     Alert.alert('Remove expense?', '', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
-        await supabase.from('expenses').delete().eq('id', id)
-        load()
+        const { error } = await supabase.from('expenses').delete().eq('id', id).eq('project_id', projectId).eq('user_id', user.id)
+        if (error) return Alert.alert('Could not remove expense', error.message)
+        if (editingExpenseId === id) cancelExpense()
+        await load()
       }}
+    ])
+  }
+
+  async function handleUndoSale() {
+    if (saving) return
+    Alert.alert('Undo this sale?', 'The project will return to Active and its sale proceeds will be removed from the goal, if linked.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Undo Sale', onPress: async () => {
+        setSaving(true)
+        try {
+          const { error } = await supabase.rpc('undo_goal_project_outcome', { p_project_id: projectId })
+          if (error) throw error
+          onReturn?.()
+          await load()
+        } catch (error) {
+          Alert.alert('Could not undo sale', error.message || 'Please try again.')
+        } finally {
+          setSaving(false)
+        }
+      }},
     ])
   }
 
@@ -122,6 +188,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const profit = project.sale_price ? Number(project.sale_price) - totalInvested : null
   const photos = project.photos?.length > 0 ? project.photos : (project.photo ? [project.photo] : [])
   const dedicatedPhotos = [project.before_photo, project.after_photo].filter(url => url && !photos.includes(url))
+  const laborPreview = roundLaborHours(expense.laborHours)
 
   return (
     <View style={s.root}>
@@ -135,7 +202,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={s.content}>
+      <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
         {/* Multi Photo */}
         <MultiPhotoPicker
           userId={user.id}
@@ -183,14 +250,18 @@ export default function ProjectDetailScreen({ navigation, route }) {
             <Text style={s.emptyText}>No expenses yet</Text>
           ) : (
             project.expenses.map(e => (
-              <TouchableOpacity key={e.id} style={s.expenseRow} onPress={() => handleDeleteExpense(e.id)}>
-                <View style={{flex:1}}>
-                  <Text style={s.expenseDesc}>{e.description}</Text>
-                  <Text style={s.expenseCat}>{e.category}</Text>
-                </View>
-                <Text style={s.expenseAmount}>{fmt(e.amount)}</Text>
-                <Text style={s.expenseDelete}>🗑</Text>
-              </TouchableOpacity>
+              <View key={e.id} style={s.expenseRow}>
+                <TouchableOpacity style={s.expenseEditArea} onPress={() => beginEditExpense(e)}>
+                  <View style={{flex:1}}>
+                    <Text style={s.expenseDesc}>{e.description}</Text>
+                    <Text style={s.expenseCat}>{e.category}{e.labor_hours ? ` · ${Number(e.labor_hours)} hr labor` : ' · Labor not recorded'}</Text>
+                  </View>
+                  <Text style={s.expenseAmount}>{fmt(e.amount)}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Remove ${e.description}`} onPress={() => handleDeleteExpense(e.id)}>
+                  <Text style={s.expenseRemove}>Remove</Text>
+                </TouchableOpacity>
+              </View>
             ))
           )}
         </View>
@@ -198,12 +269,17 @@ export default function ProjectDetailScreen({ navigation, route }) {
         {/* Add expense form */}
         {showAddExpense && (
           <View style={s.card}>
+            <Text style={s.formTitle}>{editingExpenseId ? 'Edit Expense' : 'Add Expense'}</Text>
             <Text style={[s.label,{marginBottom:6}]}>Description</Text>
             <TextInput style={s.input} placeholder="e.g. Carburetor" placeholderTextColor="#A8A49E"
               value={expense.description} onChangeText={v => setExpense(e=>({...e,description:v}))} autoFocus />
             <Text style={[s.label,{marginTop:12,marginBottom:6}]}>Amount</Text>
             <TextInput style={s.input} placeholder="0.00" placeholderTextColor="#A8A49E"
               value={expense.amount} onChangeText={v => setExpense(e=>({...e,amount:v}))} keyboardType="decimal-pad" />
+            <Text style={[s.label,{marginTop:12,marginBottom:6}]}>Labor hours *</Text>
+            <TextInput style={s.input} placeholder="0.25" placeholderTextColor="#A8A49E"
+              value={expense.laborHours} onChangeText={v => setExpense(e=>({...e,laborHours:v}))} keyboardType="decimal-pad" />
+            <Text style={s.inputHint}>{laborPreview ? `Will save as ${laborPreview} hour${laborPreview === 1 ? '' : 's'}.` : 'Always rounded up to the nearest 0.25 hour.'}</Text>
             <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:12}}>
               {EXPENSE_CATS.map(c => (
                 <TouchableOpacity key={c.value} onPress={() => setExpense(e=>({...e,category:c.value}))}
@@ -213,11 +289,11 @@ export default function ProjectDetailScreen({ navigation, route }) {
               ))}
             </View>
             <View style={{flexDirection:'row',gap:8,marginTop:16}}>
-              <TouchableOpacity style={[s.btn,{flex:1,backgroundColor:'#F0EDE8'}]} onPress={() => setShowAddExpense(false)}>
+              <TouchableOpacity style={[s.btn,{flex:1,backgroundColor:'#F0EDE8'}]} onPress={cancelExpense}>
                 <Text style={[s.btnText,{color:'#5C5850'}]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.btn,{flex:1},saving&&s.btnDisabled]} onPress={handleAddExpense} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Add</Text>}
+                {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>{editingExpenseId ? 'Save Changes' : 'Add Expense'}</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -227,8 +303,8 @@ export default function ProjectDetailScreen({ navigation, route }) {
         {project.status === 'active' && (
           <>
             {!showAddExpense && (
-              <TouchableOpacity style={[s.btn,{backgroundColor:'#F0EDE8',marginBottom:10}]} onPress={() => setShowAddExpense(true)}>
-                <Text style={[s.btnText,{color:'#1A1917'}]}>+ Add Expense</Text>
+              <TouchableOpacity style={[s.btn,{backgroundColor:'#F0EDE8',marginBottom:10}]} onPress={beginAddExpense}>
+                <Text style={[s.btnText,{color:'#1A1917'}]}>Add Expense</Text>
               </TouchableOpacity>
             )}
 
@@ -240,13 +316,13 @@ export default function ProjectDetailScreen({ navigation, route }) {
             >
               {generatingListing
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={s.btnText}>{isPro ? '✨ Generate FB Listing' : '🔒 AI Listing Generator — Pro'}</Text>
+                : <Text style={s.btnText}>Generate Sales Listing</Text>
               }
             </TouchableOpacity>
 
             <TouchableOpacity style={[s.btn,{backgroundColor:GREEN}]}
               onPress={() => navigation.navigate('SellProject', {projectId, project, onReturn:()=>{onReturn?.();load()}})}>
-              <Text style={s.btnText}>💰 Mark as Sold</Text>
+              <Text style={s.btnText}>Mark as Sold</Text>
             </TouchableOpacity>
           </>
         )}
@@ -259,10 +335,13 @@ export default function ProjectDetailScreen({ navigation, route }) {
             >
               {generatingListing
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={s.btnText}>{isPro ? '✨ Generate FB Listing' : '🔒 AI Listing Generator — Pro'}</Text>
+                : <Text style={s.btnText}>Generate Sales Listing</Text>
               }
             </TouchableOpacity>
             <View style={s.soldBadge}><Text style={s.soldText}>✅ Sold for {fmt(project.sale_price)}</Text></View>
+            <TouchableOpacity style={[s.btn, s.undoSaleButton, saving && s.btnDisabled]} onPress={handleUndoSale} disabled={saving}>
+              {saving ? <ActivityIndicator color={ACCENT} /> : <Text style={s.undoSaleText}>Undo Sale</Text>}
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -294,7 +373,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
               style={s.modalShareBtn}
               onPress={() => Share.share({ message: listingText })}
             >
-              <Text style={s.modalShareBtnText}>📋 Share / Copy Listing</Text>
+              <Text style={s.modalShareBtnText}>Share / Copy Listing</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -321,11 +400,14 @@ const s = StyleSheet.create({
   notesText:{fontSize:14,color:'#1A1917',lineHeight:22},
   emptyText:{fontSize:13,color:'#A8A49E',textAlign:'center',paddingVertical:8},
   expenseRow:{flexDirection:'row',alignItems:'center',paddingVertical:10,borderBottomWidth:1,borderBottomColor:'#F0EDE8'},
+  expenseEditArea:{flex:1,flexDirection:'row',alignItems:'center'},
   expenseDesc:{fontSize:14,color:'#1A1917',fontWeight:'500'},expenseCat:{fontSize:11,color:'#A8A49E',marginTop:1},
-  expenseAmount:{fontSize:14,fontWeight:'700',color:'#1A1917',marginRight:8},
-  expenseDelete:{fontSize:16,color:'#A8A49E'},
+  expenseAmount:{fontSize:14,fontWeight:'700',color:'#1A1917',marginRight:10},
+  expenseRemove:{fontSize:12,color:ACCENT,fontWeight:'700',paddingVertical:8},
+  formTitle:{fontSize:17,fontWeight:'800',color:'#1A1917',marginBottom:14},
   label:{fontSize:13,fontWeight:'600',color:'#5C5850'},
   input:{borderWidth:1,borderColor:'#E8E4DE',borderRadius:10,padding:12,fontSize:15,color:'#1A1917',backgroundColor:'#FAFAF7'},
+  inputHint:{fontSize:11,color:'#8C8880',marginTop:5},
   catChip:{paddingHorizontal:10,paddingVertical:6,borderRadius:20,borderWidth:1,borderColor:'#E8E4DE',backgroundColor:'#F5F2EE'},
   catChipActive:{backgroundColor:ACCENT,borderColor:ACCENT},
   catChipText:{fontSize:12,color:'#5C5850'},catChipTextActive:{color:'#fff',fontWeight:'600'},
@@ -333,6 +415,8 @@ const s = StyleSheet.create({
   btnDisabled:{opacity:0.6},btnText:{color:'#fff',fontSize:15,fontWeight:'700'},
   soldBadge:{backgroundColor:'#E8F5EE',borderRadius:10,padding:16,alignItems:'center'},
   soldText:{fontSize:15,fontWeight:'700',color:'#2D7A4F'},
+  undoSaleButton:{backgroundColor:'#fff',borderWidth:1.5,borderColor:ACCENT,marginTop:10},
+  undoSaleText:{color:ACCENT,fontSize:15,fontWeight:'700'},
   modalRoot:{flex:1,backgroundColor:'#FAFAF7',padding:20},
   modalHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:8,paddingTop:8},
   modalTitle:{fontSize:17,fontWeight:'700',color:'#1A1917'},

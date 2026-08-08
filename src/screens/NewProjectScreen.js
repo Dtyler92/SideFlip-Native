@@ -22,7 +22,7 @@ export default function NewProjectScreen({ navigation, route }) {
   const { user, isPro } = useAuth()
   const { onReturn } = route.params || {}
   const [title, setTitle] = useState('')
-  const [category, setCategory] = useState('mower')
+  const [category, setCategory] = useState('')
   const [purchasePrice, setPurchasePrice] = useState('')
   const [notes, setNotes] = useState('')
   const [photos, setPhotos] = useState([])
@@ -53,6 +53,7 @@ export default function NewProjectScreen({ navigation, route }) {
 
   async function handleSave() {
     if (!title.trim()) return Alert.alert('Give your project a name')
+    if (!category) return Alert.alert('Select a category', 'Choose the category that best matches this project.')
     const rawPrice = Number(purchasePrice || 0)
     const rawFunding = Number(goalFundingInput || 0)
     if (!Number.isFinite(rawPrice) || rawPrice < 0) return Alert.alert('Enter a valid purchase price')
@@ -144,9 +145,9 @@ export default function NewProjectScreen({ navigation, route }) {
         <TextInput style={s.input} placeholder="e.g. Honda HRR216 Mower" placeholderTextColor="#A8A49E"
           value={title} onChangeText={setTitle} autoFocus />
 
-        <Text style={[s.label, {marginTop:16}]}>Category</Text>
+        <Text style={[s.label, {marginTop:16}]}>Category *</Text>
         <TouchableOpacity style={s.select} onPress={() => setShowCats(!showCats)}>
-          <Text style={s.selectText}>{selectedCat?.label}</Text>
+          <Text style={s.selectText}>{selectedCat?.label || 'Select'}</Text>
           <Text style={{color:'#A8A49E',fontSize:12,fontWeight:'700'}}>Choose</Text>
         </TouchableOpacity>
         {showCats && (

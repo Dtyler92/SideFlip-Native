@@ -27,5 +27,27 @@ test('goal progress includes available ledger cash and capital in active project
     progressPercent: 50,
     activeCount: 1,
     soldCount: 1,
+    outOfPocket: 50,
+    flipped: 0,
   })
+})
+
+test('goal analytics reports personal cash invested and gross flipped value', () => {
+  const goal = {
+    id: 'g1',
+    target_amount: 5000,
+    goal_ledger: [
+      { goal_id: 'g1', type: 'personal_contribution', amount: 600 },
+      { goal_id: 'g1', type: 'goal_purchase', amount: -400 },
+    ],
+  }
+  const projects = [
+    {
+      goal_id: 'g1', status: 'sold', purchase_price: 500, out_of_pocket_amount: 100,
+      sale_price: 1200, expenses: [{ amount: 50 }],
+    },
+  ]
+  const summary = calculateGoalSummary(goal, projects)
+  assert.equal(summary.outOfPocket, 750)
+  assert.equal(summary.flipped, 1200)
 })

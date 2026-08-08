@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import ProFeatureList from '../components/ProFeatureList'
+import { calculateHourlyEarnings } from './laborModel'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -99,6 +100,8 @@ export default function AnalyticsScreen({ navigation }) {
   const avgProfit = sold.length > 0 ? totalProfit / sold.length : 0
   const winRate = sold.length > 0 ? (sold.filter(p => (getProfit(p) || 0) > 0).length / sold.length * 100).toFixed(0) : 0
   const overallROI = totalInvestedSold > 0 ? ((totalProfit / totalInvestedSold) * 100).toFixed(1) : null
+  const laborAnalytics = calculateHourlyEarnings(projects)
+  const laborHoursLabel = laborAnalytics.totalLaborHours.toLocaleString('en-US', { maximumFractionDigits: 2 })
 
   // Days to sell
   const withDays = sold.filter(p => p.created_at && p.sold_at).map(p => {
@@ -154,6 +157,10 @@ export default function AnalyticsScreen({ navigation }) {
           <View style={s.row}>
             <StatCard label="Total Revenue" value={fmt(totalRevenue)} />
             <StatCard label="Capital Active" value={fmt(totalInvestedActive)} sub={`across ${active.length} projects`} />
+          </View>
+          <View style={s.row}>
+            <StatCard label="Profit per Labor Hour" value={laborAnalytics.hourlyEarnings === null ? '—' : fmt(laborAnalytics.hourlyEarnings)} color={laborAnalytics.hourlyEarnings === null || laborAnalytics.hourlyEarnings >= 0 ? GREEN : ACCENT} sub="sold projects with labor" />
+            <StatCard label="Labor Recorded" value={`${laborHoursLabel}h`} sub="sold projects with labor" />
           </View>
           {avgDays !== null && (
             <View style={s.row}>
