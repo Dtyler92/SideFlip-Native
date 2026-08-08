@@ -4,13 +4,14 @@ import { supabase } from '../lib/supabase'
 
 const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
+const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100
 const SALE_KEYBOARD_ACCESSORY_ID = 'sell-project-number-pad-actions'
 
 export default function SellProjectScreen({ navigation, route }) {
   const { projectId, project: proj, onReturn } = route.params || {}
   const [project] = useState(proj)
   const [salePrice, setSalePrice] = useState('')
-  const [keepAmount, setKeepAmount] = useState('0')
+  const [cashKeptOutInput, setCashKeptOutInput] = useState('0')
   const [saving, setSaving] = useState(false)
 
   if (!project) return null
@@ -20,17 +21,19 @@ export default function SellProjectScreen({ navigation, route }) {
   const roi = preview !== null && totalInvested ? ((preview / totalInvested) * 100).toFixed(1) : null
 
   async function handleSell() {
-    const price = Number(salePrice)
-    const kept = Number(keepAmount || 0)
+    const price = roundMoney(salePrice)
+    const cashKeptOut = roundMoney(cashKeptOutInput || 0)
+    const goalRetained = roundMoney(price - cashKeptOut)
     if (!salePrice || !Number.isFinite(price) || price < 0) return Alert.alert('Enter a valid sale price')
-    if (!Number.isFinite(kept) || kept < 0 || kept > price) return Alert.alert('Cash kept out must be between $0 and the sale price.')
+    if (project.goal_id && price === 0) return Alert.alert('Enter a sale price', 'A goal-linked sale must be greater than $0 so proceeds can be recorded toward the goal.')
+    if (!Number.isFinite(cashKeptOut) || cashKeptOut < 0 || cashKeptOut > price) return Alert.alert('Cash kept out must be between $0 and the sale price.')
     setSaving(true)
     try {
       if (project.goal_id) {
         const { error } = await supabase.rpc('record_trade_up_sale', {
           p_project_id: projectId,
           p_sale_price: price,
-          p_keep_amount: kept,
+          p_keep_amount: goalRetained,
         })
         if (error) throw error
       } else {
@@ -92,8 +95,8 @@ export default function SellProjectScreen({ navigation, route }) {
               style={s.splitInput}
               placeholder="0.00"
               placeholderTextColor="#A8A49E"
-              value={keepAmount}
-              onChangeText={setKeepAmount}
+              value={cashKeptOutInput}
+              onChangeText={setCashKeptOutInput}
               keyboardType="decimal-pad"
               inputAccessoryViewID={SALE_KEYBOARD_ACCESSORY_ID}
             />

@@ -15,6 +15,9 @@ const CATEGORIES = [
   {value:'furniture',label:'🪑 Furniture'},{value:'other',label:'📦 Other'},
 ]
 
+const money = value => '$' + (Number(value) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const roundMoney = value => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100
+
 export default function NewProjectScreen({ navigation, route }) {
   const { user, isPro } = useAuth()
   const { onReturn } = route.params || {}
@@ -25,24 +28,44 @@ export default function NewProjectScreen({ navigation, route }) {
   const [photos, setPhotos] = useState([])
   const [activeGoals, setActiveGoals] = useState([])
   const [selectedGoalId, setSelectedGoalId] = useState(null)
+  const [goalFundingInput, setGoalFundingInput] = useState('0')
   const [saving, setSaving] = useState(false)
   const projectMutationIdRef = useRef(createMutationId())
   const [showCats, setShowCats] = useState(false)
 
   useEffect(() => {
     if (!user?.id) return
-    supabase.from('trade_up_goals').select('id,name').eq('user_id', user.id).eq('status', 'active').order('created_at', { ascending: false })
+    supabase.from('trade_up_goals').select('id,name,goal_ledger(amount)').eq('user_id', user.id).eq('status', 'active').order('created_at', { ascending: false })
       .then(({ data, error }) => {
         if (error) console.warn('Could not load active goals:', error.message)
-        else setActiveGoals(data || [])
+        else setActiveGoals((data || []).map(goal => ({
+          ...goal,
+          available: Math.max(0, (goal.goal_ledger || []).reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0)),
+        })))
       })
   }, [user?.id])
 
+  const selectedGoal = activeGoals.find(goal => goal.id === selectedGoalId)
+  const goalAvailable = Number(selectedGoal?.available) || 0
+  const purchasePriceValue = roundMoney(purchasePrice)
+  const goalFundingValue = roundMoney(goalFundingInput)
+  const outOfPocketPreview = Math.max(0, roundMoney(purchasePriceValue - goalFundingValue))
+
   async function handleSave() {
     if (!title.trim()) return Alert.alert('Give your project a name')
+    const rawPrice = Number(purchasePrice || 0)
+    const rawFunding = Number(goalFundingInput || 0)
+    if (!Number.isFinite(rawPrice) || rawPrice < 0) return Alert.alert('Enter a valid purchase price')
+    if (!Number.isFinite(rawFunding) || rawFunding < 0) return Alert.alert('Enter a valid goal amount')
+
+    const price = roundMoney(rawPrice)
+    const funding = selectedGoalId ? roundMoney(rawFunding) : 0
+    if (funding > price) return Alert.alert('Goal amount too high', 'The amount used from your goal cannot exceed the project purchase price.')
+    if (funding > goalAvailable) return Alert.alert('Goal amount too high', `This goal currently has ${money(goalAvailable)} available.`)
+    const outOfPocket = roundMoney(price - funding)
+
     setSaving(true)
     try {
-      const price = Number(purchasePrice) || 0
       if (selectedGoalId) {
         const { data: projectId, error: createError } = await supabase.rpc('create_trade_up_project', {
           p_title: title.trim(),
@@ -60,8 +83,8 @@ export default function NewProjectScreen({ navigation, route }) {
           p_vehicle_make: null,
           p_vehicle_model: null,
           p_goal_id: selectedGoalId,
-          p_goal_funding: 0,
-          p_out_of_pocket: price,
+          p_goal_funding: funding,
+          p_out_of_pocket: outOfPocket,
           p_mutation_id: projectMutationIdRef.current,
         })
         if (createError) throw createError
@@ -142,11 +165,11 @@ export default function NewProjectScreen({ navigation, route }) {
             <Text style={[s.label, {marginTop:16}]}>Trade-Up Goal (optional)</Text>
             <Text style={s.goalHint}>Connect this project to a goal. Its purchase and sale will update goal progress.</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.goalChoices}>
-              <TouchableOpacity style={[s.goalChoice, !selectedGoalId && s.goalChoiceActive]} onPress={() => setSelectedGoalId(null)}>
+              <TouchableOpacity style={[s.goalChoice, !selectedGoalId && s.goalChoiceActive]} onPress={() => { setSelectedGoalId(null); setGoalFundingInput('0') }}>
                 <Text style={[s.goalChoiceText, !selectedGoalId && s.goalChoiceTextActive]}>No goal</Text>
               </TouchableOpacity>
               {activeGoals.map(goal => (
-                <TouchableOpacity key={goal.id} style={[s.goalChoice, selectedGoalId === goal.id && s.goalChoiceActive]} onPress={() => setSelectedGoalId(goal.id)}>
+                <TouchableOpacity key={goal.id} style={[s.goalChoice, selectedGoalId === goal.id && s.goalChoiceActive]} onPress={() => { setSelectedGoalId(goal.id); setGoalFundingInput('0') }}>
                   <Text style={[s.goalChoiceText, selectedGoalId === goal.id && s.goalChoiceTextActive]} numberOfLines={1}>{goal.name}</Text>
                 </TouchableOpacity>
               ))}
@@ -157,6 +180,36 @@ export default function NewProjectScreen({ navigation, route }) {
         <Text style={[s.label, {marginTop:16}]}>Purchase Price</Text>
         <TextInput style={s.input} placeholder="0.00" placeholderTextColor="#A8A49E"
           value={purchasePrice} onChangeText={setPurchasePrice} keyboardType="decimal-pad" />
+
+        {selectedGoal && (
+          <View style={s.fundingCard}>
+            <View style={s.fundingHeader}>
+              <Text style={s.fundingTitle}>Use from goal balance</Text>
+              <Text style={s.availableText}>{money(goalAvailable)} available</Text>
+            </View>
+            <Text style={s.goalHint}>Choose how much of this purchase comes from the goal. The rest is tracked as out-of-pocket.</Text>
+            <View style={s.fundingInputRow}>
+              <TextInput
+                style={[s.input, s.fundingInput]}
+                placeholder="0.00"
+                placeholderTextColor="#A8A49E"
+                value={goalFundingInput}
+                onChangeText={setGoalFundingInput}
+                keyboardType="decimal-pad"
+              />
+              <TouchableOpacity
+                style={s.useMaxButton}
+                onPress={() => setGoalFundingInput(String(Math.min(goalAvailable, purchasePriceValue)))}
+              >
+                <Text style={s.useMaxText}>Use max</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={s.fundingSummary}>
+              <Text style={s.fundingSummaryLabel}>Out-of-pocket</Text>
+              <Text style={s.fundingSummaryValue}>{money(outOfPocketPreview)}</Text>
+            </View>
+          </View>
+        )}
 
         <Text style={[s.label, {marginTop:16}]}>Notes (optional)</Text>
         <TextInput style={[s.input, s.textarea]} placeholder="Condition, what's wrong, the plan..."
@@ -194,6 +247,17 @@ const s = StyleSheet.create({
   goalChoiceActive:{borderColor:'#C8402F',backgroundColor:'#FFF2EE'},
   goalChoiceText:{fontSize:13,color:'#5C5850',fontWeight:'600'},
   goalChoiceTextActive:{color:'#C8402F'},
+  fundingCard:{marginTop:14,padding:14,borderRadius:12,borderWidth:1,borderColor:'#CFE4D8',backgroundColor:'#F3FAF6'},
+  fundingHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:5},
+  fundingTitle:{fontSize:14,fontWeight:'700',color:'#1A1917'},
+  availableText:{fontSize:12,fontWeight:'700',color:'#2D7A4F'},
+  fundingInputRow:{flexDirection:'row',alignItems:'center',gap:10},
+  fundingInput:{flex:1},
+  useMaxButton:{paddingHorizontal:14,paddingVertical:14,borderRadius:10,backgroundColor:'#2D7A4F'},
+  useMaxText:{fontSize:13,fontWeight:'700',color:'#fff'},
+  fundingSummary:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:12,paddingTop:10,borderTopWidth:1,borderTopColor:'#D8EADF'},
+  fundingSummaryLabel:{fontSize:13,color:'#5C5850'},
+  fundingSummaryValue:{fontSize:15,fontWeight:'800',color:'#1A1917'},
   btn:{backgroundColor:'#C8402F',borderRadius:10,padding:16,alignItems:'center',marginTop:24},
   btnDisabled:{opacity:0.6},btnText:{color:'#fff',fontSize:16,fontWeight:'700'},
 })
