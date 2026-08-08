@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
 import { supabase } from '../lib/supabase'
 
 const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
+const SALE_KEYBOARD_ACCESSORY_ID = 'sell-project-number-pad-actions'
 
 export default function SellProjectScreen({ navigation, route }) {
   const { projectId, project: proj, onReturn } = route.params || {}
@@ -59,7 +60,14 @@ export default function SellProjectScreen({ navigation, route }) {
         <View style={{width:60}} />
       </View>
 
-      <View style={s.content}>
+      <KeyboardAvoidingView style={s.keyboardArea} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentContainerStyle={s.content}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+          showsVerticalScrollIndicator={false}
+        >
         <View style={s.card}>
           <Text style={s.projectLabel}>Project</Text>
           <Text style={s.projectTitle}>{project.title}</Text>
@@ -73,13 +81,22 @@ export default function SellProjectScreen({ navigation, route }) {
         <TextInput
           style={s.bigInput} placeholder="0.00" placeholderTextColor="#A8A49E"
           value={salePrice} onChangeText={setSalePrice} keyboardType="decimal-pad" autoFocus
+          inputAccessoryViewID={SALE_KEYBOARD_ACCESSORY_ID}
         />
 
         {project.goal_id && (
           <View style={s.goalSplit}>
             <Text style={s.sectionLabel}>Cash kept out</Text>
             <Text style={s.goalSplitHint}>Leave $0 to roll all sale proceeds into this Trade-Up Goal.</Text>
-            <TextInput style={s.splitInput} placeholder="0.00" placeholderTextColor="#A8A49E" value={keepAmount} onChangeText={setKeepAmount} keyboardType="decimal-pad" />
+            <TextInput
+              style={s.splitInput}
+              placeholder="0.00"
+              placeholderTextColor="#A8A49E"
+              value={keepAmount}
+              onChangeText={setKeepAmount}
+              keyboardType="decimal-pad"
+              inputAccessoryViewID={SALE_KEYBOARD_ACCESSORY_ID}
+            />
           </View>
         )}
 
@@ -94,16 +111,31 @@ export default function SellProjectScreen({ navigation, route }) {
         <TouchableOpacity style={[s.btn, saving && s.btnDisabled]} onPress={handleSell} disabled={saving}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Confirm Sale</Text>}
         </TouchableOpacity>
-        <TouchableOpacity style={s.cancelBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={s.cancelBtn} onPress={() => { Keyboard.dismiss(); navigation.goBack() }}>
           <Text style={s.cancelText}>Cancel</Text>
         </TouchableOpacity>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {Platform.OS === 'ios' && (
+        <InputAccessoryView nativeID={SALE_KEYBOARD_ACCESSORY_ID}>
+          <View style={s.keyboardToolbar}>
+            <TouchableOpacity style={s.keyboardDone} onPress={() => Keyboard.dismiss()}>
+              <Text style={s.keyboardDoneText}>Done</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.keyboardConfirm, saving && s.btnDisabled]} onPress={handleSell} disabled={saving}>
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.keyboardConfirmText}>Confirm Sale</Text>}
+            </TouchableOpacity>
+          </View>
+        </InputAccessoryView>
+      )}
     </View>
   )
 }
 
 const s = StyleSheet.create({
   root:{flex:1,backgroundColor:'#FAFAF7'},
+  keyboardArea:{flex:1},
   header:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:16,paddingTop:56,paddingBottom:12,backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E8E4DE'},
   backBtn:{width:60},backText:{color:'#C8402F',fontSize:16,fontWeight:'600'},
   headerTitle:{fontSize:17,fontWeight:'700',color:'#1A1917'},
@@ -129,4 +161,9 @@ const s = StyleSheet.create({
   btnDisabled:{opacity:0.6},btnText:{color:'#fff',fontSize:16,fontWeight:'700'},
   cancelBtn:{alignItems:'center',padding:12},
   cancelText:{color:'#A8A49E',fontSize:15},
+  keyboardToolbar:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,paddingHorizontal:14,paddingVertical:10,backgroundColor:'#F4F1EC',borderTopWidth:1,borderTopColor:'#DEDAD3'},
+  keyboardDone:{paddingHorizontal:12,paddingVertical:10},
+  keyboardDoneText:{color:'#C8402F',fontSize:16,fontWeight:'700'},
+  keyboardConfirm:{flex:1,backgroundColor:'#2D7A4F',borderRadius:10,paddingVertical:12,alignItems:'center'},
+  keyboardConfirmText:{color:'#fff',fontSize:15,fontWeight:'700'},
 })
