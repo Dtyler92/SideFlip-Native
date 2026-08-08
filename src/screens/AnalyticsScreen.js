@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
+import ProFeatureList from '../components/ProFeatureList'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -22,22 +23,71 @@ function StatCard({ label, value, sub, color }) {
   )
 }
 
-export default function AnalyticsScreen() {
+function LockedAnalyticsPreview({ navigation, topInset }) {
+  return (
+    <ScrollView
+      style={s.root}
+      contentContainerStyle={[s.content, { paddingTop: topInset + 20 }]}
+    >
+      <Text style={s.heading}>Analytics</Text>
+      <Text style={s.sub}>Understand every flip and make your next buy with confidence.</Text>
+
+      <View style={s.lockCard}>
+        <View style={s.lockIconWrap}><Text style={s.lockIcon}>🔒</Text></View>
+        <Text style={s.lockTitle}>Portfolio Analytics is a Pro feature</Text>
+        <Text style={s.lockCopy}>Upgrade to unlock live performance insights across your entire portfolio.</Text>
+      </View>
+
+      <View style={s.preview} pointerEvents="none">
+        <Text style={s.sectionTitle}>Analytics Preview</Text>
+        <View style={s.row}>
+          <StatCard label="Total Profit" value="$4,280" color={GREEN} sub="31.4% ROI" />
+          <StatCard label="Win Rate" value="86%" color={GREEN} sub="12 of 14 sold" />
+        </View>
+        <View style={s.row}>
+          <StatCard label="Avg Profit / Flip" value="$356.67" color={GREEN} />
+          <StatCard label="Avg Days to Sell" value="11d" />
+        </View>
+      </View>
+
+      <TouchableOpacity
+        accessibilityRole="button"
+        style={s.upgradeButton}
+        onPress={() => navigation.navigate('Pro')}
+      >
+        <Text style={s.upgradeButtonText}>Upgrade to SideFlip Pro</Text>
+      </TouchableOpacity>
+
+      <Text style={s.proIncludes}>Everything included with Pro</Text>
+      <View style={s.featureCard}><ProFeatureList compact /></View>
+    </ScrollView>
+  )
+}
+
+export default function AnalyticsScreen({ navigation }) {
   const insets = useSafeAreaInsets()
-  const { user } = useAuth()
+  const { user, isPro } = useAuth()
   const [projects, setProjects] = useState([])
   const [refreshing, setRefreshing] = useState(false)
+  const hasPro = isPro
 
   const load = useCallback(async () => {
+    if (!hasPro) {
+      setProjects([])
+      setRefreshing(false)
+      return
+    }
     const { data } = await supabase
       .from('projects')
       .select('*, expenses(*)')
       .eq('user_id', user.id)
     setProjects(data || [])
     setRefreshing(false)
-  }, [user])
+  }, [hasPro, user])
 
   useEffect(() => { load() }, [load])
+
+  if (!hasPro) return <LockedAnalyticsPreview navigation={navigation} topInset={insets.top} />
 
   const sold = projects.filter(p => p.status === 'sold')
   const active = projects.filter(p => p.status === 'active')
@@ -211,4 +261,14 @@ const s = StyleSheet.create({
   emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: '#1A1917', marginBottom: 8 },
   emptySub: { fontSize: 14, color: '#8C8880', textAlign: 'center', lineHeight: 22 },
+  lockCard: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 22, marginBottom: 18, borderWidth: 1, borderColor: '#E8E4DE' },
+  lockIconWrap: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#F7E8E5', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  lockIcon: { fontSize: 24 },
+  lockTitle: { fontSize: 18, fontWeight: '800', color: '#1A1917', textAlign: 'center', marginBottom: 7 },
+  lockCopy: { fontSize: 14, color: '#716D66', textAlign: 'center', lineHeight: 20 },
+  preview: { opacity: 0.42 },
+  upgradeButton: { minHeight: 56, backgroundColor: ACCENT, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, marginTop: 5, marginBottom: 26, shadowColor: ACCENT, shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+  upgradeButtonText: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  proIncludes: { fontSize: 18, fontWeight: '800', color: '#1A1917', marginBottom: 12 },
+  featureCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E8E4DE' },
 })

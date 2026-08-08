@@ -9,6 +9,7 @@ export default function SellProjectScreen({ navigation, route }) {
   const { projectId, project: proj, onReturn } = route.params || {}
   const [project] = useState(proj)
   const [salePrice, setSalePrice] = useState('')
+  const [keepAmount, setKeepAmount] = useState('0')
   const [saving, setSaving] = useState(false)
 
   if (!project) return null
@@ -18,14 +19,27 @@ export default function SellProjectScreen({ navigation, route }) {
   const roi = preview !== null && totalInvested ? ((preview / totalInvested) * 100).toFixed(1) : null
 
   async function handleSell() {
-    if (!salePrice || Number(salePrice) < 0) return Alert.alert('Enter a valid sale price')
+    const price = Number(salePrice)
+    const kept = Number(keepAmount || 0)
+    if (!salePrice || !Number.isFinite(price) || price < 0) return Alert.alert('Enter a valid sale price')
+    if (!Number.isFinite(kept) || kept < 0 || kept > price) return Alert.alert('Cash kept out must be between $0 and the sale price.')
     setSaving(true)
     try {
-      await supabase.from('projects').update({
-        status: 'sold',
-        sale_price: Number(salePrice),
-        sold_at: new Date().toISOString(),
-      }).eq('id', projectId)
+      if (project.goal_id) {
+        const { error } = await supabase.rpc('record_trade_up_sale', {
+          p_project_id: projectId,
+          p_sale_price: price,
+          p_keep_amount: kept,
+        })
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('projects').update({
+          status: 'sold',
+          sale_price: price,
+          sold_at: new Date().toISOString(),
+        }).eq('id', projectId)
+        if (error) throw error
+      }
       onReturn?.()
       navigation.goBack()
     } catch (err) {
@@ -61,6 +75,14 @@ export default function SellProjectScreen({ navigation, route }) {
           value={salePrice} onChangeText={setSalePrice} keyboardType="decimal-pad" autoFocus
         />
 
+        {project.goal_id && (
+          <View style={s.goalSplit}>
+            <Text style={s.sectionLabel}>Cash kept out</Text>
+            <Text style={s.goalSplitHint}>Leave $0 to roll all sale proceeds into this Trade-Up Goal.</Text>
+            <TextInput style={s.splitInput} placeholder="0.00" placeholderTextColor="#A8A49E" value={keepAmount} onChangeText={setKeepAmount} keyboardType="decimal-pad" />
+          </View>
+        )}
+
         {preview !== null && (
           <View style={[s.previewCard, preview<0 && s.previewCardLoss]}>
             <Text style={[s.previewLabel, preview<0 && s.previewLabelLoss]}>{preview>=0?'Profit':'Loss'}</Text>
@@ -70,7 +92,7 @@ export default function SellProjectScreen({ navigation, route }) {
         )}
 
         <TouchableOpacity style={[s.btn, saving && s.btnDisabled]} onPress={handleSell} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Confirm Sale →</Text>}
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Confirm Sale</Text>}
         </TouchableOpacity>
         <TouchableOpacity style={s.cancelBtn} onPress={() => navigation.goBack()}>
           <Text style={s.cancelText}>Cancel</Text>
@@ -93,6 +115,9 @@ const s = StyleSheet.create({
   label:{fontSize:14,color:'#5C5850'},value:{fontSize:14,fontWeight:'700'},
   sectionLabel:{fontSize:13,fontWeight:'600',color:'#5C5850',marginBottom:8},
   bigInput:{backgroundColor:'#fff',borderRadius:12,borderWidth:1,borderColor:'#E8E4DE',padding:20,fontSize:36,fontWeight:'700',color:'#1A1917',textAlign:'center',marginBottom:16},
+  goalSplit:{backgroundColor:'#FFF9F6',borderWidth:1,borderColor:'#F1D2C8',borderRadius:12,padding:14,marginBottom:16},
+  goalSplitHint:{fontSize:12,lineHeight:17,color:'#8C8880',marginBottom:8},
+  splitInput:{backgroundColor:'#fff',borderRadius:10,borderWidth:1,borderColor:'#E8E4DE',padding:13,fontSize:18,fontWeight:'700',color:'#1A1917'},
   previewCard:{backgroundColor:'#E8F5EE',borderRadius:12,padding:20,alignItems:'center',marginBottom:16},
   previewCardLoss:{backgroundColor:'#FDECEA'},
   previewLabel:{fontSize:11,color:'#2D7A4F',textTransform:'uppercase',letterSpacing:0.5,marginBottom:4},

@@ -31,7 +31,7 @@ export default function LoginScreen({ navigation }) {
           <TextInput style={s.input} placeholder="Your password" placeholderTextColor="#A8A49E"
             value={password} onChangeText={setPassword} secureTextEntry autoComplete="password" />
           <TouchableOpacity style={[s.btn, loading && s.btnDisabled]} onPress={handleSignIn} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Sign In →</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Sign In</Text>}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')} style={s.linkRow}>
             <Text style={s.link}>Forgot password?</Text>

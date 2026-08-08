@@ -10,7 +10,7 @@ const getProfit = p => p.sale_price ? Number(p.sale_price) - getTotalInvested(p)
 const ICONS = {mower:'🚜',car:'🚗',motorcycle:'🏍️',atv:'🏎️',boat:'⛵',bicycle:'🚲',watch:'⌚',electronics:'📱',gaming:'🎮',tool:'🔧',exercise:'💪',instrument:'🎸',furniture:'🪑',other:'📦'}
 
 export default function HomeScreen({ navigation }) {
-  const { user, signOut } = useAuth()
+  const { user, signOut, isPro } = useAuth()
   const [projects, setProjects] = useState([])
   const [refreshing, setRefreshing] = useState(false)
   const [tab, setTab] = useState('active')
@@ -44,6 +44,15 @@ export default function HomeScreen({ navigation }) {
           <View key={l} style={s.summaryItem}><Text style={s.summaryLabel}>{l}</Text><Text style={[s.summaryValue,{color:c}]}>{v}</Text></View>
         ))}
       </View>
+      {!isPro && (
+        <TouchableOpacity accessibilityRole="button" style={s.proBanner} onPress={() => navigation.navigate('Pro')}>
+          <View style={s.proBannerCopy}>
+            <Text style={s.proBannerTitle}>Upgrade to SideFlip Pro</Text>
+            <Text style={s.proBannerText}>Unlock Analytics, AI listings, multiple goals, and more photos.</Text>
+          </View>
+          <Text style={s.proBannerButton}>View Pro</Text>
+        </TouchableOpacity>
+      )}
       <View style={s.tabs}>
         {[['active', `Active (${active.length})`], ['sold', `Sold (${sold.length})`]].map(([k,label]) => (
           <TouchableOpacity key={k} style={[s.tab, tab===k && s.tabActive]} onPress={() => setTab(k)}>
@@ -78,7 +87,6 @@ export default function HomeScreen({ navigation }) {
                   {p.status==='sold' && profit!==null && <Text style={[s.badge, profit<0 && s.badgeLoss]}>{profit>=0?'+':''}{fmt(profit)}</Text>}
                 </View>
               </View>
-              <Text style={s.chevron}>›</Text>
             </TouchableOpacity>
           )
         }}
@@ -107,6 +115,11 @@ const s = StyleSheet.create({
   summaryItem:{flex:1,alignItems:'center',paddingVertical:14},
   summaryLabel:{fontSize:10,color:'#8C8880',textTransform:'uppercase',letterSpacing:0.5,marginBottom:3},
   summaryValue:{fontSize:16,fontWeight:'700'},
+  proBanner:{marginHorizontal:16,marginTop:12,backgroundColor:ACCENT,borderRadius:14,padding:15,flexDirection:'row',alignItems:'center',gap:12},
+  proBannerCopy:{flex:1},
+  proBannerTitle:{color:'#fff',fontSize:16,fontWeight:'800',marginBottom:3},
+  proBannerText:{color:'#FDECEA',fontSize:12,lineHeight:17},
+  proBannerButton:{color:ACCENT,backgroundColor:'#fff',overflow:'hidden',borderRadius:8,paddingHorizontal:11,paddingVertical:8,fontSize:12,fontWeight:'800'},
   tabs:{flexDirection:'row',paddingHorizontal:16,paddingTop:12,gap:8},
   tab:{flex:1,paddingVertical:8,borderRadius:8,alignItems:'center',backgroundColor:'#F0EDE8'},
   tabActive:{backgroundColor:'#1A1917'},tabText:{fontSize:13,fontWeight:'600',color:'#8C8880'},tabTextActive:{color:'#fff'},

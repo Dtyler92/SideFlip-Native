@@ -16,7 +16,7 @@ const EXPENSE_CATS = [
 ]
 
 export default function ProjectDetailScreen({ navigation, route }) {
-  const { user } = useAuth()
+  const { user, isPro } = useAuth()
   const { projectId, onReturn } = route.params || {}
   const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -28,7 +28,12 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [showListingModal, setShowListingModal] = useState(false)
 
   async function load() {
-    const { data } = await supabase.from('projects').select('*, expenses(*)').eq('id', projectId).single()
+    const { data, error } = await supabase.from('projects').select('*, expenses(*)').eq('id', projectId).single()
+    if (error) {
+      Alert.alert('Could not load project', error.message)
+      setLoading(false)
+      return
+    }
     setProject(data)
     setLoading(false)
   }
@@ -38,7 +43,8 @@ export default function ProjectDetailScreen({ navigation, route }) {
   async function handlePhotosUpdate(urls) {
     const photo = urls[0] || null
     const photos = urls
-    await supabase.from('projects').update({ photo, photos }).eq('id', projectId)
+    const { error } = await supabase.from('projects').update({ photo, photos }).eq('id', projectId)
+    if (error) throw new Error(`Could not save project photos: ${error.message}`)
     setProject(p => ({ ...p, photo, photos }))
   }
 
@@ -71,7 +77,8 @@ export default function ProjectDetailScreen({ navigation, route }) {
     Alert.alert(`Delete "${project?.title}"?`, 'This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        await supabase.from('projects').delete().eq('id', projectId)
+        const { error } = await supabase.rpc('delete_trade_up_project', { p_project_id: projectId })
+        if (error) return Alert.alert('Could not delete project', error.message)
         onReturn?.()
         navigation.goBack()
       }}
@@ -79,11 +86,17 @@ export default function ProjectDetailScreen({ navigation, route }) {
   }
 
   async function generateListing() {
+    if (!isPro) {
+      navigation.navigate('Pro')
+      return
+    }
     setGeneratingListing(true)
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Please sign in again to use the AI Listing Generator.')
       const res = await fetch('https://sideflip.org/api/generate-listing', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           title: project.title,
           category: project.category,
@@ -107,7 +120,8 @@ export default function ProjectDetailScreen({ navigation, route }) {
 
   const totalInvested = getTotalInvested(project)
   const profit = project.sale_price ? Number(project.sale_price) - totalInvested : null
-  const photos = project.photos || (project.photo ? [project.photo] : [])
+  const photos = project.photos?.length > 0 ? project.photos : (project.photo ? [project.photo] : [])
+  const dedicatedPhotos = [project.before_photo, project.after_photo].filter(url => url && !photos.includes(url))
 
   return (
     <View style={s.root}>
@@ -123,7 +137,14 @@ export default function ProjectDetailScreen({ navigation, route }) {
 
       <ScrollView contentContainerStyle={s.content}>
         {/* Multi Photo */}
-        <MultiPhotoPicker userId={user.id} photos={photos} onUpdate={handlePhotosUpdate} />
+        <MultiPhotoPicker
+          userId={user.id}
+          photos={photos}
+          onUpdate={handlePhotosUpdate}
+          isPro={isPro}
+          additionalPhotoCount={dedicatedPhotos.length}
+          onUpgrade={() => navigation.navigate('Pro')}
+        />
 
         {/* Stats */}
         <View style={s.statsCard}>
@@ -219,7 +240,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
             >
               {generatingListing
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={s.btnText}>✨ Generate FB Listing</Text>
+                : <Text style={s.btnText}>{isPro ? '✨ Generate FB Listing' : '🔒 AI Listing Generator — Pro'}</Text>
               }
             </TouchableOpacity>
 
@@ -238,7 +259,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
             >
               {generatingListing
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={s.btnText}>✨ Generate FB Listing</Text>
+                : <Text style={s.btnText}>{isPro ? '✨ Generate FB Listing' : '🔒 AI Listing Generator — Pro'}</Text>
               }
             </TouchableOpacity>
             <View style={s.soldBadge}><Text style={s.soldText}>✅ Sold for {fmt(project.sale_price)}</Text></View>
@@ -256,7 +277,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
               </TouchableOpacity>
               <Text style={s.modalTitle}>FB Listing</Text>
               <TouchableOpacity onPress={() => Share.share({ message: listingText })}>
-                <Text style={s.modalShare}>Share ↗</Text>
+                <Text style={s.modalShare}>Share</Text>
               </TouchableOpacity>
             </View>
             <Text style={s.modalHint}>Edit the listing below before sharing</Text>

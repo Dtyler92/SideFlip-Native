@@ -12,6 +12,7 @@ import NewProjectScreen from './src/screens/NewProjectScreen'
 import ProjectDetailScreen from './src/screens/ProjectDetailScreen'
 import SellProjectScreen from './src/screens/SellProjectScreen'
 import CalculatorScreen from './src/screens/CalculatorScreen'
+import TradeUpGoalsScreen from './src/screens/TradeUpGoalsScreen'
 import AnalyticsScreen from './src/screens/AnalyticsScreen'
 import SettingsScreen from './src/screens/SettingsScreen'
 import ProScreen from './src/screens/ProScreen'
@@ -46,6 +47,8 @@ function HomeTabs() {
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🔧" focused={focused} />, tabBarLabel: 'Projects' }} />
       <Tab.Screen name="Calculator" component={CalculatorScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🧮" focused={focused} />, tabBarLabel: 'Calculator' }} />
+      <Tab.Screen name="Goals" component={TradeUpGoalsScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🎯" focused={focused} />, tabBarLabel: 'Goals' }} />
       <Tab.Screen name="Analytics" component={AnalyticsScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />, tabBarLabel: 'Analytics' }} />
       <Tab.Screen name="Settings" component={SettingsScreen}

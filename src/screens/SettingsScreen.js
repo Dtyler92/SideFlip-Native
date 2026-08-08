@@ -28,11 +28,12 @@ const LANGUAGES = [
 
 export default function SettingsScreen({ navigation }) {
   const insets = useSafeAreaInsets()
-  const { user, profile, signOut, refreshProfile } = useAuth()
+  const { user, profile, isPro, signOut, refreshProfile } = useAuth()
   const [currency, setCurrency] = useState(profile?.currency || 'USD')
   const [language, setLanguage] = useState(profile?.language || 'en')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const hasPro = isPro
 
   async function handleSave() {
     setSaving(true)
@@ -70,9 +71,24 @@ export default function SettingsScreen({ navigation }) {
       {/* Account Info */}
       <Text style={s.sectionTitle}>Account</Text>
       <View style={s.card}>
-        <Text style={s.accountEmail}>{user?.email}</Text>
-        <Text style={s.accountNote}>Use SideFlip Free, or unlock Pro features in the app.</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Pro')}><Text style={s.proLink}>View SideFlip Pro</Text></TouchableOpacity>
+        <View style={s.accountTopRow}>
+          <Text style={s.accountEmail}>{user?.email}</Text>
+          <Text style={[s.planBadge, hasPro && s.planBadgeActive]}>{hasPro ? 'PRO' : 'FREE'}</Text>
+        </View>
+        <Text style={s.accountNote}>
+          {hasPro
+            ? 'SideFlip Pro is active. Your native Pro features are unlocked.'
+            : 'You are using SideFlip Free. Upgrade in the app to unlock the complete Pro toolkit.'}
+        </Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={[s.proButton, hasPro && s.proButtonActive]}
+          onPress={() => navigation.navigate('Pro')}
+        >
+          <Text style={[s.proButtonText, hasPro && s.proButtonTextActive]}>
+            {hasPro ? 'View Pro Benefits' : 'Upgrade to SideFlip Pro'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Currency */}
@@ -133,9 +149,15 @@ const s = StyleSheet.create({
   heading: { fontSize: 26, fontWeight: '800', color: '#1A1917', marginBottom: 20 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#8C8880', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 12, marginTop: 8 },
   card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  accountEmail: { fontSize: 15, color: '#1A1917', fontWeight: '500', marginBottom: 8 },
-  accountNote: { fontSize: 13, color: '#8C8880', lineHeight: 19, marginBottom: 8 },
-  proLink: { fontSize: 14, color: ACCENT, fontWeight: '700' },
+  accountTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 },
+  accountEmail: { flex: 1, fontSize: 15, color: '#1A1917', fontWeight: '500' },
+  accountNote: { fontSize: 13, color: '#8C8880', lineHeight: 19, marginBottom: 14 },
+  planBadge: { fontSize: 10, color: '#716D66', backgroundColor: '#F0EDE8', borderRadius: 6, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4, fontWeight: '800', letterSpacing: 0.5 },
+  planBadgeActive: { color: '#23613F', backgroundColor: '#E8F5EE' },
+  proButton: { minHeight: 46, borderRadius: 11, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  proButtonActive: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: ACCENT },
+  proButtonText: { fontSize: 14, color: '#fff', fontWeight: '800' },
+  proButtonTextActive: { color: ACCENT },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
   chip: { width: '47%', borderRadius: 12, borderWidth: 1.5, borderColor: '#E8E4DE', backgroundColor: '#fff', padding: 12, alignItems: 'center' },
   chipActive: { borderColor: ACCENT, backgroundColor: '#FDF1EF' },

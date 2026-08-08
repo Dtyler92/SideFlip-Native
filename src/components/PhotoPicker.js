@@ -3,9 +3,22 @@ import * as ImagePicker from 'expo-image-picker'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-export default function PhotoPicker({ userId, photoUrl, onUploaded }) {
+export default function PhotoPicker({ userId, photoUrl, onUploaded, totalPhotoCount = 0, isPro = false, onUpgrade }) {
   const [uploading, setUploading] = useState(false)
   const [imgError, setImgError] = useState(false)
+  const photoLimit = isPro ? 25 : 5
+
+  function showLimitPrompt() {
+    if (isPro) return Alert.alert('Photo limit reached', 'SideFlip Pro supports up to 25 photos per project.')
+    Alert.alert(
+      'Unlock more project photos with SideFlip Pro',
+      'Free projects include up to 5 total photos, including before and after photos. SideFlip Pro expands each project to 25 photos.',
+      [
+        { text: 'Not Now', style: 'cancel' },
+        { text: 'View SideFlip Pro', onPress: onUpgrade },
+      ]
+    )
+  }
 
   async function pick(useCamera) {
     const permFn = useCamera
@@ -49,6 +62,7 @@ export default function PhotoPicker({ userId, photoUrl, onUploaded }) {
   }
 
   function showOptions() {
+    if (!photoUrl && totalPhotoCount >= photoLimit) return showLimitPrompt()
     Alert.alert('Add Photo', '', [
       { text: 'Take Photo', onPress: () => pick(true) },
       { text: 'Choose from Library', onPress: () => pick(false) },

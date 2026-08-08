@@ -1,3 +1,4 @@
+import { AppState } from 'react-native'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import * as Linking from 'expo-linking'
 import { supabase, getProfile } from '../lib/supabase'
@@ -15,9 +16,20 @@ function tokensFromUrl(url) {
   return access_token && refresh_token ? { access_token, refresh_token } : null
 }
 
+async function getServerPlan(accessToken) {
+  if (!accessToken) return 'free'
+  const response = await fetch('https://sideflip.org/api/entitlement', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) return 'free'
+  const body = await response.json().catch(() => ({}))
+  return body.plan === 'pro' ? 'pro' : 'free'
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [plan, setPlan] = useState('free')
   const [loading, setLoading] = useState(true)
   const generation = useRef(0)
 
@@ -27,13 +39,18 @@ export function AuthProvider({ children }) {
     setLoading(true)
     setUser(nextUser)
     setProfile(null)
+    setPlan('free')
     if (!nextUser) {
       if (request === generation.current) setLoading(false)
       return
     }
-    const nextProfile = await getProfile(nextUser.id)
+    const [nextProfile, nextPlan] = await Promise.all([
+      getProfile(nextUser.id),
+      getServerPlan(session?.access_token).catch(() => 'free'),
+    ])
     if (request !== generation.current) return
     setProfile(nextProfile)
+    setPlan(nextPlan)
     setLoading(false)
   }
 
@@ -51,21 +68,34 @@ export function AuthProvider({ children }) {
     return () => { mounted = false; linkSubscription.remove(); subscription.unsubscribe() }
   }, [])
 
+  useEffect(() => {
+    const appStateSubscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active' && user) refreshEntitlement().catch(() => {})
+    })
+    return () => appStateSubscription.remove()
+  }, [user?.id])
+
   async function signUp(email, password) {
     const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: AUTH_CALLBACK_URL } })
     if (error) throw error
     return data
   }
   async function signIn(email, password) { const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) throw error }
-  async function signOut() { await supabase.auth.signOut(); setUser(null); setProfile(null) }
+  async function signOut() { await supabase.auth.signOut(); setUser(null); setProfile(null); setPlan('free') }
   async function resetPassword(email) { const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: AUTH_CALLBACK_URL }); if (error) throw error }
   async function refreshProfile() { if (user) return getProfile(user.id).then(p => { setProfile(p); return p }) }
+  async function refreshEntitlement() {
+    const { data: { session } } = await supabase.auth.getSession()
+    const nextPlan = await getServerPlan(session?.access_token).catch(() => 'free')
+    setPlan(nextPlan)
+    return nextPlan
+  }
 
   const currency = profile?.currency || 'USD'
   const language = profile?.language || 'en'
   const currencySymbol = CURRENCY_SYMBOLS[currency] || '$'
   function formatMoney(amount) { const n = Number(amount || 0); const decimals = currency === 'JPY' ? 0 : 2; return currencySymbol + n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) }
 
-  return <AuthContext.Provider value={{ user, profile, loading, currency, language, currencySymbol, formatMoney, signUp, signIn, signOut, resetPassword, refreshProfile, needsOnboarding: profile && !profile.onboarded }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, plan, isPro: plan === 'pro', loading, currency, language, currencySymbol, formatMoney, signUp, signIn, signOut, resetPassword, refreshProfile, refreshEntitlement, needsOnboarding: profile && !profile.onboarded }}>{children}</AuthContext.Provider>
 }
 export function useAuth() { return useContext(AuthContext) }

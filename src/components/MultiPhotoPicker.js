@@ -4,11 +4,33 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const ACCENT = '#C8402F'
+export const FREE_PHOTO_LIMIT = 5
+export const PRO_PHOTO_LIMIT = 25
 
-export default function MultiPhotoPicker({ userId, photos = [], onUpdate }) {
+export default function MultiPhotoPicker({ userId, photos = [], onUpdate, isPro = false, onUpgrade, additionalPhotoCount = 0 }) {
   const [uploading, setUploading] = useState(false)
+  const photoLimit = isPro ? PRO_PHOTO_LIMIT : FREE_PHOTO_LIMIT
+  const totalPhotoCount = photos.length + additionalPhotoCount
+
+  function showUpgradePrompt() {
+    Alert.alert(
+      'Unlock more project photos with SideFlip Pro',
+      `Free projects include up to ${FREE_PHOTO_LIMIT} total photos, including before and after photos. SideFlip Pro expands each project to ${PRO_PHOTO_LIMIT} photos.`,
+      [
+        { text: 'Not Now', style: 'cancel' },
+        { text: 'View SideFlip Pro', onPress: onUpgrade },
+      ]
+    )
+  }
+
+  function showLimitPrompt() {
+    if (!isPro) return showUpgradePrompt()
+    Alert.alert('Photo limit reached', `SideFlip Pro supports up to ${PRO_PHOTO_LIMIT} photos per project.`)
+  }
 
   async function pick(useCamera) {
+    if (totalPhotoCount >= photoLimit) return showLimitPrompt()
+
     const permFn = useCamera ? ImagePicker.requestCameraPermissionsAsync : ImagePicker.requestMediaLibraryPermissionsAsync
     const { granted } = await permFn()
     if (!granted) return Alert.alert('Permission required', 'Photo access is needed.')
@@ -18,7 +40,11 @@ export default function MultiPhotoPicker({ userId, photos = [], onUpdate }) {
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, allowsMultipleSelection: true })
 
     if (result.canceled) return
-    await uploadAll(result.assets)
+
+    const remaining = photoLimit - totalPhotoCount
+    const selectedAssets = result.assets.slice(0, remaining)
+    await uploadAll(selectedAssets)
+    if (result.assets.length > remaining) showLimitPrompt()
   }
 
   async function uploadAll(assets) {
@@ -34,7 +60,7 @@ export default function MultiPhotoPicker({ userId, photos = [], onUpdate }) {
         const { data } = supabase.storage.from('project-photos').getPublicUrl(path)
         urls.push(data.publicUrl)
       }
-      onUpdate([...photos, ...urls])
+      await onUpdate([...photos, ...urls])
     } catch (err) {
       Alert.alert('Upload failed', err.message)
     } finally {
@@ -45,11 +71,18 @@ export default function MultiPhotoPicker({ userId, photos = [], onUpdate }) {
   function removePhoto(url) {
     Alert.alert('Remove photo?', '', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => onUpdate(photos.filter(p => p !== url)) }
+      { text: 'Remove', style: 'destructive', onPress: async () => {
+        try {
+          await onUpdate(photos.filter(p => p !== url))
+        } catch (err) {
+          Alert.alert('Could not remove photo', err.message)
+        }
+      }}
     ])
   }
 
   function showAddOptions() {
+    if (totalPhotoCount >= photoLimit) return showLimitPrompt()
     Alert.alert('Add Photo', '', [
       { text: 'Take Photo', onPress: () => pick(true) },
       { text: 'Choose from Library', onPress: () => pick(false) },
@@ -72,12 +105,15 @@ export default function MultiPhotoPicker({ userId, photos = [], onUpdate }) {
             ? <ActivityIndicator color={ACCENT} />
             : <>
                 <Text style={s.addIcon}>📷</Text>
-                <Text style={s.addTxt}>{photos.length === 0 ? 'Add Photo' : 'Add More'}</Text>
+                <Text style={s.addTxt}>{totalPhotoCount >= photoLimit ? 'Limit Reached' : (photos.length === 0 ? 'Add Photo' : 'Add More')}</Text>
               </>
           }
         </TouchableOpacity>
       </ScrollView>
-      {photos.length > 0 && <Text style={s.hint}>Tap a photo to remove · First photo is main</Text>}
+      <Text style={s.hint}>
+        {photos.length > 0 ? 'Tap a photo to remove · First photo is main · ' : ''}
+        {totalPhotoCount}/{photoLimit} photos
+      </Text>
     </View>
   )
 }
