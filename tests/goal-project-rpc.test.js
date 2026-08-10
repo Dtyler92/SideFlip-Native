@@ -24,6 +24,8 @@ test('goal-linked project sales retain sale price minus cash kept out', () => {
   assert.match(value, /const goalRetained = roundMoney\(price - cashKeptOut\)/)
   assert.match(value, /project\.goal_id && price === 0/)
   assert.match(value, /p_keep_amount:\s*goalRetained/)
+  assert.match(value, /await onReturn\?\.\(\)/)
+  assert.match(source('src/screens/ProjectDetailScreen.js'), /onReturn:\s*async\s*\(\)\s*=>\s*\{\s*await onReturn\?\.\(\);\s*await load\(\)/)
 })
 
 test('project deletion always uses the accounting-safe deletion RPC', () => {

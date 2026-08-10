@@ -10,6 +10,7 @@ test('project actions use requested copy and sold projects can be undone', () =>
   assert.match(detail, />Generate Sales Listing</)
   assert.doesNotMatch(detail, /Generate FB Listing|✨ Generate|🔒 AI Listing|💰 Mark as Sold|📋 Share/)
   assert.match(detail, /rpc\('undo_goal_project_outcome'/)
+  assert.match(detail, /await onReturn\?\.\(\)/)
   assert.match(detail, />Undo Sale</)
   assert.match(detail, /✅ Sold for/)
   assert.match(detail, /<Text style=\{s\.expenseRemove\}>×<\/Text>/)

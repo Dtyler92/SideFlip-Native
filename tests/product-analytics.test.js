@@ -125,7 +125,7 @@ test('auth transitions reset identity before reconciliation and always clean up 
 
 test('iOS privacy manifest discloses linked app and analytics data without tracking', () => {
   const config = JSON.parse(source('app.json')).expo
-  assert.equal(config.ios.buildNumber, '12')
+  assert.equal(config.ios.buildNumber, '13')
   const manifest = config.ios.privacyManifests
   assert.equal(manifest.NSPrivacyTracking, false)
   assert.deepEqual(manifest.NSPrivacyTrackingDomains, [])

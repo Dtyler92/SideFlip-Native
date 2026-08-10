@@ -46,7 +46,7 @@ export default function SellProjectScreen({ navigation, route }) {
         if (error) throw error
       }
       captureEvent('project_marked_sold', { project_category: project.category, is_goal_linked: Boolean(project.goal_id) })
-      onReturn?.()
+      await onReturn?.()
       navigation.goBack()
     } catch (err) {
       Alert.alert('Error', err.message)

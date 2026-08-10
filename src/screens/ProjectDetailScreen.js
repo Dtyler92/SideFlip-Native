@@ -135,7 +135,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
           const { error } = await supabase.rpc('undo_goal_project_outcome', { p_project_id: projectId })
           if (error) throw error
           captureEvent('project_sale_undone', { project_category: project.category, is_goal_linked: Boolean(project.goal_id) })
-          onReturn?.()
+          await onReturn?.()
           await load()
         } catch (error) {
           Alert.alert('Could not undo sale', error.message || 'Please try again.')
@@ -332,7 +332,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
             </TouchableOpacity>
 
             <TouchableOpacity style={[s.btn,{backgroundColor:GREEN}]}
-              onPress={() => navigation.navigate('SellProject', {projectId, project, onReturn:()=>{onReturn?.();load()}})}>
+              onPress={() => navigation.navigate('SellProject', {projectId, project, onReturn:async()=>{await onReturn?.();await load()}})}>
               <Text style={s.btnText}>Mark as Sold</Text>
             </TouchableOpacity>
           </>

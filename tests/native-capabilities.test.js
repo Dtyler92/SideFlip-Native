@@ -32,6 +32,26 @@ test('goal progress includes available ledger cash and capital in active project
   })
 })
 
+test('undoing a goal-linked sale removes proceeds and restores only active invested capital', () => {
+  const goal = { id: 'g1', target_amount: 1000 }
+  const soldSummary = calculateGoalSummary(goal, [
+    { goal_id: 'g1', status: 'sold', purchase_price: 100, sale_price: 300, expenses: [{ amount: 50 }] },
+  ], [
+    { goal_id: 'g1', type: 'sale_proceeds', amount: 300 },
+  ])
+  assert.equal(soldSummary.available, 300)
+  assert.equal(soldSummary.activeValue, 0)
+  assert.equal(soldSummary.progressValue, 300)
+
+  const reopenedSummary = calculateGoalSummary(goal, [
+    { goal_id: 'g1', status: 'active', purchase_price: 100, sale_price: null, expenses: [{ amount: 50 }] },
+  ], [])
+  assert.equal(reopenedSummary.available, 0)
+  assert.equal(reopenedSummary.activeValue, 150)
+  assert.equal(reopenedSummary.progressValue, 150)
+  assert.equal(reopenedSummary.flipped, 0)
+})
+
 test('goal analytics reports personal cash invested and gross flipped value', () => {
   const goal = {
     id: 'g1',
