@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, Linking, Platform } from 'react-native'
 import { getAvailablePurchases, useIAP } from 'expo-iap'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -7,6 +7,7 @@ import ProFeatureList from '../components/ProFeatureList'
 import { captureEvent } from '../lib/analytics'
 
 const PRODUCT_IDS = ['com.sideflip.app.pro.monthly', 'com.sideflip.app.pro.annual']
+const IS_ANDROID = Platform.OS === 'android'
 const purchaseKey = purchase => purchase?.purchaseToken || purchase?.transactionId || purchase?.id
 const monthlyEquivalent = product => {
   const annualPrice = Number(product?.price)
@@ -90,8 +91,9 @@ export default function ProScreen() {
     },
   })
 
-  useEffect(() => { captureEvent('paywall_viewed', { provider: 'apple', source: 'native_upgrade' }) }, [])
+  useEffect(() => { captureEvent('paywall_viewed', { provider: IS_ANDROID ? 'google' : 'apple', source: 'native_upgrade' }) }, [])
   useEffect(() => {
+    if (IS_ANDROID) return
     if (!connected) return
     fetchProducts({ skus: PRODUCT_IDS, type: 'subs' }).catch(error => {
       captureEvent('apple_store_products_fetch_failed', { provider: 'apple', error_type: 'product_fetch' })
@@ -100,6 +102,10 @@ export default function ProScreen() {
   }, [connected, fetchProducts])
   const product = id => subscriptions.find(item => item.id === id)
   async function buy(id) {
+    if (IS_ANDROID) {
+      Alert.alert('Google Play subscriptions are being prepared', 'Purchasing is disabled in this closed-test build. Existing verified Pro access remains available when you sign in.')
+      return
+    }
     pendingProductRef.current = id
     captureEvent('plan_selected', { provider: 'apple', plan: planForProduct(id), product_id: id })
     captureEvent('apple_purchase_started', { provider: 'apple', plan: planForProduct(id), product_id: id })
@@ -114,6 +120,10 @@ export default function ProScreen() {
     }
   }
   async function restore() {
+    if (IS_ANDROID) {
+      Alert.alert('Google Play restore is being prepared', 'Restore will be enabled after secure Google purchase verification is connected. Existing verified Pro access loads automatically when you sign in.')
+      return
+    }
     captureEvent('apple_restore_started', { provider: 'apple', is_restore: true })
     setBusy(true)
     restoringRef.current = true
@@ -190,38 +200,52 @@ export default function ProScreen() {
       <Text style={s.sectionTitle}>Included with Pro</Text>
       <View style={s.featuresCard}><ProFeatureList /></View>
 
-      <Text style={s.sectionTitle}>{hasPro ? 'Your subscription options' : 'Choose your plan'}</Text>
-      {PRODUCT_IDS.map(id => {
-        const annual = id.endsWith('.annual')
-        const item = product(id)
-        return (
-          <View key={id} style={[s.card, annual && s.featured]}>
-            <View style={s.planRow}>
-              <Text style={s.plan}>{annual ? 'Annual' : 'Monthly'}</Text>
-              {annual && <Text style={s.valueBadge}>BEST VALUE</Text>}
-            </View>
-            <Text style={s.price}>
-              {annual ? monthlyEquivalent(item) : (item?.displayPrice || '$12.99')}
-              <Text style={s.unit}>/month</Text>
-            </Text>
-            <Text style={s.detail}>{annual ? `${item?.displayPrice || '$99.99'} billed annually` : 'Billed monthly'}</Text>
-            {!hasPro && (
-              <TouchableOpacity
-                accessibilityRole="button"
-                disabled={!connected || busy || !item}
-                onPress={() => buy(id)}
-                style={[s.button, (!connected || busy || !item) && s.buttonDisabled]}
-              >
-                <Text style={s.buttonText}>{busy ? 'Working…' : `Choose ${annual ? 'Annual' : 'Monthly'}`}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )
-      })}
-      <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={restore} style={s.restore}>
-        <Text style={s.restoreText}>Restore Purchases</Text>
-      </TouchableOpacity>
-      <Text style={s.legal}>Payment is charged to your Apple ID. Subscriptions renew automatically unless canceled at least 24 hours before the current period ends. Manage subscriptions in your Apple ID settings.</Text>
+      {IS_ANDROID ? null : (
+        <>
+          <Text style={s.sectionTitle}>{hasPro ? 'Your subscription options' : 'Choose your plan'}</Text>
+          {PRODUCT_IDS.map(id => {
+            const annual = id.endsWith('.annual')
+            const item = product(id)
+            return (
+              <View key={id} style={[s.card, annual && s.featured]}>
+                <View style={s.planRow}>
+                  <Text style={s.plan}>{annual ? 'Annual' : 'Monthly'}</Text>
+                  {annual && <Text style={s.valueBadge}>BEST VALUE</Text>}
+                </View>
+                <Text style={s.price}>
+                  {annual ? monthlyEquivalent(item) : (item?.displayPrice || '$12.99')}
+                  <Text style={s.unit}>/month</Text>
+                </Text>
+                <Text style={s.detail}>{annual ? `${item?.displayPrice || '$99.99'} billed annually` : 'Billed monthly'}</Text>
+                {!hasPro && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    disabled={!connected || busy || !item}
+                    onPress={() => buy(id)}
+                    style={[s.button, (!connected || busy || !item) && s.buttonDisabled]}
+                  >
+                    <Text style={s.buttonText}>{busy ? 'Working…' : `Choose ${annual ? 'Annual' : 'Monthly'}`}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )
+          })}
+          <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={restore} style={s.restore}>
+            <Text style={s.restoreText}>Restore Purchases</Text>
+          </TouchableOpacity>
+          <Text style={s.legal}>Payment is charged to your Apple ID. Subscriptions renew automatically unless canceled at least 24 hours before the current period ends. Manage subscriptions in your Apple ID settings.</Text>
+        </>
+      )}
+      {IS_ANDROID && (
+        <View style={s.card}>
+          <Text style={s.plan}>{hasPro ? 'Your existing Pro access is active' : 'Google Play subscriptions are being prepared'}</Text>
+          <Text style={s.detail}>
+            {hasPro
+              ? 'SideFlip recognized verified Pro access on this account.'
+              : 'Purchasing and restore are disabled in this closed-test build until secure Google Play verification is connected.'}
+          </Text>
+        </View>
+      )}
       <View style={s.legalLinks}>
         <TouchableOpacity onPress={() => Linking.openURL('https://sideflip.org/privacy')}><Text style={s.legalLink}>Privacy Policy</Text></TouchableOpacity>
         <Text style={s.legalDot}>•</Text>

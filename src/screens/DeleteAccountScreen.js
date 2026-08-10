@@ -1,10 +1,14 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Platform } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
 const API_URL = 'https://sideflip.org/api/delete-account'
+const IS_ANDROID = Platform.OS === 'android'
+const BILLING_NOTICE = IS_ANDROID
+  ? 'Deleting SideFlip data does not cancel subscriptions. If you have a subscription, cancel it through the original billing provider, such as Google Play, Apple, or the web.'
+  : 'Deleting SideFlip data does not cancel Apple billing. Manage or cancel an Apple subscription in your Apple ID subscription settings.'
 
 export default function DeleteAccountScreen({ navigation }) {
   const insets = useSafeAreaInsets()
@@ -29,7 +33,7 @@ export default function DeleteAccountScreen({ navigation }) {
 
   function confirmDeletion() {
     if (confirmation !== 'DELETE') return Alert.alert('Type DELETE to continue', 'Enter DELETE exactly in the confirmation field.')
-    Alert.alert('Delete SideFlip account?', 'This permanently deletes your SideFlip account, projects, photos, receipts, goals, and app data. Active Apple subscriptions are managed in your Apple ID settings.', [
+    Alert.alert('Delete SideFlip account?', `This permanently deletes your SideFlip account, projects, photos, receipts, goals, and app data. ${BILLING_NOTICE}`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete Account', style: 'destructive', onPress: deleteAccount },
     ])
@@ -40,7 +44,7 @@ export default function DeleteAccountScreen({ navigation }) {
     <Text style={s.title}>Delete Account</Text>
     <Text style={s.warning}>This action is permanent.</Text>
     <Text style={s.copy}>Deleting your account removes your SideFlip profile, projects, project photos, receipts, expenses, and Trade-Up Goal data. This cannot be undone.</Text>
-    <Text style={s.copy}>If you have an Apple subscription, manage or cancel it in your Apple ID subscription settings. Deleting SideFlip data does not cancel Apple billing.</Text>
+    <Text style={s.copy}>{BILLING_NOTICE}</Text>
     <Text style={s.label}>Type DELETE to confirm</Text>
     <TextInput value={confirmation} onChangeText={setConfirmation} autoCapitalize="characters" autoCorrect={false} placeholder="DELETE" style={s.input} editable={!deleting} />
     <TouchableOpacity disabled={deleting || confirmation !== 'DELETE'} onPress={confirmDeletion} style={[s.button, (deleting || confirmation !== 'DELETE') && s.disabled]}>
