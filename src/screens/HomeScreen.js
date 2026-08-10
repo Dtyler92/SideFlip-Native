@@ -7,7 +7,7 @@ const ACCENT = '#C8402F'
 const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
 const getProfit = p => p.sale_price ? Number(p.sale_price) - getTotalInvested(p) : null
-const ICONS = {mower:'🚜',car:'🚗',motorcycle:'🏍️',atv:'🏎️',boat:'⛵',bicycle:'🚲',watch:'⌚',electronics:'📱',gaming:'🎮',tool:'🔧',exercise:'💪',instrument:'🎸',furniture:'🪑',other:'📦'}
+const ICONS = {mower:'🚜',car:'🚗',motorcycle:'🏍️',atv:'🏎️',boat:'⛵',bicycle:'🚲',watch:'⌚',electronics:'📱',gaming:'🎮',tool:'🔧',exercise:'💪',instrument:'🎸',furniture:'🪑',house:'🏠',other:'📦'}
 
 export default function HomeScreen({ navigation }) {
   const { user, signOut, isPro } = useAuth()
