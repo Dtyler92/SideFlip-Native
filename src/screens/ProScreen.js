@@ -4,6 +4,7 @@ import { getAvailablePurchases, useIAP } from 'expo-iap'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import ProFeatureList from '../components/ProFeatureList'
+import { captureEvent } from '../lib/analytics'
 
 const PRODUCT_IDS = ['com.sideflip.app.pro.monthly', 'com.sideflip.app.pro.annual']
 const purchaseKey = purchase => purchase?.purchaseToken || purchase?.transactionId || purchase?.id
@@ -17,12 +18,14 @@ const monthlyEquivalent = product => {
   }
 }
 
-async function verifyWithSideFlip(purchase) {
+const planForProduct = productId => PRODUCT_IDS.includes(productId) ? (productId.endsWith('.annual') ? 'annual' : 'monthly') : undefined
+
+async function verifyWithSideFlip(purchase, isRestore = false) {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token || !purchase?.purchaseToken) throw new Error('Please sign in again before verifying your purchase.')
   const response = await fetch('https://sideflip.org/api/verify-apple-purchase', {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-    body: JSON.stringify({ signedTransaction: purchase.purchaseToken }),
+    body: JSON.stringify({ signedTransaction: purchase.purchaseToken, isRestore }),
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok || !body.entitlement?.verified) throw new Error(body.error || 'Your purchase could not be verified yet. Please try Restore Purchases.')
@@ -35,33 +38,83 @@ export default function ProScreen() {
   const [busy, setBusy] = useState(false)
   const restoringRef = useRef(false)
   const restoredPurchaseKeysRef = useRef(new Set())
+  const pendingProductRef = useRef(null)
+  const lastPurchaseErrorRef = useRef({ key: '', at: 0 })
   const hasPro = isPro
+
+  function reportPurchaseError(error, source) {
+    const key = `${error?.code || 'unknown'}:${error?.message || ''}`
+    const now = Date.now()
+    if (lastPurchaseErrorRef.current.key === key && now - lastPurchaseErrorRef.current.at < 2500) return
+    lastPurchaseErrorRef.current = { key, at: now }
+    const productId = pendingProductRef.current
+    const cancelled = error?.code === 'user-cancelled'
+    captureEvent(cancelled ? 'apple_purchase_cancelled' : 'apple_purchase_failed', {
+      provider: 'apple',
+      plan: planForProduct(productId),
+      product_id: productId,
+      error_type: source,
+    })
+  }
+
   const { connected, subscriptions, fetchProducts, requestPurchase, restorePurchases, finishTransaction } = useIAP({
     onPurchaseSuccess: async purchase => {
       const key = purchaseKey(purchase)
       if (restoringRef.current || (key && restoredPurchaseKeysRef.current.has(key))) return
+      const productId = purchase.productId || pendingProductRef.current
+      let verified = false
       try {
-        await verifyWithSideFlip(purchase)
+        await verifyWithSideFlip(purchase, false)
+        verified = true
         await finishTransaction({ purchase, isConsumable: false })
-        await refreshEntitlement()
+        const nextPlan = await refreshEntitlement()
+        if (nextPlan !== 'pro') throw new Error('The verified subscription has not activated SideFlip Pro yet. Please try Restore Purchases.')
+        captureEvent('apple_entitlement_activated', {
+          provider: 'apple', plan: planForProduct(productId), product_id: productId,
+          status: 'active', is_restore: false,
+        })
         Alert.alert('SideFlip Pro is active', 'Your verified Pro access is ready.')
-      } catch (error) { Alert.alert('Purchase received', error.message) } finally { setBusy(false) }
+      } catch (error) {
+        captureEvent(verified ? 'apple_entitlement_activation_failed' : 'apple_purchase_verification_failed', {
+          provider: 'apple', plan: planForProduct(productId), product_id: productId,
+          error_type: verified ? 'finish_or_entitlement_refresh' : 'verification', is_restore: false,
+        })
+        Alert.alert('Purchase received', error.message)
+      } finally { pendingProductRef.current = null; setBusy(false) }
     },
-    onPurchaseError: error => { setBusy(false); if (error?.code !== 'user-cancelled') Alert.alert('Purchase not completed', error?.message || 'Please try again.') },
+    onPurchaseError: error => {
+      reportPurchaseError(error, 'store_callback')
+      pendingProductRef.current = null
+      setBusy(false)
+      if (error?.code !== 'user-cancelled') Alert.alert('Purchase not completed', error?.message || 'Please try again.')
+    },
   })
 
-  useEffect(() => { if (connected) fetchProducts({ skus: PRODUCT_IDS, type: 'subs' }).catch(error => Alert.alert('Store unavailable', error.message)) }, [connected, fetchProducts])
+  useEffect(() => { captureEvent('paywall_viewed', { provider: 'apple', source: 'native_upgrade' }) }, [])
+  useEffect(() => {
+    if (!connected) return
+    fetchProducts({ skus: PRODUCT_IDS, type: 'subs' }).catch(error => {
+      captureEvent('apple_store_products_fetch_failed', { provider: 'apple', error_type: 'product_fetch' })
+      Alert.alert('Store unavailable', error.message)
+    })
+  }, [connected, fetchProducts])
   const product = id => subscriptions.find(item => item.id === id)
   async function buy(id) {
+    pendingProductRef.current = id
+    captureEvent('plan_selected', { provider: 'apple', plan: planForProduct(id), product_id: id })
+    captureEvent('apple_purchase_started', { provider: 'apple', plan: planForProduct(id), product_id: id })
     setBusy(true)
     try {
       await requestPurchase({ type: 'subs', request: { apple: { sku: id, appAccountToken: user.id, andDangerouslyFinishTransactionAutomatically: false } } })
     } catch (error) {
+      reportPurchaseError(error, 'request_purchase')
+      pendingProductRef.current = null
       setBusy(false)
       if (error?.code !== 'user-cancelled') Alert.alert('Purchase not started', error.message)
     }
   }
   async function restore() {
+    captureEvent('apple_restore_started', { provider: 'apple', is_restore: true })
     setBusy(true)
     restoringRef.current = true
     try {
@@ -69,30 +122,49 @@ export default function ProScreen() {
       const purchases = await getAvailablePurchases({ alsoPublishToEventListenerIOS: false, onlyIncludeActiveItemsIOS: true })
       const eligible = purchases.filter(purchase => PRODUCT_IDS.includes(purchase.productId) && purchase.purchaseToken)
       let verifiedCount = 0
+      const verifiedProductIds = []
       let lastError = null
 
       for (const purchase of eligible) {
+        let verified = false
         try {
-          await verifyWithSideFlip(purchase)
+          await verifyWithSideFlip(purchase, true)
+          verified = true
           await finishTransaction({ purchase, isConsumable: false })
           const key = purchaseKey(purchase)
           if (key) restoredPurchaseKeysRef.current.add(key)
           verifiedCount += 1
+          verifiedProductIds.push(purchase.productId)
         } catch (error) {
+          captureEvent(verified ? 'apple_entitlement_activation_failed' : 'apple_purchase_verification_failed', {
+            provider: 'apple', plan: planForProduct(purchase.productId), product_id: purchase.productId,
+            error_type: verified ? 'restore_finish' : 'restore_verification', is_restore: true,
+          })
           lastError = error
         }
       }
 
       if (verifiedCount === 0) {
         if (lastError) throw lastError
+        captureEvent('apple_restore_completed', { provider: 'apple', status: 'not_found', verified_count: 0, is_restore: true })
         Alert.alert('No active purchase found', 'No active SideFlip Pro subscription is currently available for this Apple ID.')
         return
       }
 
       const nextPlan = await refreshEntitlement()
       if (nextPlan !== 'pro') throw new Error('Apple verified the subscription, but SideFlip Pro is not active yet. Please try Restore Purchases again.')
+      const restoredProductId = verifiedProductIds[0]
+      captureEvent('apple_restore_completed', {
+        provider: 'apple', status: 'active', plan: planForProduct(restoredProductId),
+        product_id: restoredProductId, verified_count: verifiedCount, is_restore: true,
+      })
+      captureEvent('apple_entitlement_activated', {
+        provider: 'apple', status: 'active', plan: planForProduct(restoredProductId),
+        product_id: restoredProductId, is_restore: true,
+      })
       Alert.alert('SideFlip Pro restored', 'Your verified Apple subscription is active on this SideFlip account.')
     } catch (error) {
+      captureEvent('apple_restore_failed', { provider: 'apple', error_type: 'restore_or_entitlement', is_restore: true })
       Alert.alert('Restore failed', error.message)
     } finally {
       restoringRef.current = false

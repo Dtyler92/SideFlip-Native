@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
+import { captureEvent } from '../lib/analytics'
 import {
   calculateGoalSummary,
   canCreateAnotherGoal,
@@ -133,6 +134,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
         p_mutation_id: mutationId,
       })
       if (error) throw error
+      captureEvent('goal_created', { goal_type: form.goalType })
       setForm(EMPTY_FORM)
       setMutationId(createMutationId())
       setShowCreate(false)
@@ -155,6 +157,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
         .eq('id', selected.id)
         .eq('user_id', user.id)
       if (error) throw error
+      if (status === 'completed') captureEvent('goal_completed', { goal_type: selected.goal_type })
       await load({ quiet: true })
     } catch (error) {
       Alert.alert('Could not update goal', error.message || 'Please try again.')

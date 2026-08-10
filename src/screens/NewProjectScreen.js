@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
 import { createMutationId } from './tradeUpGoalModel'
+import { captureEvent } from '../lib/analytics'
 
 const CATEGORIES = [
   {value:'mower',label:'🚜 Lawn Mower'},{value:'car',label:'🚗 Car'},
@@ -104,6 +105,7 @@ export default function NewProjectScreen({ navigation, route }) {
         })
         if (error) throw error
       }
+      captureEvent('project_created', { project_category: category, is_goal_linked: Boolean(selectedGoalId) })
       onReturn?.()
       navigation.goBack()
     } catch (err) {

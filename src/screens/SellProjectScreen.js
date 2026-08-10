@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
 import { supabase } from '../lib/supabase'
+import { captureEvent } from '../lib/analytics'
 
 const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
@@ -44,6 +45,7 @@ export default function SellProjectScreen({ navigation, route }) {
         }).eq('id', projectId)
         if (error) throw error
       }
+      captureEvent('project_marked_sold', { project_category: project.category, is_goal_linked: Boolean(project.goal_id) })
       onReturn?.()
       navigation.goBack()
     } catch (err) {

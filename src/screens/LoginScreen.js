@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native'
 import { useAuth } from '../context/AuthContext'
+import { captureEvent } from '../lib/analytics'
 
 export default function LoginScreen({ navigation }) {
   const { signIn } = useAuth()
@@ -11,7 +12,7 @@ export default function LoginScreen({ navigation }) {
   async function handleSignIn() {
     if (!email.trim() || !password) return Alert.alert('Please enter your email and password')
     setLoading(true)
-    try { await signIn(email.trim().toLowerCase(), password) }
+    try { await signIn(email.trim().toLowerCase(), password); captureEvent('signin_completed', { source: 'native_auth' }) }
     catch (err) { Alert.alert('Sign in failed', err.message) }
     finally { setLoading(false) }
   }

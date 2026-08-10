@@ -2,6 +2,7 @@ import { AppState } from 'react-native'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import * as Linking from 'expo-linking'
 import { supabase, getProfile } from '../lib/supabase'
+import { beginAnalyticsIdentityTransition, captureAttribution, identifyAnalytics, reconcileAnalyticsPreference } from '../lib/analytics'
 
 const AuthContext = createContext(null)
 const AUTH_CALLBACK_URL = 'sideflip://auth/callback'
@@ -31,17 +32,24 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [plan, setPlan] = useState('free')
   const [loading, setLoading] = useState(true)
+  const [analyticsReady, setAnalyticsReady] = useState(false)
   const generation = useRef(0)
 
   async function syncSession(session) {
     const request = ++generation.current
     const nextUser = session?.user ?? null
+    setAnalyticsReady(false)
+    const analyticsReset = beginAnalyticsIdentityTransition(nextUser?.id || null)
     setLoading(true)
     setUser(nextUser)
     setProfile(null)
     setPlan('free')
     if (!nextUser) {
-      if (request === generation.current) setLoading(false)
+      await analyticsReset
+      if (request === generation.current) {
+        setAnalyticsReady(true)
+        setLoading(false)
+      }
       return
     }
     const [nextProfile, nextPlan] = await Promise.all([
@@ -51,6 +59,12 @@ export function AuthProvider({ children }) {
     if (request !== generation.current) return
     setProfile(nextProfile)
     setPlan(nextPlan)
+    await analyticsReset
+    if (request !== generation.current) return
+    const analyticsEnabled = await reconcileAnalyticsPreference(nextUser.id)
+    if (request !== generation.current) return
+    if (analyticsEnabled) identifyAnalytics(nextUser.id, { plan: nextPlan, is_pro: nextPlan === 'pro' })
+    setAnalyticsReady(true)
     setLoading(false)
   }
 
@@ -62,8 +76,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let mounted = true
     supabase.auth.getSession().then(({ data: { session } }) => { if (mounted) syncSession(session) })
-    Linking.getInitialURL().then(url => { if (url) handleAuthUrl(url).catch(() => {}) })
-    const linkSubscription = Linking.addEventListener('url', ({ url }) => handleAuthUrl(url).catch(() => {}))
+    Linking.getInitialURL().then(url => { if (url) { captureAttribution(url); handleAuthUrl(url).catch(() => {}) } })
+    const linkSubscription = Linking.addEventListener('url', ({ url }) => { captureAttribution(url); handleAuthUrl(url).catch(() => {}) })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { if (mounted) syncSession(session) })
     return () => { mounted = false; linkSubscription.remove(); subscription.unsubscribe() }
   }, [])
@@ -81,7 +95,17 @@ export function AuthProvider({ children }) {
     return data
   }
   async function signIn(email, password) { const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) throw error }
-  async function signOut() { await supabase.auth.signOut(); setUser(null); setProfile(null); setPlan('free') }
+  async function signOut() {
+    try {
+      await supabase.auth.signOut()
+    } finally {
+      await beginAnalyticsIdentityTransition(null)
+      setAnalyticsReady(true)
+      setUser(null)
+      setProfile(null)
+      setPlan('free')
+    }
+  }
   async function resetPassword(email) { const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: AUTH_CALLBACK_URL }); if (error) throw error }
   async function refreshProfile() { if (user) return getProfile(user.id).then(p => { setProfile(p); return p }) }
   async function refreshEntitlement() {
@@ -96,6 +120,6 @@ export function AuthProvider({ children }) {
   const currencySymbol = CURRENCY_SYMBOLS[currency] || '$'
   function formatMoney(amount) { const n = Number(amount || 0); const decimals = currency === 'JPY' ? 0 : 2; return currencySymbol + n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) }
 
-  return <AuthContext.Provider value={{ user, profile, plan, isPro: plan === 'pro', loading, currency, language, currencySymbol, formatMoney, signUp, signIn, signOut, resetPassword, refreshProfile, refreshEntitlement, needsOnboarding: profile && !profile.onboarded }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, plan, isPro: plan === 'pro', loading, analyticsReady, currency, language, currencySymbol, formatMoney, signUp, signIn, signOut, resetPassword, refreshProfile, refreshEntitlement, needsOnboarding: profile && !profile.onboarded }}>{children}</AuthContext.Provider>
 }
 export function useAuth() { return useContext(AuthContext) }

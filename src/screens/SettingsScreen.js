@@ -1,8 +1,9 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native'
-import { useState } from 'react'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Switch } from 'react-native'
+import { useEffect, useState } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { isAnalyticsEnabled, setAnalyticsEnabled } from '../lib/analytics'
 
 const ACCENT = '#C8402F'
 
@@ -33,7 +34,34 @@ export default function SettingsScreen({ navigation }) {
   const [language, setLanguage] = useState(profile?.language || 'en')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [analyticsEnabled, setAnalyticsPreference] = useState(false)
+  const [analyticsSaving, setAnalyticsSaving] = useState(false)
   const hasPro = isPro
+
+  useEffect(() => { isAnalyticsEnabled(user?.id).then(setAnalyticsPreference) }, [user?.id])
+
+  async function handleAnalyticsPreference(enabled) {
+    if (!enabled) setAnalyticsPreference(false)
+    setAnalyticsSaving(true)
+    try {
+      const { effectiveEnabled, serverSynced } = await setAnalyticsEnabled(enabled, user?.id)
+      setAnalyticsPreference(effectiveEnabled)
+      if (!serverSynced && !enabled) {
+        Alert.alert('Analytics turned off on this device', 'Analytics is off here, but your account setting could not be updated. Try again when you are online.')
+      } else if (!serverSynced) {
+        Alert.alert('Analytics remains off', 'Your account setting could not be updated, so analytics was not enabled. Try again when you are online.')
+      } else if (enabled && !effectiveEnabled) {
+        Alert.alert('Analytics remains off', 'Your account setting was saved, but analytics is unavailable on this device.')
+      }
+    } catch {
+      setAnalyticsPreference(false)
+      Alert.alert(enabled ? 'Analytics remains off' : 'Analytics turned off on this device', enabled
+        ? 'Your account setting could not be updated, so analytics was not enabled.'
+        : 'Analytics is off here, but your account setting could not be updated.')
+    } finally {
+      setAnalyticsSaving(false)
+    }
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -129,6 +157,15 @@ export default function SettingsScreen({ navigation }) {
         }
       </TouchableOpacity>
 
+      <Text style={s.sectionTitle}>Privacy</Text>
+      <View style={[s.card, s.analyticsCard]}>
+        <View style={s.analyticsCopy}>
+          <Text style={s.analyticsTitle}>Share usage analytics</Text>
+          <Text style={s.analyticsNote}>When enabled, SideFlip sends a stable pseudonymous account ID, screen and feature usage, campaign/referral attribution, and subscription plan/status. It does not send card or payment details, project financials (including prices, costs, or profits), project text or photos, or session recordings.</Text>
+        </View>
+        <Switch disabled={analyticsSaving} value={analyticsEnabled} onValueChange={handleAnalyticsPreference} trackColor={{ false: '#D7D2CB', true: '#E7AAA1' }} thumbColor={analyticsEnabled ? ACCENT : '#fff'} />
+      </View>
+
       {/* Sign Out */}
       <TouchableOpacity style={s.signOutBtn} onPress={confirmSignOut}>
         <Text style={s.signOutText}>Sign Out</Text>
@@ -152,6 +189,10 @@ const s = StyleSheet.create({
   accountTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 },
   accountEmail: { flex: 1, fontSize: 15, color: '#1A1917', fontWeight: '500' },
   accountNote: { fontSize: 13, color: '#8C8880', lineHeight: 19, marginBottom: 14 },
+  analyticsCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  analyticsCopy: { flex: 1 },
+  analyticsTitle: { fontSize: 15, color: '#1A1917', fontWeight: '700', marginBottom: 5 },
+  analyticsNote: { fontSize: 12, color: '#8C8880', lineHeight: 18 },
   planBadge: { fontSize: 10, color: '#716D66', backgroundColor: '#F0EDE8', borderRadius: 6, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4, fontWeight: '800', letterSpacing: 0.5 },
   planBadgeActive: { color: '#23613F', backgroundColor: '#E8F5EE' },
   proButton: { minHeight: 46, borderRadius: 11, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },

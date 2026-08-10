@@ -1,7 +1,8 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { captureEvent } from '../lib/analytics'
 
 const ACCENT = '#C8402F'
 
@@ -31,6 +32,8 @@ export default function OnboardingScreen({ onComplete }) {
   const [language, setLanguage] = useState('en')
   const [saving, setSaving] = useState(false)
 
+  useEffect(() => { captureEvent('onboarding_started', { source: 'native' }) }, [])
+
   async function handleSave() {
     setSaving(true)
     try {
@@ -43,6 +46,7 @@ export default function OnboardingScreen({ onComplete }) {
       })
       const body = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(body.error || 'Could not save preferences.')
+      captureEvent('onboarding_completed', { source: 'native' })
       onComplete({ currency, language })
     } catch (error) {
       Alert.alert('Error', error.message)

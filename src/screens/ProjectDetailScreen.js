@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
 import { roundLaborHours } from './laborModel'
+import { captureEvent } from '../lib/analytics'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -98,6 +99,10 @@ export default function ProjectDetailScreen({ navigation, route }) {
         : supabase.from('expenses').insert({ ...values, project_id: projectId, user_id: user.id })
       const { error } = await query
       if (error) throw error
+      captureEvent(editingExpenseId ? 'expense_updated' : 'expense_added', {
+        expense_category: expense.category,
+        project_category: project.category,
+      })
       cancelExpense()
       await load()
     } catch (error) {
@@ -113,6 +118,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
       { text: 'Remove', style: 'destructive', onPress: async () => {
         const { error } = await supabase.from('expenses').delete().eq('id', id).eq('project_id', projectId).eq('user_id', user.id)
         if (error) return Alert.alert('Could not remove expense', error.message)
+        captureEvent('expense_deleted', { project_category: project.category })
         if (editingExpenseId === id) cancelExpense()
         await load()
       }}
@@ -128,6 +134,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
         try {
           const { error } = await supabase.rpc('undo_goal_project_outcome', { p_project_id: projectId })
           if (error) throw error
+          captureEvent('project_sale_undone', { project_category: project.category, is_goal_linked: Boolean(project.goal_id) })
           onReturn?.()
           await load()
         } catch (error) {
@@ -145,6 +152,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
       { text: 'Delete', style: 'destructive', onPress: async () => {
         const { error } = await supabase.rpc('delete_trade_up_project', { p_project_id: projectId })
         if (error) return Alert.alert('Could not delete project', error.message)
+        captureEvent('project_deleted', { project_category: project.category, is_goal_linked: Boolean(project.goal_id) })
         onReturn?.()
         navigation.goBack()
       }}
@@ -152,6 +160,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
   }
 
   async function generateListing() {
+    captureEvent('ai_listing_requested', { project_category: project?.category, is_pro: isPro })
     if (!isPro) {
       navigation.navigate('Pro')
       return
@@ -172,9 +181,11 @@ export default function ProjectDetailScreen({ navigation, route }) {
       })
       const data = await res.json()
       if (!res.ok || !data.listing) throw new Error(data.error || 'Could not generate listing')
+      captureEvent('ai_listing_succeeded', { project_category: project.category })
       setListingText(data.listing)
       setShowListingModal(true)
     } catch (err) {
+      captureEvent('ai_listing_failed', { project_category: project?.category, error_type: 'generation_failed' })
       Alert.alert('Could not generate listing', err.message)
     } finally {
       setGeneratingListing(false)

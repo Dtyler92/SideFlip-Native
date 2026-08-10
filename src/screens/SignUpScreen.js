@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert } from 'react-native'
 import { useAuth } from '../context/AuthContext'
+import { captureEvent } from '../lib/analytics'
 
 export default function SignUpScreen({ navigation }) {
   const { signUp } = useAuth()
@@ -15,8 +16,10 @@ export default function SignUpScreen({ navigation }) {
     if (password.length < 6) return Alert.alert('Use a password with at least 6 characters')
     if (password !== confirmPassword) return Alert.alert('Passwords do not match')
     setLoading(true)
+    captureEvent('signup_started', { source: 'native_auth' })
     try {
       const data = await signUp(normalizedEmail, password)
+      captureEvent('signup_completed', { source: 'native_auth' })
       if (!data.session) {
         Alert.alert('Confirm your email', `Check ${normalizedEmail} for a confirmation link, then sign in to use SideFlip Free.`)
         navigation.replace('Login')
