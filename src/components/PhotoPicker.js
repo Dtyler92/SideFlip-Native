@@ -1,4 +1,4 @@
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Platform } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
@@ -21,11 +21,15 @@ export default function PhotoPicker({ userId, photoUrl, onUploaded, totalPhotoCo
   }
 
   async function pick(useCamera) {
-    const permFn = useCamera
-      ? ImagePicker.requestCameraPermissionsAsync
-      : ImagePicker.requestMediaLibraryPermissionsAsync
-    const { granted } = await permFn()
-    if (!granted) return Alert.alert('Permission required', useCamera ? 'Camera access is needed.' : 'Photo library access is needed.')
+    // Android's system photo picker grants access only to files the user selects;
+    // it does not require broad photo-library permission.
+    if (useCamera || Platform.OS !== 'android') {
+      const permFn = useCamera
+        ? ImagePicker.requestCameraPermissionsAsync
+        : ImagePicker.requestMediaLibraryPermissionsAsync
+      const { granted } = await permFn()
+      if (!granted) return Alert.alert('Permission required', useCamera ? 'Camera access is needed.' : 'Photo library access is needed.')
+    }
 
     const result = useCamera
       ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.7 })

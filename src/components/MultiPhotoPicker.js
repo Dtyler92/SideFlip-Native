@@ -1,4 +1,4 @@
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native'
+import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Platform } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
@@ -31,9 +31,11 @@ export default function MultiPhotoPicker({ userId, photos = [], onUpdate, isPro 
   async function pick(useCamera) {
     if (totalPhotoCount >= photoLimit) return showLimitPrompt()
 
-    const permFn = useCamera ? ImagePicker.requestCameraPermissionsAsync : ImagePicker.requestMediaLibraryPermissionsAsync
-    const { granted } = await permFn()
-    if (!granted) return Alert.alert('Permission required', 'Photo access is needed.')
+    if (useCamera || Platform.OS !== 'android') {
+      const permFn = useCamera ? ImagePicker.requestCameraPermissionsAsync : ImagePicker.requestMediaLibraryPermissionsAsync
+      const { granted } = await permFn()
+      if (!granted) return Alert.alert('Permission required', useCamera ? 'Camera access is needed.' : 'Photo library access is needed.')
+    }
 
     const result = useCamera
       ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.7 })

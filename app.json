@@ -97,13 +97,15 @@
       "package": "com.sideflip.app",
       "versionCode": 1,
       "permissions": [
-        "android.permission.CAMERA",
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.RECORD_AUDIO"
-      ],
-      "googleServicesFile": "./google-services.json"
+        "android.permission.READ_MEDIA_VIDEO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -116,7 +118,8 @@
         "expo-image-picker",
         {
           "photosPermission": "SideFlip uses your photo library to attach photos to your projects.",
-          "cameraPermission": "SideFlip uses your camera to take photos of your projects."
+          "cameraPermission": "SideFlip uses your camera to take photos of your projects.",
+          "microphonePermission": false
         }
       ],
       "expo-localization"

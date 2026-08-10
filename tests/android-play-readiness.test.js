@@ -1,0 +1,31 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+
+const root = new URL('../', import.meta.url)
+const read = path => fs.readFileSync(new URL(path, root), 'utf8')
+
+test('Android Play config uses the stable package and minimal permissions', () => {
+  const config = JSON.parse(read('app.json')).expo
+  assert.equal(config.android.package, 'com.sideflip.app')
+  assert.equal(config.android.versionCode, 1)
+  assert.equal(config.android.googleServicesFile, undefined)
+  assert.deepEqual(config.android.permissions, ['android.permission.CAMERA'])
+  assert.deepEqual(new Set(config.android.blockedPermissions), new Set([
+    'android.permission.RECORD_AUDIO',
+    'android.permission.READ_EXTERNAL_STORAGE',
+    'android.permission.WRITE_EXTERNAL_STORAGE',
+    'android.permission.READ_MEDIA_IMAGES',
+    'android.permission.READ_MEDIA_VIDEO',
+  ]))
+  const imagePicker = config.plugins.find(item => Array.isArray(item) && item[0] === 'expo-image-picker')
+  assert.equal(imagePicker[1].microphonePermission, false)
+})
+
+test('Android photo library uses the system picker without broad permission prompts', () => {
+  for (const path of ['src/components/PhotoPicker.js', 'src/components/MultiPhotoPicker.js']) {
+    const source = read(path)
+    assert.match(source, /Platform\.OS !== 'android'/)
+    assert.match(source, /launchImageLibraryAsync/)
+  }
+})
