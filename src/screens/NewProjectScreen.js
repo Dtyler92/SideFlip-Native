@@ -1,10 +1,11 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator, Platform } from 'react-native'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
 import { createMutationId } from './tradeUpGoalModel'
 import { captureEvent } from '../lib/analytics'
+import { openGoalCreation } from './goalCreationNavigation'
 
 const CATEGORIES = [
   {value:'mower',label:'🚜 Lawn Mower'},{value:'car',label:'🚗 Car'},
@@ -13,14 +14,15 @@ const CATEGORIES = [
   {value:'watch',label:'⌚ Watch'},{value:'electronics',label:'📱 Electronics'},
   {value:'gaming',label:'🎮 Gaming / Console'},{value:'tool',label:'🔧 Tool / Equipment'},
   {value:'exercise',label:'💪 Exercise Equipment'},{value:'instrument',label:'🎸 Musical Instrument'},
-  {value:'furniture',label:'🪑 Furniture'},{value:'other',label:'📦 Other'},
+  {value:'furniture',label:'🪑 Furniture'},{value:'house',label:'🏠 Home Improvement'},
+  {value:'other',label:'📦 Other'},
 ]
 
 const money = value => '$' + (Number(value) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const roundMoney = value => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100
 
 export default function NewProjectScreen({ navigation, route }) {
-  const { user, isPro } = useAuth()
+  const { user, isPro, plan } = useAuth()
   const { onReturn } = route.params || {}
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('')
@@ -51,6 +53,19 @@ export default function NewProjectScreen({ navigation, route }) {
   const purchasePriceValue = roundMoney(purchasePrice)
   const goalFundingValue = roundMoney(goalFundingInput)
   const outOfPocketPreview = Math.max(0, roundMoney(purchasePriceValue - goalFundingValue))
+
+  function handleCreateGoal() {
+    openGoalCreation({
+      navigation,
+      plan,
+      activeGoals,
+      onCreated: goal => {
+        setActiveGoals(current => [goal, ...current.filter(item => item.id !== goal.id)])
+        setSelectedGoalId(goal.id)
+        setGoalFundingInput('0')
+      },
+    })
+  }
 
   async function handleSave() {
     if (!title.trim()) return Alert.alert('Give your project a name')
@@ -127,7 +142,6 @@ export default function NewProjectScreen({ navigation, route }) {
         <View style={{width:60}} />
       </View>
 
-      <KeyboardAvoidingView style={s.keyboardArea} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         style={s.scroll}
         contentContainerStyle={s.content}
@@ -163,11 +177,15 @@ export default function NewProjectScreen({ navigation, route }) {
           </View>
         )}
 
-        {activeGoals.length > 0 && (
-          <View>
-            <Text style={[s.label, {marginTop:16}]}>Trade-Up Goal (optional)</Text>
+        <View>
+            <View style={s.goalLabelRow}>
+              <Text style={[s.label, s.goalLabel]}>Trade-Up Goal (optional)</Text>
+              <TouchableOpacity style={s.goalAddButton} onPress={handleCreateGoal} accessibilityRole="button" accessibilityLabel="Create new Trade-Up Goal">
+                <Text style={s.goalAddText}>+</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={s.goalHint}>Connect this project to a goal. Its purchase and sale will update goal progress.</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.goalChoices}>
+            {activeGoals.length > 0 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.goalChoices}>
               <TouchableOpacity style={[s.goalChoice, !selectedGoalId && s.goalChoiceActive]} onPress={() => { setSelectedGoalId(null); setGoalFundingInput('0') }}>
                 <Text style={[s.goalChoiceText, !selectedGoalId && s.goalChoiceTextActive]}>No goal</Text>
               </TouchableOpacity>
@@ -176,9 +194,8 @@ export default function NewProjectScreen({ navigation, route }) {
                   <Text style={[s.goalChoiceText, selectedGoalId === goal.id && s.goalChoiceTextActive]} numberOfLines={1}>{goal.name}</Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </ScrollView> : <Text style={s.noGoalsText}>No active goals yet. Tap + to create one.</Text>}
           </View>
-        )}
 
         <Text style={[s.label, {marginTop:16}]}>Purchase Price</Text>
         <TextInput style={s.input} placeholder="0.00" placeholderTextColor="#A8A49E"
@@ -222,14 +239,12 @@ export default function NewProjectScreen({ navigation, route }) {
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Create Project</Text>}
         </TouchableOpacity>
       </ScrollView>
-      </KeyboardAvoidingView>
     </View>
   )
 }
 
 const s = StyleSheet.create({
   root:{flex:1,backgroundColor:'#FAFAF7'},
-  keyboardArea:{flex:1},
   header:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:16,paddingTop:56,paddingBottom:12,backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E8E4DE'},
   backBtn:{width:60},backText:{color:'#C8402F',fontSize:16,fontWeight:'600'},
   headerTitle:{fontSize:17,fontWeight:'700',color:'#1A1917'},
@@ -245,6 +260,11 @@ const s = StyleSheet.create({
   catItemText:{fontSize:14,color:'#1A1917'},
   catItemTextActive:{color:'#fff',fontWeight:'600'},
   goalHint:{fontSize:12,lineHeight:17,color:'#8C8880',marginBottom:9},
+  goalLabelRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:16},
+  goalLabel:{marginBottom:0},
+  goalAddButton:{width:32,height:32,borderRadius:16,borderWidth:1.5,borderColor:'#C8402F',alignItems:'center',justifyContent:'center',backgroundColor:'#FFF2EE'},
+  goalAddText:{fontSize:22,lineHeight:24,color:'#C8402F',fontWeight:'700'},
+  noGoalsText:{fontSize:13,color:'#8C8880',paddingVertical:7},
   goalChoices:{gap:8,paddingRight:8},
   goalChoice:{maxWidth:190,borderWidth:1,borderColor:'#D7D2CB',borderRadius:20,paddingHorizontal:13,paddingVertical:9,backgroundColor:'#fff'},
   goalChoiceActive:{borderColor:'#C8402F',backgroundColor:'#FFF2EE'},

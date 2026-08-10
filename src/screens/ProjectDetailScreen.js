@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator, Share, Modal, KeyboardAvoidingView, Platform } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
 import { roundLaborHours } from './laborModel'
 import { captureEvent } from '../lib/analytics'
+import { createMutationId } from './tradeUpGoalModel'
+import { openGoalCreation } from './goalCreationNavigation'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -20,7 +22,7 @@ const EXPENSE_CATS = [
 const EMPTY_EXPENSE = { description: '', amount: '', category: 'parts', laborHours: '' }
 
 export default function ProjectDetailScreen({ navigation, route }) {
-  const { user, isPro } = useAuth()
+  const { user, isPro, plan } = useAuth()
   const { projectId, onReturn } = route.params || {}
   const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -31,19 +33,74 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [generatingListing, setGeneratingListing] = useState(false)
   const [listingText, setListingText] = useState('')
   const [showListingModal, setShowListingModal] = useState(false)
+  const [activeGoals, setActiveGoals] = useState([])
+  const [showAssignGoal, setShowAssignGoal] = useState(false)
+  const goalLinkMutationId = useRef(createMutationId())
 
   async function load() {
-    const { data, error } = await supabase.from('projects').select('*, expenses(*)').eq('id', projectId).single()
-    if (error) {
-      Alert.alert('Could not load project', error.message)
+    const [projectResult, goalResult] = await Promise.all([
+      supabase.from('projects').select('*, expenses(*)').eq('id', projectId).single(),
+      supabase.from('trade_up_goals').select('id,name,status').eq('user_id', user.id).eq('status', 'active').order('created_at', { ascending: false }),
+    ])
+    if (projectResult.error) {
+      Alert.alert('Could not load project', projectResult.error.message)
       setLoading(false)
       return
     }
-    setProject(data)
+    setProject(projectResult.data)
+    if (goalResult.error) Alert.alert('Could not load goals', goalResult.error.message)
+    else setActiveGoals(goalResult.data || [])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [projectId])
+
+  async function assignGoal(goalId) {
+    if (saving) return
+    setSaving(true)
+    try {
+      const { error } = await supabase.rpc('link_trade_up_project', {
+        p_project_id: projectId,
+        p_goal_id: goalId,
+        p_goal_funding: 0,
+        p_mutation_id: goalLinkMutationId.current,
+      })
+      if (error) throw error
+      goalLinkMutationId.current = createMutationId()
+      setShowAssignGoal(false)
+      await onReturn?.()
+      await load()
+      Alert.alert('Goal assigned', 'This project will now update the selected Trade-Up Goal.')
+    } catch (error) {
+      Alert.alert('Could not assign goal', error.message || 'Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function createGoalForProject() {
+    setShowAssignGoal(false)
+    openGoalCreation({
+      navigation,
+      plan,
+      activeGoals,
+      onCreated: async goal => {
+        setActiveGoals(current => [goal, ...current.filter(item => item.id !== goal.id)])
+        await assignGoal(goal.id)
+      },
+    })
+  }
+
+  function beginAssignGoal() {
+    if (activeGoals.length > 0) {
+      setShowAssignGoal(true)
+      return
+    }
+    Alert.alert('No active goal', 'Would you like to create a Trade-Up Goal for this project?', [
+      { text: 'Not Now', style: 'cancel' },
+      { text: 'Create Goal', onPress: createGoalForProject },
+    ])
+  }
 
   async function handlePhotosUpdate(urls) {
     const photo = urls[0] || null
@@ -335,6 +392,11 @@ export default function ProjectDetailScreen({ navigation, route }) {
               onPress={() => navigation.navigate('SellProject', {projectId, project, onReturn:async()=>{await onReturn?.();await load()}})}>
               <Text style={s.btnText}>Mark as Sold</Text>
             </TouchableOpacity>
+            {project.status === 'active' && !project.goal_id && (
+              <TouchableOpacity style={s.assignGoalLink} onPress={beginAssignGoal} disabled={saving}>
+                <Text style={s.assignGoalLinkText}>Assign to Goal</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
         {project.status === 'sold' && (
@@ -356,6 +418,29 @@ export default function ProjectDetailScreen({ navigation, route }) {
           </>
         )}
       </ScrollView>
+
+      <Modal visible={showAssignGoal} transparent animationType="fade" onRequestClose={() => setShowAssignGoal(false)}>
+        <View style={s.assignOverlay}>
+          <View style={s.assignCard}>
+            <View style={s.assignHeader}>
+              <Text style={s.assignTitle}>Assign to Goal</Text>
+              <TouchableOpacity style={s.goalPlusButton} onPress={createGoalForProject} accessibilityRole="button" accessibilityLabel="Create new Trade-Up Goal">
+                <Text style={s.goalPlusText}>+</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={s.assignHint}>Choose the active goal this project should update.</Text>
+            {activeGoals.map(goal => (
+              <TouchableOpacity key={goal.id} style={s.assignChoice} onPress={() => assignGoal(goal.id)} disabled={saving}>
+                <Text style={s.assignChoiceText}>{goal.name}</Text>
+                {saving && <ActivityIndicator size="small" color={ACCENT} />}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={s.assignCancel} onPress={() => setShowAssignGoal(false)} disabled={saving}>
+              <Text style={s.assignCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Listing Editor Modal */}
       <Modal visible={showListingModal} animationType="slide" presentationStyle="pageSheet">
@@ -424,6 +509,18 @@ const s = StyleSheet.create({
   catChipText:{fontSize:12,color:'#5C5850'},catChipTextActive:{color:'#fff',fontWeight:'600'},
   btn:{backgroundColor:ACCENT,borderRadius:10,padding:14,alignItems:'center',marginBottom:4},
   btnDisabled:{opacity:0.6},btnText:{color:'#fff',fontSize:15,fontWeight:'700'},
+  assignGoalLink:{alignItems:'center',paddingVertical:10},
+  assignGoalLinkText:{fontSize:12,fontWeight:'700',color:ACCENT},
+  assignOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.35)',justifyContent:'center',padding:24},
+  assignCard:{backgroundColor:'#fff',borderRadius:16,padding:18},
+  assignHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:5},
+  assignTitle:{fontSize:19,fontWeight:'800',color:'#1A1917'},
+  assignHint:{fontSize:13,color:'#8C8880',marginBottom:14},
+  goalPlusButton:{width:34,height:34,borderRadius:17,borderWidth:1.5,borderColor:ACCENT,backgroundColor:'#FFF2EE',alignItems:'center',justifyContent:'center'},
+  goalPlusText:{fontSize:23,lineHeight:25,fontWeight:'700',color:ACCENT},
+  assignChoice:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderWidth:1,borderColor:'#E8E4DE',borderRadius:10,padding:14,marginBottom:8},
+  assignChoiceText:{fontSize:15,fontWeight:'600',color:'#1A1917'},
+  assignCancel:{alignItems:'center',paddingTop:8},assignCancelText:{fontSize:14,fontWeight:'600',color:'#8C8880'},
   soldBadge:{backgroundColor:'#E8F5EE',borderRadius:10,padding:16,alignItems:'center'},
   soldText:{fontSize:15,fontWeight:'700',color:'#2D7A4F'},
   undoSaleButton:{backgroundColor:'#fff',borderWidth:1.5,borderColor:ACCENT,marginTop:10},

@@ -32,7 +32,7 @@ const SCREEN_NAMES = {
   Onboarding: 'onboarding', Projects: 'projects', Home: 'projects', Main: 'projects',
   Calculator: 'calculator', Goals: 'goals', Analytics: 'analytics', Settings: 'settings',
   NewProject: 'new_project', ProjectDetail: 'project_detail', SellProject: 'sell_project',
-  Pro: 'paywall', DeleteAccount: 'delete_account',
+  GoalCreate: 'goal_create', Pro: 'paywall', DeleteAccount: 'delete_account',
 }
 
 function bounded(value, max = 80) {

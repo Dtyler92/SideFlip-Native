@@ -31,6 +31,7 @@ test('native attribution rejects contact details, URLs, credentials, and opaque 
 test('screen names contain no record identifiers', () => {
   assert.equal(normalizeScreenName('ProjectDetail'), 'project_detail')
   assert.equal(normalizeScreenName('SellProject'), 'sell_project')
+  assert.equal(normalizeScreenName('GoalCreate'), 'goal_create')
   assert.equal(normalizeScreenName('unexpected-value'), 'unknown')
 })
 
@@ -125,7 +126,7 @@ test('auth transitions reset identity before reconciliation and always clean up 
 
 test('iOS privacy manifest discloses linked app and analytics data without tracking', () => {
   const config = JSON.parse(source('app.json')).expo
-  assert.equal(config.ios.buildNumber, '13')
+  assert.equal(config.ios.buildNumber, '14')
   const manifest = config.ios.privacyManifests
   assert.equal(manifest.NSPrivacyTracking, false)
   assert.deepEqual(manifest.NSPrivacyTrackingDomains, [])

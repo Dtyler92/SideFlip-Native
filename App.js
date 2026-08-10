@@ -14,6 +14,7 @@ import ProjectDetailScreen from './src/screens/ProjectDetailScreen'
 import SellProjectScreen from './src/screens/SellProjectScreen'
 import CalculatorScreen from './src/screens/CalculatorScreen'
 import TradeUpGoalsScreen from './src/screens/TradeUpGoalsScreen'
+import GoalCreateScreen from './src/screens/GoalCreateScreen'
 import AnalyticsScreen from './src/screens/AnalyticsScreen'
 import SettingsScreen from './src/screens/SettingsScreen'
 import ProScreen from './src/screens/ProScreen'
@@ -106,6 +107,7 @@ function RootNavigator() {
       <Stack.Screen name="NewProject" component={NewProjectScreen} />
       <Stack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
       <Stack.Screen name="SellProject" component={SellProjectScreen} />
+      <Stack.Screen name="GoalCreate" component={GoalCreateScreen} />
       <Stack.Screen name="Pro" component={ProScreen} options={{ headerShown: true, title: 'SideFlip Pro', headerTintColor: '#C8402F', headerStyle: { backgroundColor: '#FAFAF7' } }} />
       <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
