@@ -122,3 +122,34 @@ test('auth transitions reset identity before reconciliation and always clean up 
   assert.match(app, /isAnalyticsReady\(\)/)
   assert.match(app, /analyticsReady/)
 })
+
+test('iOS privacy manifest discloses linked app and analytics data without tracking', () => {
+  const config = JSON.parse(source('app.json')).expo
+  assert.equal(config.ios.buildNumber, '12')
+  const manifest = config.ios.privacyManifests
+  assert.equal(manifest.NSPrivacyTracking, false)
+  assert.deepEqual(manifest.NSPrivacyTrackingDomains, [])
+  const types = new Map(manifest.NSPrivacyCollectedDataTypes.map(entry => [entry.NSPrivacyCollectedDataType, entry]))
+  const expected = [
+    'NSPrivacyCollectedDataTypeEmailAddress',
+    'NSPrivacyCollectedDataTypePhotosorVideos',
+    'NSPrivacyCollectedDataTypeOtherUserContent',
+    'NSPrivacyCollectedDataTypeOtherFinancialInfo',
+    'NSPrivacyCollectedDataTypePurchaseHistory',
+    'NSPrivacyCollectedDataTypeUserID',
+    'NSPrivacyCollectedDataTypeDeviceID',
+    'NSPrivacyCollectedDataTypeProductInteraction',
+    'NSPrivacyCollectedDataTypeOtherUsageData',
+  ]
+  assert.deepEqual([...types.keys()], expected)
+  for (const entry of types.values()) {
+    assert.equal(entry.NSPrivacyCollectedDataTypeLinked, true)
+    assert.equal(entry.NSPrivacyCollectedDataTypeTracking, false)
+  }
+  assert.deepEqual(types.get('NSPrivacyCollectedDataTypeEmailAddress').NSPrivacyCollectedDataTypePurposes, [
+    'NSPrivacyCollectedDataTypePurposeAppFunctionality',
+  ])
+  assert.deepEqual(types.get('NSPrivacyCollectedDataTypeProductInteraction').NSPrivacyCollectedDataTypePurposes, [
+    'NSPrivacyCollectedDataTypePurposeAnalytics',
+  ])
+})
