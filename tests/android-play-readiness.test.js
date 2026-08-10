@@ -8,7 +8,9 @@ const read = path => fs.readFileSync(new URL(path, root), 'utf8')
 test('Android Play config uses the stable package and minimal permissions', () => {
   const config = JSON.parse(read('app.json')).expo
   assert.equal(config.android.package, 'com.sideflip.app')
+  assert.equal(config.scheme, 'sideflip')
   assert.equal(config.android.versionCode, 1)
+  assert.equal(config.android.intentFilters, undefined)
   assert.equal(config.android.googleServicesFile, undefined)
   assert.deepEqual(config.android.permissions, ['android.permission.CAMERA'])
   assert.deepEqual(new Set(config.android.blockedPermissions), new Set([
