@@ -80,6 +80,15 @@ test('native Settings provides analytics opt-out with accurate wording', () => {
   assert.match(settings, /Analytics remains off/)
 })
 
+test('Settings separates project currency from Apple storefront pricing and hides redundant active-Pro benefits', () => {
+  const settings = source('src/screens/SettingsScreen.js')
+  assert.match(settings, /controls project amounts after you tap Save Changes/)
+  assert.match(settings, /Apple subscription prices use your App Store storefront currency/)
+  assert.doesNotMatch(settings, /View Pro Benefits/)
+  assert.match(settings, /!hasPro &&/)
+  assert.match(settings, /Upgrade to SideFlip Pro/)
+})
+
 test('analytics stays hard-gated until scoped server preference reconciliation', () => {
   const analytics = source('src/lib/analytics.js')
   assert.match(analytics, /runtimePreferenceReady/)
@@ -126,7 +135,7 @@ test('auth transitions reset identity before reconciliation and always clean up 
 
 test('iOS privacy manifest discloses linked app and analytics data without tracking', () => {
   const config = JSON.parse(source('app.json')).expo
-  assert.equal(config.ios.buildNumber, '14')
+  assert.equal(config.ios.buildNumber, '15')
   const manifest = config.ios.privacyManifests
   assert.equal(manifest.NSPrivacyTracking, false)
   assert.deepEqual(manifest.NSPrivacyTrackingDomains, [])

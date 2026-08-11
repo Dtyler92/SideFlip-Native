@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native'
 import { getAvailablePurchases, useIAP } from 'expo-iap'
 import { supabase } from '../lib/supabase'
@@ -7,14 +7,15 @@ import ProFeatureList from '../components/ProFeatureList'
 import { captureEvent } from '../lib/analytics'
 
 const PRODUCT_IDS = ['com.sideflip.app.pro.monthly', 'com.sideflip.app.pro.annual']
+const STORE_CONNECTION_GRACE_MS = 3000
 const purchaseKey = purchase => purchase?.purchaseToken || purchase?.transactionId || purchase?.id
 const monthlyEquivalent = product => {
   const annualPrice = Number(product?.price)
-  if (!Number.isFinite(annualPrice) || annualPrice <= 0) return '$8.33'
+  if (!Number.isFinite(annualPrice) || annualPrice <= 0 || !product?.currency) return null
   try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: product.currency || 'USD' }).format(annualPrice / 12)
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: product.currency }).format(annualPrice / 12)
   } catch {
-    return `$${(annualPrice / 12).toFixed(2)}`
+    return null
   }
 }
 
@@ -36,6 +37,9 @@ async function verifyWithSideFlip(purchase, isRestore = false) {
 export default function ProScreen() {
   const { user, isPro, refreshEntitlement } = useAuth()
   const [busy, setBusy] = useState(false)
+  const [catalogAttempted, setCatalogAttempted] = useState(false)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogError, setCatalogError] = useState(false)
   const restoringRef = useRef(false)
   const restoredPurchaseKeysRef = useRef(new Set())
   const pendingProductRef = useRef(null)
@@ -57,7 +61,7 @@ export default function ProScreen() {
     })
   }
 
-  const { connected, subscriptions, fetchProducts, requestPurchase, restorePurchases, finishTransaction } = useIAP({
+  const { connected, subscriptions, fetchProducts, requestPurchase, restorePurchases, finishTransaction, reconnect } = useIAP({
     onPurchaseSuccess: async purchase => {
       const key = purchaseKey(purchase)
       if (restoringRef.current || (key && restoredPurchaseKeysRef.current.has(key))) return
@@ -90,15 +94,52 @@ export default function ProScreen() {
     },
   })
 
+  const loadProducts = useCallback(async () => {
+    setCatalogLoading(true)
+    setCatalogError(false)
+    try {
+      await fetchProducts({ skus: PRODUCT_IDS, type: 'subs' })
+    } catch {
+      setCatalogError(true)
+      captureEvent('apple_store_products_fetch_failed', { provider: 'apple', error_type: 'product_fetch' })
+    } finally {
+      setCatalogAttempted(true)
+      setCatalogLoading(false)
+    }
+  }, [fetchProducts])
+
+  const retryProducts = useCallback(async () => {
+    if (connected) {
+      await loadProducts()
+      return
+    }
+    setCatalogAttempted(true)
+    setCatalogLoading(true)
+    setCatalogError(false)
+    const reconnected = await reconnect()
+    if (reconnected) return
+    setCatalogError(true)
+    setCatalogLoading(false)
+    captureEvent('apple_store_products_fetch_failed', { provider: 'apple', error_type: 'store_connection' })
+  }, [connected, loadProducts, reconnect])
+
   useEffect(() => { captureEvent('paywall_viewed', { provider: 'apple', source: 'native_upgrade' }) }, [])
   useEffect(() => {
-    if (!connected) return
-    fetchProducts({ skus: PRODUCT_IDS, type: 'subs' }).catch(error => {
-      captureEvent('apple_store_products_fetch_failed', { provider: 'apple', error_type: 'product_fetch' })
-      Alert.alert('Store unavailable', error.message)
-    })
-  }, [connected, fetchProducts])
+    if (connected) {
+      loadProducts()
+      return undefined
+    }
+    const timeout = setTimeout(() => {
+      setCatalogAttempted(true)
+      setCatalogError(true)
+    }, STORE_CONNECTION_GRACE_MS)
+    return () => clearTimeout(timeout)
+  }, [connected, loadProducts])
   const product = id => subscriptions.find(item => item.id === id)
+  const catalogReady = PRODUCT_IDS.every(id => {
+    const item = product(id)
+    return Boolean(item?.displayPrice && (!id.endsWith('.annual') || monthlyEquivalent(item)))
+  })
   async function buy(id) {
     pendingProductRef.current = id
     captureEvent('plan_selected', { provider: 'apple', plan: planForProduct(id), product_id: id })
@@ -194,23 +235,28 @@ export default function ProScreen() {
       {PRODUCT_IDS.map(id => {
         const annual = id.endsWith('.annual')
         const item = product(id)
+        const priceText = item ? (annual ? monthlyEquivalent(item) : item.displayPrice) : null
+        const priceUnavailable = !priceText
         return (
           <View key={id} style={[s.card, annual && s.featured]}>
             <View style={s.planRow}>
               <Text style={s.plan}>{annual ? 'Annual' : 'Monthly'}</Text>
               {annual && <Text style={s.valueBadge}>BEST VALUE</Text>}
             </View>
-            <Text style={s.price}>
-              {annual ? monthlyEquivalent(item) : (item?.displayPrice || '$12.99')}
-              <Text style={s.unit}>/month</Text>
+            <Text style={[s.price, priceUnavailable && s.priceLoading]}>
+              {priceText || 'Loading Apple price…'}
+              {priceText && <Text style={s.unit}>/month</Text>}
             </Text>
-            <Text style={s.detail}>{annual ? `${item?.displayPrice || '$99.99'} billed annually` : 'Billed monthly'}</Text>
+            <Text style={s.detail}>{item?.displayPrice
+              ? (annual ? `${item.displayPrice} billed annually` : 'Billed monthly')
+              : 'Apple prices are provided in your App Store storefront currency.'}
+            </Text>
             {!hasPro && (
               <TouchableOpacity
                 accessibilityRole="button"
-                disabled={!connected || busy || !item}
+                disabled={!connected || busy || priceUnavailable}
                 onPress={() => buy(id)}
-                style={[s.button, (!connected || busy || !item) && s.buttonDisabled]}
+                style={[s.button, (!connected || busy || priceUnavailable) && s.buttonDisabled]}
               >
                 <Text style={s.buttonText}>{busy ? 'Working…' : `Choose ${annual ? 'Annual' : 'Monthly'}`}</Text>
               </TouchableOpacity>
@@ -218,6 +264,22 @@ export default function ProScreen() {
           </View>
         )
       })}
+      {catalogAttempted && !catalogReady && (
+        <View style={s.catalogError}>
+          <Text style={s.catalogErrorText}>{catalogError
+            ? 'Apple prices could not be loaded.'
+            : (catalogLoading ? 'Connecting to the App Store…' : 'Apple did not return all subscription prices.')}
+          </Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            disabled={catalogLoading}
+            onPress={retryProducts}
+            style={[s.catalogRetry, catalogLoading && s.buttonDisabled]}
+          >
+            <Text style={s.catalogRetryText}>{catalogLoading ? 'Retrying…' : 'Retry Apple Prices'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={restore} style={s.restore}>
         <Text style={s.restoreText}>Restore Purchases</Text>
       </TouchableOpacity>
@@ -250,11 +312,16 @@ const s = StyleSheet.create({
   plan: { fontSize: 17, fontWeight: '800', color: '#1A1917' },
   valueBadge: { fontSize: 9, fontWeight: '800', color: '#8D3529', backgroundColor: '#F7E8E5', borderRadius: 5, overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 4, letterSpacing: 0.4 },
   price: { fontSize: 28, fontWeight: '800', color: '#C8402F', marginTop: 6 },
+  priceLoading: { fontSize: 18, color: '#8C8880' },
   unit: { fontSize: 15, fontWeight: '700', color: '#C8402F' },
   detail: { color: '#8C8880', marginTop: 3 },
   button: { backgroundColor: '#C8402F', alignItems: 'center', padding: 14, borderRadius: 10, marginTop: 15 },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: '#fff', fontWeight: '800' },
+  catalogError: { backgroundColor: '#FFF7E8', borderColor: '#E8C986', borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 8 },
+  catalogErrorText: { color: '#6F5420', textAlign: 'center', lineHeight: 19 },
+  catalogRetry: { alignItems: 'center', paddingTop: 12, paddingBottom: 4 },
+  catalogRetryText: { color: '#C8402F', fontWeight: '800' },
   restore: { alignItems: 'center', padding: 16 },
   restoreText: { color: '#C8402F', fontWeight: '700' },
   legal: { fontSize: 12, color: '#8C8880', textAlign: 'center', lineHeight: 18, marginTop: 8 },
