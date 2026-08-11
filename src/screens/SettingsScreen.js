@@ -108,19 +108,20 @@ export default function SettingsScreen({ navigation }) {
             ? 'SideFlip Pro is active. Your native Pro features are unlocked.'
             : 'You are using SideFlip Free. Upgrade in the app to unlock the complete Pro toolkit.'}
         </Text>
-        <TouchableOpacity
-          accessibilityRole="button"
-          style={[s.proButton, hasPro && s.proButtonActive]}
-          onPress={() => navigation.navigate('Pro')}
-        >
-          <Text style={[s.proButtonText, hasPro && s.proButtonTextActive]}>
-            {hasPro ? 'View Pro Benefits' : 'Upgrade to SideFlip Pro'}
-          </Text>
-        </TouchableOpacity>
+        {!hasPro && (
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={s.proButton}
+            onPress={() => navigation.navigate('Pro')}
+          >
+            <Text style={s.proButtonText}>Upgrade to SideFlip Pro</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Currency */}
       <Text style={s.sectionTitle}>Currency</Text>
+      <Text style={s.currencyNote}>Your selection controls project amounts after you tap Save Changes. Apple subscription prices use your App Store storefront currency.</Text>
       <View style={s.grid}>
         {CURRENCIES.map(c => (
           <TouchableOpacity
@@ -196,9 +197,8 @@ const s = StyleSheet.create({
   planBadge: { fontSize: 10, color: '#716D66', backgroundColor: '#F0EDE8', borderRadius: 6, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4, fontWeight: '800', letterSpacing: 0.5 },
   planBadgeActive: { color: '#23613F', backgroundColor: '#E8F5EE' },
   proButton: { minHeight: 46, borderRadius: 11, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  proButtonActive: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: ACCENT },
   proButtonText: { fontSize: 14, color: '#fff', fontWeight: '800' },
-  proButtonTextActive: { color: ACCENT },
+  currencyNote: { color: '#8C8880', fontSize: 12, lineHeight: 18, marginTop: -4, marginBottom: 12 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
   chip: { width: '47%', borderRadius: 12, borderWidth: 1.5, borderColor: '#E8E4DE', backgroundColor: '#fff', padding: 12, alignItems: 'center' },
   chipActive: { borderColor: ACCENT, backgroundColor: '#FDF1EF' },
