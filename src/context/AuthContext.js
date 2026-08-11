@@ -3,10 +3,10 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import * as Linking from 'expo-linking'
 import { supabase, getProfile } from '../lib/supabase'
 import { beginAnalyticsIdentityTransition, captureAttribution, identifyAnalytics, reconcileAnalyticsPreference } from '../lib/analytics'
+import { CURRENCY_SYMBOLS, formatMoneyForCurrency } from '../lib/currencyModel'
 
 const AuthContext = createContext(null)
 const AUTH_CALLBACK_URL = 'sideflip://auth/callback'
-const CURRENCY_SYMBOLS = { USD: '$', CAD: 'CA$', GBP: '£', EUR: '€', AUD: 'A$', MXN: 'MX$', JPY: '¥', INR: '₹' }
 
 function tokensFromUrl(url) {
   const query = url?.split('?')[1]?.split('#')[0] || ''
@@ -118,7 +118,7 @@ export function AuthProvider({ children }) {
   const currency = profile?.currency || 'USD'
   const language = profile?.language || 'en'
   const currencySymbol = CURRENCY_SYMBOLS[currency] || '$'
-  function formatMoney(amount) { const n = Number(amount || 0); const decimals = currency === 'JPY' ? 0 : 2; return currencySymbol + n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) }
+  function formatMoney(amount) { return formatMoneyForCurrency(amount, currency) }
 
   return <AuthContext.Provider value={{ user, profile, plan, isPro: plan === 'pro', loading, analyticsReady, currency, language, currencySymbol, formatMoney, signUp, signIn, signOut, resetPassword, refreshProfile, refreshEntitlement, needsOnboarding: profile && !profile.onboarded }}>{children}</AuthContext.Provider>
 }

@@ -18,11 +18,10 @@ const CATEGORIES = [
   {value:'other',label:'📦 Other'},
 ]
 
-const money = value => '$' + (Number(value) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const roundMoney = value => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100
 
 export default function NewProjectScreen({ navigation, route }) {
-  const { user, isPro, plan } = useAuth()
+  const { user, isPro, plan, formatMoney } = useAuth()
   const { onReturn } = route.params || {}
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('')
@@ -78,7 +77,7 @@ export default function NewProjectScreen({ navigation, route }) {
     const price = roundMoney(rawPrice)
     const funding = selectedGoalId ? roundMoney(rawFunding) : 0
     if (funding > price) return Alert.alert('Goal amount too high', 'The amount used from your goal cannot exceed the project purchase price.')
-    if (funding > goalAvailable) return Alert.alert('Goal amount too high', `This goal currently has ${money(goalAvailable)} available.`)
+    if (funding > goalAvailable) return Alert.alert('Goal amount too high', `This goal currently has ${formatMoney(goalAvailable)} available.`)
     const outOfPocket = roundMoney(price - funding)
 
     setSaving(true)
@@ -205,7 +204,7 @@ export default function NewProjectScreen({ navigation, route }) {
           <View style={s.fundingCard}>
             <View style={s.fundingHeader}>
               <Text style={s.fundingTitle}>Use from goal balance</Text>
-              <Text style={s.availableText}>{money(goalAvailable)} available</Text>
+              <Text style={s.availableText}>{formatMoney(goalAvailable)} available</Text>
             </View>
             <Text style={s.goalHint}>Choose how much of this purchase comes from the goal. The rest is tracked as out-of-pocket.</Text>
             <View style={s.fundingInputRow}>
@@ -226,7 +225,7 @@ export default function NewProjectScreen({ navigation, route }) {
             </View>
             <View style={s.fundingSummary}>
               <Text style={s.fundingSummaryLabel}>Out-of-pocket</Text>
-              <Text style={s.fundingSummaryValue}>{money(outOfPocketPreview)}</Text>
+              <Text style={s.fundingSummaryValue}>{formatMoney(outOfPocketPreview)}</Text>
             </View>
           </View>
         )}
