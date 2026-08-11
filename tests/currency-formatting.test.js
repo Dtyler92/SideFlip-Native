@@ -7,6 +7,7 @@ const monetaryScreens = [
   'HomeScreen',
   'AnalyticsScreen',
   'CalculatorScreen',
+  'NewProjectScreen',
   'ProjectDetailScreen',
   'SellProjectScreen',
 ]
@@ -16,7 +17,7 @@ test('all native project-tracking money displays use the selected profile curren
     const source = screen(name)
     assert.match(source, /useAuth\(\)/, `${name} must read the shared auth/profile currency`)
     assert.match(source, /formatMoney/, `${name} must use the shared selected-currency formatter`)
-    assert.doesNotMatch(source, /const fmt\s*=.*['"]\$/, `${name} must not define a hardcoded-dollar formatter`)
+    assert.doesNotMatch(source, /const (?:fmt|money)\s*=.*['"]\$/, `${name} must not define a hardcoded-dollar formatter`)
   }
 })
 
