@@ -10,7 +10,6 @@ import { openGoalCreation } from './goalCreationNavigation'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
-const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
 
 const EXPENSE_CATS = [
@@ -22,7 +21,7 @@ const EXPENSE_CATS = [
 const EMPTY_EXPENSE = { description: '', amount: '', category: 'parts', laborHours: '' }
 
 export default function ProjectDetailScreen({ navigation, route }) {
-  const { user, isPro, plan } = useAuth()
+  const { user, isPro, plan, formatMoney } = useAuth()
   const { projectId, onReturn } = route.params || {}
   const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -285,20 +284,20 @@ export default function ProjectDetailScreen({ navigation, route }) {
         <View style={s.statsCard}>
           <View style={s.statRow}>
             <Text style={s.statLabel}>Purchase Price</Text>
-            <Text style={s.statValue}>{fmt(project.purchase_price)}</Text>
+            <Text style={s.statValue}>{formatMoney(project.purchase_price)}</Text>
           </View>
           <View style={s.statRow}>
             <Text style={s.statLabel}>Expenses</Text>
-            <Text style={s.statValue}>{fmt(totalInvested - Number(project.purchase_price||0))}</Text>
+            <Text style={s.statValue}>{formatMoney(totalInvested - Number(project.purchase_price||0))}</Text>
           </View>
           <View style={[s.statRow,{borderBottomWidth:0}]}>
             <Text style={[s.statLabel,{fontWeight:'700'}]}>Total Invested</Text>
-            <Text style={[s.statValue,{color:ACCENT,fontWeight:'700'}]}>{fmt(totalInvested)}</Text>
+            <Text style={[s.statValue,{color:ACCENT,fontWeight:'700'}]}>{formatMoney(totalInvested)}</Text>
           </View>
           {profit !== null && (
             <View style={[s.profitBanner, profit<0 && s.profitBannerLoss]}>
               <Text style={s.profitLabel}>{profit>=0?'Profit':'Loss'}</Text>
-              <Text style={s.profitAmount}>{profit>=0?'+':''}{fmt(profit)}</Text>
+              <Text style={s.profitAmount}>{profit>=0?'+':''}{formatMoney(profit)}</Text>
             </View>
           )}
         </View>
@@ -324,7 +323,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
                     <Text style={s.expenseDesc}>{e.description}</Text>
                     <Text style={s.expenseCat}>{e.category}{e.labor_hours ? ` · ${Number(e.labor_hours)} hr labor` : ' · Labor not recorded'}</Text>
                   </View>
-                  <Text style={s.expenseAmount}>{fmt(e.amount)}</Text>
+                  <Text style={s.expenseAmount}>{formatMoney(e.amount)}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Remove ${e.description}`} onPress={() => handleDeleteExpense(e.id)}>
                   <Text style={s.expenseRemove}>×</Text>
@@ -411,7 +410,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
                 : <Text style={s.btnText}>Generate Sales Listing</Text>
               }
             </TouchableOpacity>
-            <View style={s.soldBadge}><Text style={s.soldText}>✅ Sold for {fmt(project.sale_price)}</Text></View>
+            <View style={s.soldBadge}><Text style={s.soldText}>✅ Sold for {formatMoney(project.sale_price)}</Text></View>
             <TouchableOpacity style={[s.btn, s.undoSaleButton, saving && s.btnDisabled]} onPress={handleUndoSale} disabled={saving}>
               {saving ? <ActivityIndicator color={ACCENT} /> : <Text style={s.undoSaleText}>Undo Sale</Text>}
             </TouchableOpacity>

@@ -4,13 +4,12 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 
 const ACCENT = '#C8402F'
-const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
 const getProfit = p => p.sale_price ? Number(p.sale_price) - getTotalInvested(p) : null
 const ICONS = {mower:'🚜',car:'🚗',motorcycle:'🏍️',atv:'🏎️',boat:'⛵',bicycle:'🚲',watch:'⌚',electronics:'📱',gaming:'🎮',tool:'🔧',exercise:'💪',instrument:'🎸',furniture:'🪑',house:'🏠',other:'📦'}
 
 export default function HomeScreen({ navigation }) {
-  const { user, signOut, isPro } = useAuth()
+  const { user, signOut, isPro, formatMoney } = useAuth()
   const [projects, setProjects] = useState([])
   const [refreshing, setRefreshing] = useState(false)
   const [tab, setTab] = useState('active')
@@ -40,7 +39,7 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
       </View>
       <View style={s.summaryBar}>
-        {[['Active', active.length, ACCENT], ['In Projects', fmt(totalInvested), ACCENT], ['Total Profit', fmt(totalProfit), totalProfit>=0?'#2D7A4F':ACCENT]].map(([l,v,c]) => (
+        {[['Active', active.length, ACCENT], ['In Projects', formatMoney(totalInvested), ACCENT], ['Total Profit', formatMoney(totalProfit), totalProfit>=0?'#2D7A4F':ACCENT]].map(([l,v,c]) => (
           <View key={l} style={s.summaryItem}><Text style={s.summaryLabel}>{l}</Text><Text style={[s.summaryValue,{color:c}]}>{v}</Text></View>
         ))}
       </View>
@@ -83,8 +82,8 @@ export default function HomeScreen({ navigation }) {
                 <Text style={s.cardCat}>{p.category}</Text>
                 <Text style={s.cardTitle} numberOfLines={1}>{p.title}</Text>
                 <View style={s.cardMeta}>
-                  <Text style={s.cardInvested}>{fmt(getTotalInvested(p))} in</Text>
-                  {p.status==='sold' && profit!==null && <Text style={[s.badge, profit<0 && s.badgeLoss]}>{profit>=0?'+':''}{fmt(profit)}</Text>}
+                  <Text style={s.cardInvested}>{formatMoney(getTotalInvested(p))} in</Text>
+                  {p.status==='sold' && profit!==null && <Text style={[s.badge, profit<0 && s.badgeLoss]}>{profit>=0?'+':''}{formatMoney(profit)}</Text>}
                 </View>
               </View>
             </TouchableOpacity>

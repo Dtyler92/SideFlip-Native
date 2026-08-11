@@ -8,7 +8,6 @@ import { calculateHourlyEarnings } from './laborModel'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
-const fmt = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const getTotalInvested = p => (p.expenses || []).reduce((s, e) => s + Number(e.amount), 0) + (Number(p.purchase_price) || 0)
 const getProfit = p => p.sale_price ? Number(p.sale_price) - getTotalInvested(p) : null
 
@@ -24,7 +23,7 @@ function StatCard({ label, value, sub, color }) {
   )
 }
 
-function LockedAnalyticsPreview({ navigation, topInset }) {
+function LockedAnalyticsPreview({ navigation, topInset, formatMoney }) {
   return (
     <ScrollView
       style={s.root}
@@ -42,11 +41,11 @@ function LockedAnalyticsPreview({ navigation, topInset }) {
       <View style={s.preview} pointerEvents="none">
         <Text style={s.sectionTitle}>Analytics Preview</Text>
         <View style={s.row}>
-          <StatCard label="Total Profit" value="$4,280" color={GREEN} sub="31.4% ROI" />
+          <StatCard label="Total Profit" value={formatMoney(4280)} color={GREEN} sub="31.4% ROI" />
           <StatCard label="Win Rate" value="86%" color={GREEN} sub="12 of 14 sold" />
         </View>
         <View style={s.row}>
-          <StatCard label="Avg Profit / Flip" value="$356.67" color={GREEN} />
+          <StatCard label="Avg Profit / Flip" value={formatMoney(356.67)} color={GREEN} />
           <StatCard label="Avg Days to Sell" value="11d" />
         </View>
       </View>
@@ -67,7 +66,7 @@ function LockedAnalyticsPreview({ navigation, topInset }) {
 
 export default function AnalyticsScreen({ navigation }) {
   const insets = useSafeAreaInsets()
-  const { user, isPro } = useAuth()
+  const { user, isPro, formatMoney } = useAuth()
   const [projects, setProjects] = useState([])
   const [refreshing, setRefreshing] = useState(false)
   const hasPro = isPro
@@ -88,7 +87,7 @@ export default function AnalyticsScreen({ navigation }) {
 
   useEffect(() => { load() }, [load])
 
-  if (!hasPro) return <LockedAnalyticsPreview navigation={navigation} topInset={insets.top} />
+  if (!hasPro) return <LockedAnalyticsPreview navigation={navigation} topInset={insets.top} formatMoney={formatMoney} />
 
   const sold = projects.filter(p => p.status === 'sold')
   const active = projects.filter(p => p.status === 'active')
@@ -148,18 +147,18 @@ export default function AnalyticsScreen({ navigation }) {
           <Text style={s.sectionTitle}>Overview</Text>
           <View style={s.row}>
             <StatCard label="Total Flips" value={sold.length} sub={`${active.length} active`} />
-            <StatCard label="Total Profit" value={fmt(totalProfit)} color={totalProfit >= 0 ? GREEN : ACCENT} sub={overallROI ? `${overallROI}% ROI` : null} />
+            <StatCard label="Total Profit" value={formatMoney(totalProfit)} color={totalProfit >= 0 ? GREEN : ACCENT} sub={overallROI ? `${overallROI}% ROI` : null} />
           </View>
           <View style={s.row}>
-            <StatCard label="Avg Profit / Flip" value={fmt(avgProfit)} color={avgProfit >= 0 ? GREEN : ACCENT} />
+            <StatCard label="Avg Profit / Flip" value={formatMoney(avgProfit)} color={avgProfit >= 0 ? GREEN : ACCENT} />
             <StatCard label="Win Rate" value={`${winRate}%`} color={GREEN} sub={`${sold.filter(p => (getProfit(p)||0)>0).length} of ${sold.length} sold`} />
           </View>
           <View style={s.row}>
-            <StatCard label="Total Revenue" value={fmt(totalRevenue)} />
-            <StatCard label="Capital Active" value={fmt(totalInvestedActive)} sub={`across ${active.length} projects`} />
+            <StatCard label="Total Revenue" value={formatMoney(totalRevenue)} />
+            <StatCard label="Capital Active" value={formatMoney(totalInvestedActive)} sub={`across ${active.length} projects`} />
           </View>
           <View style={s.row}>
-            <StatCard label="Profit per Labor Hour" value={laborAnalytics.hourlyEarnings === null ? '—' : fmt(laborAnalytics.hourlyEarnings)} color={laborAnalytics.hourlyEarnings === null || laborAnalytics.hourlyEarnings >= 0 ? GREEN : ACCENT} sub="sold projects with labor" />
+            <StatCard label="Profit per Labor Hour" value={laborAnalytics.hourlyEarnings === null ? '—' : formatMoney(laborAnalytics.hourlyEarnings)} color={laborAnalytics.hourlyEarnings === null || laborAnalytics.hourlyEarnings >= 0 ? GREEN : ACCENT} sub="sold projects with labor" />
             <StatCard label="Labor Recorded" value={`${laborHoursLabel}h`} sub="sold projects with labor" />
           </View>
           {avgDays !== null && (
@@ -182,7 +181,7 @@ export default function AnalyticsScreen({ navigation }) {
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                           <Text style={s.catName}>{cat} <Text style={s.catCount}>({data.count})</Text></Text>
-                          <Text style={[s.catProfit, { color: data.profit >= 0 ? GREEN : ACCENT }]}>{fmt(data.profit)}</Text>
+                          <Text style={[s.catProfit, { color: data.profit >= 0 ? GREEN : ACCENT }]}>{formatMoney(data.profit)}</Text>
                         </View>
                         <View style={s.barBg}>
                           <View style={[s.barFill, { width: `${Math.max(Math.abs(pct) * 100, 2)}%`, backgroundColor: data.profit >= 0 ? GREEN : ACCENT }]} />
@@ -203,9 +202,9 @@ export default function AnalyticsScreen({ navigation }) {
                 <Text style={{ fontSize: 32 }}>{ICONS[bestFlip.category] || '📦'}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={s.bestTitle}>{bestFlip.title}</Text>
-                  <Text style={s.bestSub}>Bought {fmt(bestFlip.purchase_price)} · Sold {fmt(bestFlip.sale_price)}</Text>
+                  <Text style={s.bestSub}>Bought {formatMoney(bestFlip.purchase_price)} · Sold {formatMoney(bestFlip.sale_price)}</Text>
                 </View>
-                <Text style={[s.bestProfit, { color: GREEN }]}>+{fmt(getProfit(bestFlip))}</Text>
+                <Text style={[s.bestProfit, { color: GREEN }]}>+{formatMoney(getProfit(bestFlip))}</Text>
               </View>
             </>
           )}
@@ -222,9 +221,9 @@ export default function AnalyticsScreen({ navigation }) {
                       <Text style={s.recentIcon}>{ICONS[p.category] || '📦'}</Text>
                       <View style={{ flex: 1 }}>
                         <Text style={s.recentTitle} numberOfLines={1}>{p.title}</Text>
-                        <Text style={s.recentMeta}>{fmt(getTotalInvested(p))} in · {fmt(p.sale_price)} sold</Text>
+                        <Text style={s.recentMeta}>{formatMoney(getTotalInvested(p))} in · {formatMoney(p.sale_price)} sold</Text>
                       </View>
-                      <Text style={[s.recentProfit, { color: profit >= 0 ? GREEN : ACCENT }]}>{profit >= 0 ? '+' : ''}{fmt(profit)}</Text>
+                      <Text style={[s.recentProfit, { color: profit >= 0 ? GREEN : ACCENT }]}>{profit >= 0 ? '+' : ''}{formatMoney(profit)}</Text>
                     </View>
                   )
                 })}
