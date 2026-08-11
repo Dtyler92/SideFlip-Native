@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useAuth } from '../context/AuthContext'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
-const fmt = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 const PRESETS = [
   { label: '10%', value: 10 },
@@ -16,6 +16,7 @@ const PRESETS = [
 
 export default function CalculatorScreen() {
   const insets = useSafeAreaInsets()
+  const { formatMoney } = useAuth()
   const [invested, setInvested] = useState('')
   const [targetPct, setTargetPct] = useState('50')
   const [fees, setFees] = useState('10') // platform fees %
@@ -96,11 +97,11 @@ export default function CalculatorScreen() {
       {inv > 0 && (
         <View style={s.resultCard}>
           <Text style={s.resultLabel}>List At</Text>
-          <Text style={s.resultPrice}>{fmt(listPrice)}</Text>
+          <Text style={s.resultPrice}>{formatMoney(listPrice)}</Text>
           <View style={s.resultRow}>
             <View style={s.resultStat}>
               <Text style={s.resultStatLabel}>Your Profit</Text>
-              <Text style={[s.resultStatValue, { color: GREEN }]}>{fmt(actualProfit)}</Text>
+              <Text style={[s.resultStatValue, { color: GREEN }]}>{formatMoney(actualProfit)}</Text>
             </View>
             <View style={s.resultDivider} />
             <View style={s.resultStat}>
@@ -110,7 +111,7 @@ export default function CalculatorScreen() {
             <View style={s.resultDivider} />
             <View style={s.resultStat}>
               <Text style={s.resultStatLabel}>Invested</Text>
-              <Text style={s.resultStatValue}>{fmt(inv)}</Text>
+              <Text style={s.resultStatValue}>{formatMoney(inv)}</Text>
             </View>
           </View>
         </View>
@@ -128,8 +129,8 @@ export default function CalculatorScreen() {
           {scenarios.map(({ pct: p, price, profit }) => (
             <TouchableOpacity key={p} style={s.tableRow} onPress={() => setTargetPct(String(p))}>
               <Text style={[s.tableCell, { flex: 1, fontWeight: '600', color: ACCENT }]}>{p}%</Text>
-              <Text style={[s.tableCell, { flex: 2, fontWeight: '700', color: '#1A1917' }]}>{fmt(price)}</Text>
-              <Text style={[s.tableCell, { flex: 2, textAlign: 'right', color: GREEN, fontWeight: '600' }]}>{fmt(profit)}</Text>
+              <Text style={[s.tableCell, { flex: 2, fontWeight: '700', color: '#1A1917' }]}>{formatMoney(price)}</Text>
+              <Text style={[s.tableCell, { flex: 2, textAlign: 'right', color: GREEN, fontWeight: '600' }]}>{formatMoney(profit)}</Text>
             </TouchableOpacity>
           ))}
           <Text style={s.tableHint}>Tap a row to set as your target</Text>

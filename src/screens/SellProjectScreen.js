@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
 import { supabase } from '../lib/supabase'
 import { captureEvent } from '../lib/analytics'
+import { useAuth } from '../context/AuthContext'
 
-const fmt = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
 const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100
 const SALE_KEYBOARD_ACCESSORY_ID = 'sell-project-number-pad-actions'
 
 export default function SellProjectScreen({ navigation, route }) {
+  const { formatMoney, currencySymbol } = useAuth()
   const { projectId, project: proj, onReturn } = route.params || {}
   const [project] = useState(proj)
   const [salePrice, setSalePrice] = useState('')
@@ -26,8 +27,8 @@ export default function SellProjectScreen({ navigation, route }) {
     const cashKeptOut = roundMoney(cashKeptOutInput || 0)
     const goalRetained = roundMoney(price - cashKeptOut)
     if (!salePrice || !Number.isFinite(price) || price < 0) return Alert.alert('Enter a valid sale price')
-    if (project.goal_id && price === 0) return Alert.alert('Enter a sale price', 'A goal-linked sale must be greater than $0 so proceeds can be recorded toward the goal.')
-    if (!Number.isFinite(cashKeptOut) || cashKeptOut < 0 || cashKeptOut > price) return Alert.alert('Cash kept out must be between $0 and the sale price.')
+    if (project.goal_id && price === 0) return Alert.alert('Enter a sale price', `A goal-linked sale must be greater than ${currencySymbol}0 so proceeds can be recorded toward the goal.`)
+    if (!Number.isFinite(cashKeptOut) || cashKeptOut < 0 || cashKeptOut > price) return Alert.alert(`Cash kept out must be between ${currencySymbol}0 and the sale price.`)
     setSaving(true)
     try {
       if (project.goal_id) {
@@ -78,7 +79,7 @@ export default function SellProjectScreen({ navigation, route }) {
           <Text style={s.projectTitle}>{project.title}</Text>
           <View style={s.row}>
             <Text style={s.label}>Total Invested</Text>
-            <Text style={[s.value,{color:'#C8402F'}]}>{fmt(totalInvested)}</Text>
+            <Text style={[s.value,{color:'#C8402F'}]}>{formatMoney(totalInvested)}</Text>
           </View>
         </View>
 
@@ -92,7 +93,7 @@ export default function SellProjectScreen({ navigation, route }) {
         {project.goal_id && (
           <View style={s.goalSplit}>
             <Text style={s.sectionLabel}>Cash kept out</Text>
-            <Text style={s.goalSplitHint}>Leave $0 to roll all sale proceeds into this Trade-Up Goal.</Text>
+            <Text style={s.goalSplitHint}>Leave {currencySymbol}0 to roll all sale proceeds into this Trade-Up Goal.</Text>
             <TextInput
               style={s.splitInput}
               placeholder="0.00"
@@ -108,7 +109,7 @@ export default function SellProjectScreen({ navigation, route }) {
         {preview !== null && (
           <View style={[s.previewCard, preview<0 && s.previewCardLoss]}>
             <Text style={[s.previewLabel, preview<0 && s.previewLabelLoss]}>{preview>=0?'Profit':'Loss'}</Text>
-            <Text style={[s.previewAmount, preview<0 && s.previewAmountLoss]}>{preview>=0?'+':''}{fmt(preview)}</Text>
+            <Text style={[s.previewAmount, preview<0 && s.previewAmountLoss]}>{preview>=0?'+':''}{formatMoney(preview)}</Text>
             {roi && <Text style={[s.previewRoi, preview<0 && s.previewLabelLoss]}>{preview>=0?'📈':'📉'} {roi}% ROI</Text>}
           </View>
         )}
