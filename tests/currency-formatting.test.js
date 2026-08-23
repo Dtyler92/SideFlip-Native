@@ -27,9 +27,9 @@ test('sale guidance uses the selected currency symbol instead of hardcoded dolla
   assert.doesNotMatch(source, /greater than \$0|between \$0|Leave \$0/)
 })
 
-test('build number advances after immutable TestFlight build 15', () => {
+test('build number advances after immutable TestFlight build 16', () => {
   const app = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'))
   assert.equal(app.expo.version, '1.0.0')
   assert.equal(app.expo.ios.bundleIdentifier, 'com.sideflip.app')
-  assert.equal(app.expo.ios.buildNumber, '16')
+  assert.equal(app.expo.ios.buildNumber, '17')
 })

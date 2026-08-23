@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import ProFeatureList from '../components/ProFeatureList'
 import { captureEvent } from '../lib/analytics'
+import { queryRestorablePurchases } from '../lib/storekitRestore'
 
 const PRODUCT_IDS = ['com.sideflip.app.pro.monthly', 'com.sideflip.app.pro.annual']
 const STORE_CONNECTION_GRACE_MS = 3000
@@ -159,8 +160,13 @@ export default function ProScreen() {
     setBusy(true)
     restoringRef.current = true
     try {
-      await restorePurchases({ alsoPublishToEventListenerIOS: false, onlyIncludeActiveItemsIOS: true })
-      const purchases = await getAvailablePurchases({ alsoPublishToEventListenerIOS: false, onlyIncludeActiveItemsIOS: true })
+      const restoreOptions = { alsoPublishToEventListenerIOS: false, onlyIncludeActiveItemsIOS: true }
+      const purchases = await queryRestorablePurchases({
+        options: restoreOptions,
+        syncPurchases: restorePurchases,
+        getAvailablePurchases,
+        onSyncError: () => captureEvent('apple_restore_sync_failed', { provider: 'apple', error_type: 'store_sync', is_restore: true }),
+      })
       const eligible = purchases.filter(purchase => PRODUCT_IDS.includes(purchase.productId) && purchase.purchaseToken)
       let verifiedCount = 0
       const verifiedProductIds = []
