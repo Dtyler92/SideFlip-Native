@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, useRef } from 'react'
 import { ActivityIndicator, AppState, View, Text } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
 import LoginScreen from './src/screens/LoginScreen'
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen'
@@ -48,6 +49,7 @@ function TabIcon({ emoji, focused }) {
 }
 
 function HomeTabs() {
+  const insets = useSafeAreaInsets()
   return (
     <Tab.Navigator
       screenOptions={{
@@ -55,8 +57,8 @@ function HomeTabs() {
         tabBarStyle: {
           backgroundColor: '#fff',
           borderTopColor: '#E8E4DE',
-          height: 84,
-          paddingBottom: 28,
+          height: 56 + insets.bottom,
+          paddingBottom: insets.bottom,
           paddingTop: 10,
         },
         tabBarActiveTintColor: '#C8402F',

@@ -32,6 +32,16 @@ test('Android photo library uses the system picker without broad permission prom
   }
 })
 
+test('Android tabs respect the native bottom navigation safe area', () => {
+  const app = read('App.js')
+  assert.match(app, /useSafeAreaInsets/)
+  assert.match(app, /const insets = useSafeAreaInsets\(\)/)
+  assert.match(app, /height:\s*56 \+ insets\.bottom/)
+  assert.match(app, /paddingBottom:\s*insets\.bottom/)
+  assert.doesNotMatch(app, /height:\s*84/)
+  assert.doesNotMatch(app, /paddingBottom:\s*28/)
+})
+
 test('EAS Android submission is restricted to the Google Play internal track', () => {
   const eas = JSON.parse(read('eas.json'))
   assert.equal(eas.submit.production.android.track, 'internal')
