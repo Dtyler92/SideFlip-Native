@@ -9,7 +9,7 @@ test('Android Play config uses the stable package and minimal permissions', () =
   const config = JSON.parse(read('app.json')).expo
   assert.equal(config.android.package, 'com.sideflip.app')
   assert.equal(config.scheme, 'sideflip')
-  assert.equal(config.android.versionCode, 1)
+  assert.equal(config.android.versionCode, 2)
   assert.equal(config.android.intentFilters, undefined)
   assert.equal(config.android.googleServicesFile, undefined)
   assert.deepEqual(config.android.permissions, ['android.permission.CAMERA'])
@@ -29,5 +29,17 @@ test('Android photo library uses the system picker without broad permission prom
     const source = read(path)
     assert.match(source, /Platform\.OS !== 'android'/)
     assert.match(source, /launchImageLibraryAsync/)
+  }
+})
+
+test('EAS Android submission is restricted to the Google Play internal track', () => {
+  const eas = JSON.parse(read('eas.json'))
+  assert.equal(eas.submit.production.android.track, 'internal')
+})
+
+test('Android artifacts, generated native projects, and Play credentials stay uncommitted', () => {
+  const ignore = read('.gitignore')
+  for (const entry of ['/android/', '/ios/', 'builds/', '*.aab', '*.apk', 'google-service-account.json']) {
+    assert.match(ignore, new RegExp(entry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
 })

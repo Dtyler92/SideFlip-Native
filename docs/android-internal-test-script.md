@@ -6,7 +6,7 @@ Use a dedicated synthetic SideFlip account and synthetic projects. Do not use pr
 
 - [ ] Install from Google Play Internal testing, not a locally sideloaded APK.
 - [ ] Confirm Play Protect shows the expected app name and package `com.sideflip.app`.
-- [ ] Confirm version name `1.0.0` and version code `1` in Play Console.
+- [ ] Confirm version name `1.0.0` and version code `2` in Play Console.
 - [ ] Launch from a cold start and return from the background without a crash.
 
 ## Authentication and account lifecycle

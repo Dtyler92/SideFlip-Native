@@ -10,12 +10,20 @@ web-build/
 expo-env.d.ts
 
 # Native
+/android/
+/ios/
 *.orig.*
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
+
+# Release artifacts and Google Play credentials
+builds/
+*.aab
+*.apk
+google-service-account.json
 
 # Metro
 .metro-health-check*

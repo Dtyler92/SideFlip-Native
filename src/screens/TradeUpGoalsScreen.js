@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -113,7 +114,9 @@ export default function TradeUpGoalsScreen({ navigation }) {
     const name = form.name.trim()
     const targetAmount = Number(form.targetAmount || 0)
     const startingAmount = Number(form.startingAmount || 0)
-    if (!canCreate) return Alert.alert('SideFlip Pro', 'Free includes one active Trade-Up Goal. Upgrade in the App Store to track additional active goals.', [
+    if (!canCreate) return Alert.alert('SideFlip Pro', Platform.OS === 'android'
+      ? 'Free includes one active Trade-Up Goal. Google Play subscriptions are being prepared for a future test.'
+      : 'Free includes one active Trade-Up Goal. Upgrade in the App Store to track additional active goals.', [
       { text: 'Not Now', style: 'cancel' },
       { text: 'View Pro', onPress: () => navigation.navigate('Pro') },
     ])

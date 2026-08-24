@@ -5,7 +5,7 @@
 - App: SideFlip
 - Android package: `com.sideflip.app`
 - Initial version: `1.0.0`
-- Initial version code: `1`
+- Internal-test candidate version code: `2`
 - Expo project: `@dtyler92/sideflip`
 - EAS project ID: `5a788085-4849-4264-a346-e459e1bd005d`
 - Release branch: `release/android-1.0.0`

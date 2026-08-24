@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, Linking, Platform } from 'react-native'
 import { getAvailablePurchases, useIAP } from 'expo-iap'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -8,6 +8,7 @@ import { captureEvent } from '../lib/analytics'
 import { queryRestorablePurchases } from '../lib/storekitRestore'
 
 const PRODUCT_IDS = ['com.sideflip.app.pro.monthly', 'com.sideflip.app.pro.annual']
+const IS_ANDROID = Platform.OS === 'android'
 const STORE_CONNECTION_GRACE_MS = 3000
 const purchaseKey = purchase => purchase?.purchaseToken || purchase?.transactionId || purchase?.id
 const monthlyEquivalent = product => {
@@ -64,6 +65,7 @@ export default function ProScreen() {
 
   const { connected, subscriptions, fetchProducts, requestPurchase, restorePurchases, finishTransaction, reconnect } = useIAP({
     onPurchaseSuccess: async purchase => {
+      if (IS_ANDROID) return
       const key = purchaseKey(purchase)
       if (restoringRef.current || (key && restoredPurchaseKeysRef.current.has(key))) return
       const productId = purchase.productId || pendingProductRef.current
@@ -88,6 +90,7 @@ export default function ProScreen() {
       } finally { pendingProductRef.current = null; setBusy(false) }
     },
     onPurchaseError: error => {
+      if (IS_ANDROID) return
       reportPurchaseError(error, 'store_callback')
       pendingProductRef.current = null
       setBusy(false)
@@ -96,6 +99,7 @@ export default function ProScreen() {
   })
 
   const loadProducts = useCallback(async () => {
+    if (IS_ANDROID) return
     setCatalogLoading(true)
     setCatalogError(false)
     try {
@@ -110,6 +114,7 @@ export default function ProScreen() {
   }, [fetchProducts])
 
   const retryProducts = useCallback(async () => {
+    if (IS_ANDROID) return
     if (connected) {
       await loadProducts()
       return
@@ -124,8 +129,9 @@ export default function ProScreen() {
     captureEvent('apple_store_products_fetch_failed', { provider: 'apple', error_type: 'store_connection' })
   }, [connected, loadProducts, reconnect])
 
-  useEffect(() => { captureEvent('paywall_viewed', { provider: 'apple', source: 'native_upgrade' }) }, [])
+  useEffect(() => { captureEvent('paywall_viewed', { provider: IS_ANDROID ? 'google' : 'apple', source: 'native_upgrade' }) }, [])
   useEffect(() => {
+    if (IS_ANDROID) return undefined
     if (connected) {
       loadProducts()
       return undefined
@@ -142,6 +148,7 @@ export default function ProScreen() {
     return Boolean(item?.displayPrice && (!id.endsWith('.annual') || monthlyEquivalent(item)))
   })
   async function buy(id) {
+    if (IS_ANDROID) return
     pendingProductRef.current = id
     captureEvent('plan_selected', { provider: 'apple', plan: planForProduct(id), product_id: id })
     captureEvent('apple_purchase_started', { provider: 'apple', plan: planForProduct(id), product_id: id })
@@ -156,6 +163,7 @@ export default function ProScreen() {
     }
   }
   async function restore() {
+    if (IS_ANDROID) return
     captureEvent('apple_restore_started', { provider: 'apple', is_restore: true })
     setBusy(true)
     restoringRef.current = true
@@ -237,8 +245,19 @@ export default function ProScreen() {
       <Text style={s.sectionTitle}>Included with Pro</Text>
       <View style={s.featuresCard}><ProFeatureList /></View>
 
-      <Text style={s.sectionTitle}>{hasPro ? 'Your subscription options' : 'Choose your plan'}</Text>
-      {PRODUCT_IDS.map(id => {
+      {IS_ANDROID ? (
+        <View style={s.card}>
+          <Text style={s.plan}>{hasPro ? 'Your existing Pro access is active' : 'Google Play subscriptions are being prepared'}</Text>
+          <Text style={s.detail}>
+            {hasPro
+              ? 'SideFlip recognized verified Pro access on this account.'
+              : 'Purchasing and restore are disabled in this closed-test build until secure Google Play verification is connected.'}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <Text style={s.sectionTitle}>{hasPro ? 'Your subscription options' : 'Choose your plan'}</Text>
+          {PRODUCT_IDS.map(id => {
         const annual = id.endsWith('.annual')
         const item = product(id)
         const priceText = item ? (annual ? monthlyEquivalent(item) : item.displayPrice) : null
@@ -269,8 +288,8 @@ export default function ProScreen() {
             )}
           </View>
         )
-      })}
-      {catalogAttempted && !catalogReady && (
+          })}
+          {catalogAttempted && !catalogReady && (
         <View style={s.catalogError}>
           <Text style={s.catalogErrorText}>{catalogError
             ? 'Apple prices could not be loaded.'
@@ -285,11 +304,13 @@ export default function ProScreen() {
             <Text style={s.catalogRetryText}>{catalogLoading ? 'Retrying…' : 'Retry Apple Prices'}</Text>
           </TouchableOpacity>
         </View>
+          )}
+          <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={restore} style={s.restore}>
+            <Text style={s.restoreText}>Restore Purchases</Text>
+          </TouchableOpacity>
+          <Text style={s.legal}>Payment is charged to your Apple ID. Subscriptions renew automatically unless canceled at least 24 hours before the current period ends. Manage subscriptions in your Apple ID settings.</Text>
+        </>
       )}
-      <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={restore} style={s.restore}>
-        <Text style={s.restoreText}>Restore Purchases</Text>
-      </TouchableOpacity>
-      <Text style={s.legal}>Payment is charged to your Apple ID. Subscriptions renew automatically unless canceled at least 24 hours before the current period ends. Manage subscriptions in your Apple ID settings.</Text>
       <View style={s.legalLinks}>
         <TouchableOpacity onPress={() => Linking.openURL('https://sideflip.org/privacy')}><Text style={s.legalLink}>Privacy Policy</Text></TouchableOpacity>
         <Text style={s.legalDot}>•</Text>

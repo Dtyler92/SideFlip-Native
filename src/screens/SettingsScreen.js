@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Switch } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Switch, Platform } from 'react-native'
 import { useEffect, useState } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
@@ -121,7 +121,9 @@ export default function SettingsScreen({ navigation }) {
 
       {/* Currency */}
       <Text style={s.sectionTitle}>Currency</Text>
-      <Text style={s.currencyNote}>Your selection controls project amounts after you tap Save Changes. Apple subscription prices use your App Store storefront currency.</Text>
+      <Text style={s.currencyNote}>Your selection controls project amounts after you tap Save Changes. {Platform.OS === 'android'
+        ? 'Future Google Play subscription prices use your Play storefront currency.'
+        : 'Apple subscription prices use your App Store storefront currency.'}</Text>
       <View style={s.grid}>
         {CURRENCIES.map(c => (
           <TouchableOpacity

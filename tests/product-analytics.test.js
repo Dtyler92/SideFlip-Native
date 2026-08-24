@@ -80,10 +80,11 @@ test('native Settings provides analytics opt-out with accurate wording', () => {
   assert.match(settings, /Analytics remains off/)
 })
 
-test('Settings separates project currency from Apple storefront pricing and hides redundant active-Pro benefits', () => {
+test('Settings separates project currency from platform storefront pricing and hides redundant active-Pro benefits', () => {
   const settings = source('src/screens/SettingsScreen.js')
   assert.match(settings, /controls project amounts after you tap Save Changes/)
   assert.match(settings, /Apple subscription prices use your App Store storefront currency/)
+  assert.match(settings, /Future Google Play subscription prices use your Play storefront currency/)
   assert.doesNotMatch(settings, /View Pro Benefits/)
   assert.match(settings, /!hasPro &&/)
   assert.match(settings, /Upgrade to SideFlip Pro/)
