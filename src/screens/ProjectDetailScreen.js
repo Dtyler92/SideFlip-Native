@@ -224,7 +224,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
     setGeneratingListing(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) throw new Error('Please sign in again to use the AI Listing Generator.')
+      if (!session?.access_token) throw new Error('Please sign in again to generate a sales listing.')
       const res = await fetch('https://sideflip.org/api/generate-listing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
@@ -375,7 +375,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
               </TouchableOpacity>
             )}
 
-            {/* AI Listing Generator */}
+            {/* Sales Listing Generator */}
             <TouchableOpacity
               style={[s.btn, {backgroundColor:'#1A1917', marginBottom:10}, generatingListing && s.btnDisabled]}
               onPress={generateListing}

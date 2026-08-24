@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 
 export default function ForgotPasswordScreen({ navigation }) {
@@ -18,7 +18,7 @@ export default function ForgotPasswordScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={s.inner}>
+      <ScrollView contentContainerStyle={s.inner} keyboardShouldPersistTaps="handled">
         <Text style={s.title}>Reset Password</Text>
         <Text style={s.sub}>We'll email you a link to reset your password.</Text>
         {sent ? (
@@ -40,14 +40,14 @@ export default function ForgotPasswordScreen({ navigation }) {
             </TouchableOpacity>
           </>
         )}
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   )
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FAFAF7' },
-  inner: { flex: 1, padding: 24, paddingTop: 60 },
+  inner: { flexGrow: 1, padding: 24, paddingTop: 60 },
   title: { fontSize: 26, fontWeight: '800', color: '#1A1917', marginBottom: 8 },
   sub: { fontSize: 14, color: '#8C8880', marginBottom: 28, lineHeight: 20 },
   input: { borderWidth: 1, borderColor: '#E8E4DE', borderRadius: 10, padding: 14, fontSize: 15, color: '#1A1917', backgroundColor: '#fff' },

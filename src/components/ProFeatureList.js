@@ -2,7 +2,7 @@ import { View, Text, StyleSheet } from 'react-native'
 
 export const PRO_FEATURES = [
   { icon: '📊', title: 'Portfolio Analytics', detail: 'See profit, ROI, win rate, category performance, and sales trends.' },
-  { icon: '✨', title: 'AI Listing Generator', detail: 'Turn project details into a polished marketplace listing.' },
+  { icon: '✨', title: 'Sales Listing Generator', detail: 'Turn project details into a polished marketplace listing.' },
   { icon: '📈', title: 'Comparable Sales & ROI', detail: 'Research comps and potential returns before you buy.', comingSoon: true },
   { icon: '🚘', title: 'VIN Decoder', detail: 'Quickly identify vehicle details from a VIN.', comingSoon: true },
   { icon: '🧾', title: 'Tax-Ready Exports', detail: 'Organize project income and expenses for tax time.', comingSoon: true },

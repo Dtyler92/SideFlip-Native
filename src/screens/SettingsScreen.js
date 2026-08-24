@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { isAnalyticsEnabled, setAnalyticsEnabled } from '../lib/analytics'
+import * as Application from 'expo-application'
 
 const ACCENT = '#C8402F'
 
@@ -94,7 +95,13 @@ export default function SettingsScreen({ navigation }) {
 
   return (
     <ScrollView style={s.root} contentContainerStyle={[s.content, { paddingTop: insets.top + 20 }]}>
-      <Text style={s.heading}>Settings</Text>
+      <View style={s.headerRow}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back" onPress={() => navigation.goBack()} style={s.backButton}>
+          <Text style={s.backText}>‹ Back</Text>
+        </TouchableOpacity>
+        <Text style={s.heading}>Settings</Text>
+        <View style={s.headerSpacer} />
+      </View>
 
       {/* Account Info */}
       <Text style={s.sectionTitle}>Account</Text>
@@ -178,7 +185,7 @@ export default function SettingsScreen({ navigation }) {
       </TouchableOpacity>
 
       {/* Version */}
-      <Text style={s.version}>SideFlip - Project Ledger v1.0.0</Text>
+      <Text style={s.version}>SideFlip - Project Ledger v{Application.nativeApplicationVersion || '1.1.0'}</Text>
     </ScrollView>
   )
 }
@@ -186,7 +193,11 @@ export default function SettingsScreen({ navigation }) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FAFAF7' },
   content: { padding: 20, paddingBottom: 60 },
-  heading: { fontSize: 26, fontWeight: '800', color: '#1A1917', marginBottom: 20 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  backButton: { minWidth: 64, paddingVertical: 8 },
+  backText: { color: ACCENT, fontSize: 16, fontWeight: '700' },
+  headerSpacer: { width: 64 },
+  heading: { fontSize: 26, fontWeight: '800', color: '#1A1917' },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#8C8880', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 12, marginTop: 8 },
   card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   accountTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 },

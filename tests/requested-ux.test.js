@@ -70,3 +70,35 @@ test('every goal has a positive editable target so completion remains reachable'
   assert.match(goals, /setShowTargetEditor/)
   assert.match(goals, /Save Target Amount/)
 })
+
+test('V1.1 exposes goal markers and moves Settings into the account menu', () => {
+  const home = source('src/screens/HomeScreen.js')
+  const app = source('App.js')
+  const settings = source('src/screens/SettingsScreen.js')
+  assert.match(home, /p\.goal_id/)
+  assert.match(home, />Goal<\/Text>/)
+  assert.match(home, /navigation\.navigate\('Settings'\)/)
+  assert.match(home, /accessibilityLabel="Account menu"/)
+  assert.doesNotMatch(app, /<Tab\.Screen name="Settings"/)
+  assert.match(app, /<Stack\.Screen name="Settings" component=\{SettingsScreen\}/)
+  assert.match(settings, /navigation\.goBack\(\)/)
+})
+
+test('V1.1 removes user-visible AI wording without removing listing generation', () => {
+  const home = source('src/screens/HomeScreen.js')
+  const detail = source('src/screens/ProjectDetailScreen.js')
+  const features = source('src/components/ProFeatureList.js')
+  for (const value of [home, detail, features]) assert.doesNotMatch(value, /AI Listing Generator|AI listings/)
+  assert.match(home, /sales listing tools/)
+  assert.match(detail, /Generate Sales Listing/)
+  assert.match(features, /Sales Listing Generator/)
+})
+
+test('Android forms use resize and every nontrivial form is scrollable', () => {
+  const config = JSON.parse(source('app.json')).expo
+  assert.equal(config.android.softwareKeyboardLayoutMode, 'resize')
+  const forgot = source('src/screens/ForgotPasswordScreen.js')
+  assert.match(forgot, /ScrollView/)
+  assert.match(forgot, /keyboardShouldPersistTaps="handled"/)
+  assert.match(forgot, /flexGrow:\s*1/)
+})

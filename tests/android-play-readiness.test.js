@@ -9,7 +9,9 @@ test('Android Play config uses the stable package and minimal permissions', () =
   const config = JSON.parse(read('app.json')).expo
   assert.equal(config.android.package, 'com.sideflip.app')
   assert.equal(config.scheme, 'sideflip')
-  assert.equal(config.android.versionCode, 2)
+  assert.equal(config.version, '1.1.0')
+  assert.equal(config.android.versionCode, 3)
+  assert.equal(config.android.softwareKeyboardLayoutMode, 'resize')
   assert.equal(config.android.intentFilters, undefined)
   assert.equal(config.android.googleServicesFile, undefined)
   assert.deepEqual(config.android.permissions, ['android.permission.CAMERA'])
@@ -19,6 +21,7 @@ test('Android Play config uses the stable package and minimal permissions', () =
     'android.permission.WRITE_EXTERNAL_STORAGE',
     'android.permission.READ_MEDIA_IMAGES',
     'android.permission.READ_MEDIA_VIDEO',
+    'android.permission.SYSTEM_ALERT_WINDOW',
   ]))
   const imagePicker = config.plugins.find(item => Array.isArray(item) && item[0] === 'expo-image-picker')
   assert.equal(imagePicker[1].microphonePermission, false)

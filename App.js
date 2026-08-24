@@ -74,8 +74,7 @@ function HomeTabs() {
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🎯" focused={focused} />, tabBarLabel: 'Goals' }} />
       <Tab.Screen name="Analytics" component={AnalyticsScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />, tabBarLabel: 'Analytics' }} />
-      <Tab.Screen name="Settings" component={SettingsScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="⚙️" focused={focused} />, tabBarLabel: 'Settings' }} />
+
     </Tab.Navigator>
   )
 }
@@ -110,6 +109,7 @@ function RootNavigator() {
       <Stack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
       <Stack.Screen name="SellProject" component={SellProjectScreen} />
       <Stack.Screen name="GoalCreate" component={GoalCreateScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Pro" component={ProScreen} options={{ headerShown: true, title: 'SideFlip Pro', headerTintColor: '#C8402F', headerStyle: { backgroundColor: '#FAFAF7' } }} />
       <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
