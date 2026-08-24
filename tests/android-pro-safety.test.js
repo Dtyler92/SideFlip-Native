@@ -29,4 +29,6 @@ test('Android currency and goal-limit copy presents Google Play, not Apple, as i
   assert.match(settings, /Future Google Play subscription prices use your Play storefront currency/)
   assert.match(goals, /Platform\.OS === 'android'/)
   assert.match(goals, /Google Play subscriptions are being prepared for a future test/)
+  assert.match(goals, /Platform\.OS === 'android'\s*\? 'Google Play subscriptions are not available yet/)
+  assert.doesNotMatch(goals, /<Text style=\{s\.muted\}>Upgrade with Apple/)
 })

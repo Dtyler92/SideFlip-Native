@@ -40,6 +40,11 @@ export function calculateGoalSummary(goal, projects = [], ledger = goal?.goal_le
   }
 }
 
+export function canCompleteGoal(goal, summary) {
+  const targetAmount = number(goal?.target_amount)
+  return targetAmount > 0 && number(summary?.progressValue) >= targetAmount
+}
+
 export function progressColor(percent) {
   const progress = Math.max(0, Math.min(100, number(percent))) / 100
   const start = [0xC8, 0x40, 0x2F]

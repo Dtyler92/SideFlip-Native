@@ -1,12 +1,20 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calculateGoalSummary, canCreateAnotherGoal } from '../src/screens/tradeUpGoalModel.js'
+import { calculateGoalSummary, canCompleteGoal, canCreateAnotherGoal } from '../src/screens/tradeUpGoalModel.js'
 
 test('Free allows one active goal and Pro allows multiple active goals', () => {
   assert.equal(canCreateAnotherGoal('free', []), true)
   assert.equal(canCreateAnotherGoal('free', [{ status: 'completed' }]), true)
   assert.equal(canCreateAnotherGoal('free', [{ status: 'active' }]), false)
   assert.equal(canCreateAnotherGoal('pro', [{ status: 'active' }]), true)
+})
+
+test('a goal can only be completed after current progress reaches a positive target', () => {
+  assert.equal(canCompleteGoal({ target_amount: 10000 }, { progressValue: 1000 }), false)
+  assert.equal(canCompleteGoal({ target_amount: 10000 }, { progressValue: 9999.99 }), false)
+  assert.equal(canCompleteGoal({ target_amount: 10000 }, { progressValue: 10000 }), true)
+  assert.equal(canCompleteGoal({ target_amount: 10000 }, { progressValue: 12000 }), true)
+  assert.equal(canCompleteGoal({ target_amount: 0 }, { progressValue: 10000 }), false)
 })
 
 test('goal progress includes available ledger cash and capital in active projects', () => {

@@ -49,3 +49,24 @@ test('goal detail has completion celebration, requested stats, and collapsed amo
   assert.match(goals, /showAdjustment/)
   assert.match(goals, /progressColor/)
 })
+
+test('goal completion is unavailable until current progress funds the target', () => {
+  const goals = source('src/screens/TradeUpGoalsScreen.js')
+  assert.match(goals, /const canMarkComplete = canCompleteGoal\(selected, summary\)/)
+  assert.match(goals, /activeGoal && canMarkComplete/)
+  assert.match(goals, /if \(status === 'completed' && !canCompleteGoal/)
+})
+
+test('goal screens reserve the Android top safe area while scrolling', () => {
+  const goals = source('src/screens/TradeUpGoalsScreen.js')
+  assert.match(goals, /SafeAreaView/)
+  assert.ok((goals.match(/edges=\{\['top'\]\}/g) || []).length >= 2)
+})
+
+test('every goal has a positive editable target so completion remains reachable', () => {
+  const goals = source('src/screens/TradeUpGoalsScreen.js')
+  assert.doesNotMatch(goals, /Estimated target value \(optional\)/)
+  assert.match(goals, /async function updateTargetAmount\(\)/)
+  assert.match(goals, /setShowTargetEditor/)
+  assert.match(goals, /Save Target Amount/)
+})

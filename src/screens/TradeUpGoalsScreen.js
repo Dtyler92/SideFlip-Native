@@ -13,12 +13,13 @@ import {
   View,
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { captureEvent } from '../lib/analytics'
 import {
   calculateGoalSummary,
+  canCompleteGoal,
   canCreateAnotherGoal,
   createMutationId,
   progressColor,
@@ -37,7 +38,6 @@ const EMPTY_FORM = {
 }
 
 export default function TradeUpGoalsScreen({ navigation }) {
-  const insets = useSafeAreaInsets()
   const { user, formatMoney, plan } = useAuth()
   const [goals, setGoals] = useState([])
   const [projects, setProjects] = useState([])
@@ -49,6 +49,8 @@ export default function TradeUpGoalsScreen({ navigation }) {
   const [adjustmentAmount, setAdjustmentAmount] = useState('')
   const [adjustmentNote, setAdjustmentNote] = useState('')
   const [showAdjustment, setShowAdjustment] = useState(false)
+  const [showTargetEditor, setShowTargetEditor] = useState(false)
+  const [targetAmountInput, setTargetAmountInput] = useState('')
   const [celebrationVisible, setCelebrationVisible] = useState(false)
   const celebratedGoalIds = useRef(new Set())
   const [loading, setLoading] = useState(true)
@@ -92,7 +94,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
 
   useEffect(() => {
     if (!selected || !selectedSummary) return
-    const reachedTarget = Number(selected.target_amount) > 0 && selectedSummary.progressPercent >= 100
+    const reachedTarget = canCompleteGoal(selected, selectedSummary)
     const completed = selected.status === 'completed' || reachedTarget
     if (completed && !celebratedGoalIds.current.has(selected.id)) {
       celebratedGoalIds.current.add(selected.id)
@@ -103,6 +105,8 @@ export default function TradeUpGoalsScreen({ navigation }) {
   function closeSelectedGoal() {
     setCelebrationVisible(false)
     setShowAdjustment(false)
+    setShowTargetEditor(false)
+    setTargetAmountInput('')
     setSelectedId(null)
   }
 
@@ -122,8 +126,10 @@ export default function TradeUpGoalsScreen({ navigation }) {
     ])
     if (!name) return Alert.alert('Goal name required', 'Give your Trade-Up Goal a name.')
     if (form.goalType === 'item' && !form.targetItem.trim()) return Alert.alert('Target item required', 'Enter the item you are working toward.')
-    if (form.goalType === 'amount' && targetAmount <= 0) return Alert.alert('Target amount required', 'Enter an amount greater than zero.')
-    if (targetAmount < 0 || startingAmount < 0) return Alert.alert('Check amounts', 'Goal amounts cannot be negative.')
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) return Alert.alert('Target amount required', form.goalType === 'item'
+      ? 'Enter an estimated target value greater than zero.'
+      : 'Enter an amount greater than zero.')
+    if (!Number.isFinite(startingAmount) || startingAmount < 0) return Alert.alert('Check amount', 'Starting amount must be zero or a valid positive number.')
 
     setSaving(true)
     try {
@@ -152,6 +158,14 @@ export default function TradeUpGoalsScreen({ navigation }) {
 
   async function saveStatus(status) {
     if (!selected || saving) return
+    if (status === 'completed' && !canCompleteGoal(selected, calculateGoalSummary(selected, projects))) {
+      const targetAmount = Number(selected.target_amount) || 0
+      const progressValue = calculateGoalSummary(selected, projects).progressValue
+      const message = targetAmount > 0
+        ? `Current progress must reach ${formatMoney(targetAmount)} before this goal can be completed. ${formatMoney(Math.max(0, targetAmount - progressValue))} remains.`
+        : 'Add a positive target amount before this goal can be completed.'
+      return Alert.alert('Goal not ready', message)
+    }
     setSaving(true)
     try {
       const { error } = await supabase
@@ -208,6 +222,31 @@ export default function TradeUpGoalsScreen({ navigation }) {
     }
   }
 
+  async function updateTargetAmount() {
+    if (!selected || saving) return
+    const targetAmount = Number(targetAmountInput)
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
+      return Alert.alert('Target amount required', 'Enter an amount greater than zero.')
+    }
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('trade_up_goals')
+        .update({ target_amount: targetAmount })
+        .eq('id', selected.id)
+        .eq('user_id', user.id)
+      if (error) throw error
+      setShowTargetEditor(false)
+      setTargetAmountInput('')
+      await load({ quiet: true })
+    } catch (error) {
+      Alert.alert('Could not update target', error.message || 'Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function deleteGoal() {
     if (!selected || saving) return
     setSaving(true)
@@ -236,12 +275,14 @@ export default function TradeUpGoalsScreen({ navigation }) {
     const summary = selectedSummary
     const linkedProjects = projects.filter(project => project.goal_id === selected.id)
     const activeGoal = selected.status === 'active'
-    const goalComplete = selected.status === 'completed' || (Number(selected.target_amount) > 0 && summary.progressPercent >= 100)
+    const canMarkComplete = canCompleteGoal(selected, summary)
+    const goalComplete = selected.status === 'completed' || canMarkComplete
     return (
       <>
+      <SafeAreaView style={s.root} edges={['top']}>
       <ScrollView
         style={s.root}
-        contentContainerStyle={[s.content, { paddingTop: insets.top + 12 }]}
+        contentContainerStyle={[s.content, { paddingTop: 12 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load({ quiet: true }) }} tintColor={ACCENT} />}
         keyboardShouldPersistTaps="handled"
       >
@@ -272,6 +313,30 @@ export default function TradeUpGoalsScreen({ navigation }) {
           <Stat label="Out of pocket" value={formatMoney(summary.outOfPocket)} />
           <Stat label="Flipped" value={formatMoney(summary.flipped)} />
         </View>
+
+        {activeGoal && <View style={s.card}>
+          <TouchableOpacity
+            style={s.adjustmentHeader}
+            onPress={() => {
+              setTargetAmountInput(String(selected.target_amount || ''))
+              setShowTargetEditor(value => !value)
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showTargetEditor }}
+          >
+            <View style={s.flex}>
+              <Text style={s.sectionTitle}>Target amount</Text>
+              <Text style={s.muted}>{Number(selected.target_amount) > 0 ? formatMoney(selected.target_amount) : 'Set the amount needed to achieve this goal.'}</Text>
+            </View>
+            <Text style={s.adjustmentToggle}>{showTargetEditor ? 'Hide' : 'Change'}</Text>
+          </TouchableOpacity>
+          {showTargetEditor && <>
+            <Field label={selected.goal_type === 'item' ? 'Estimated target value' : 'Target amount'}>
+              <TextInput style={s.input} value={targetAmountInput} onChangeText={setTargetAmountInput} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#A8A49E" />
+            </Field>
+            <PrimaryButton disabled={saving} label={saving ? 'Saving…' : 'Save Target Amount'} onPress={updateTargetAmount} />
+          </>}
+        </View>}
 
         {activeGoal && <View style={s.card}>
           <TouchableOpacity style={s.adjustmentHeader} onPress={() => setShowAdjustment(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: showAdjustment }}>
@@ -305,20 +370,30 @@ export default function TradeUpGoalsScreen({ navigation }) {
             </TouchableOpacity>
           ))}
 
-        <TouchableOpacity style={s.completeButton} disabled={saving} onPress={() => confirmStatus(activeGoal ? 'completed' : 'active')}>
-          <Text style={s.completeText}>{activeGoal ? 'Mark Goal Complete' : 'Reopen Goal'}</Text>
-        </TouchableOpacity>
+        {activeGoal && canMarkComplete && <TouchableOpacity style={s.completeButton} disabled={saving} onPress={() => confirmStatus('completed')}>
+          <Text style={s.completeText}>Mark Goal Complete</Text>
+        </TouchableOpacity>}
+        {activeGoal && !canMarkComplete && <Text style={s.completionHint}>
+          {Number(selected.target_amount) > 0
+            ? `Goal completion unlocks when current progress reaches ${formatMoney(selected.target_amount)}. ${formatMoney(Math.max(0, Number(selected.target_amount) - summary.progressValue))} to go.`
+            : 'Add a positive target amount before this goal can be completed.'}
+        </Text>}
+        {!activeGoal && <TouchableOpacity style={s.completeButton} disabled={saving} onPress={() => confirmStatus('active')}>
+          <Text style={s.completeText}>Reopen Goal</Text>
+        </TouchableOpacity>}
         <TouchableOpacity style={s.deleteButton} disabled={saving} onPress={confirmDelete}><Text style={s.deleteText}>Delete Goal</Text></TouchableOpacity>
       </ScrollView>
+      </SafeAreaView>
       <CelebrationModal visible={celebrationVisible} goalName={selected.name} onClose={() => setCelebrationVisible(false)} />
       </>
     )
   }
 
   return (
+    <SafeAreaView style={s.root} edges={['top']}>
     <ScrollView
       style={s.root}
-      contentContainerStyle={[s.content, { paddingTop: insets.top + 18 }]}
+      contentContainerStyle={[s.content, { paddingTop: 18 }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load({ quiet: true }) }} tintColor={ACCENT} />}
       keyboardShouldPersistTaps="handled"
     >
@@ -334,7 +409,9 @@ export default function TradeUpGoalsScreen({ navigation }) {
         : <View style={s.proCard}>
             <Text style={s.proEyebrow}>SIDEFLIP PRO</Text>
             <Text style={s.proTitle}>Free includes one active goal.</Text>
-            <Text style={s.muted}>Upgrade with Apple in the app to track additional goals at the same time.</Text>
+            <Text style={s.muted}>{Platform.OS === 'android'
+              ? 'Google Play subscriptions are not available yet. Existing SideFlip Pro members can use Pro after signing in.'
+              : 'Upgrade with Apple in the app to track additional goals at the same time.'}</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Pro')}><Text style={s.proLink}>View SideFlip Pro</Text></TouchableOpacity>
           </View>}
 
@@ -352,7 +429,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
         {form.goalType === 'item' && <Field label="Item you want">
           <TextInput style={s.input} value={form.targetItem} onChangeText={value => updateForm('targetItem', value)} placeholder="Ford F-250" placeholderTextColor="#A8A49E" />
         </Field>}
-        <Field label={form.goalType === 'item' ? 'Estimated target value (optional)' : 'Target amount'}>
+        <Field label={form.goalType === 'item' ? 'Estimated target value' : 'Target amount'}>
           <TextInput style={s.input} value={form.targetAmount} onChangeText={value => updateForm('targetAmount', value)} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#A8A49E" />
         </Field>
         <Field label="Starting amount (optional)">
@@ -369,7 +446,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
         ? <View style={s.empty}><Text style={s.emptyTitle}>No Trade-Up Goals yet</Text><Text style={s.muted}>Create your first goal to begin tracking progress.</Text></View>
         : goals.map(goal => {
           const summary = calculateGoalSummary(goal, projects)
-          const goalComplete = goal.status === 'completed' || (Number(goal.target_amount) > 0 && summary.progressPercent >= 100)
+          const goalComplete = goal.status === 'completed' || canCompleteGoal(goal, summary)
           return <TouchableOpacity key={goal.id} style={[s.goalCard, goalComplete && s.completedGoalCard]} onPress={() => setSelectedId(goal.id)}>
             <View style={s.rowBetween}>
               <View style={s.flex}><Text style={s.eyebrow}>{goal.goal_type === 'item' ? goal.target_item : 'Amount goal'}</Text><Text style={s.goalName}>{goal.name}</Text></View>
@@ -380,6 +457,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
           </TouchableOpacity>
         })}
     </ScrollView>
+    </SafeAreaView>
   )
 }
 
@@ -515,6 +593,7 @@ const s = StyleSheet.create({
   chevron: { color: '#D4CDC1', fontSize: 24 },
   completeButton: { backgroundColor: GREEN, borderRadius: 12, alignItems: 'center', padding: 15, marginTop: 22 },
   completeText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  completionHint: { color: '#6F6A62', backgroundColor: '#F2F0EB', borderRadius: 12, padding: 14, marginTop: 22, fontSize: 13, lineHeight: 19, textAlign: 'center' },
   deleteButton: { alignItems: 'center', padding: 16, marginTop: 6 },
   deleteText: { color: ACCENT, fontWeight: '700' },
   celebrationOverlay: { flex: 1, backgroundColor: 'rgba(26,25,23,0.62)', alignItems: 'center', justifyContent: 'center', padding: 24 },
