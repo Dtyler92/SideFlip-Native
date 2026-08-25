@@ -17,6 +17,9 @@ import CalculatorScreen from './src/screens/CalculatorScreen'
 import TradeUpGoalsScreen from './src/screens/TradeUpGoalsScreen'
 import GoalCreateScreen from './src/screens/GoalCreateScreen'
 import AnalyticsScreen from './src/screens/AnalyticsScreen'
+import MyStuffScreen from './src/screens/MyStuffScreen'
+import MyStuffCreateScreen from './src/screens/MyStuffCreateScreen'
+import MyStuffDetailScreen from './src/screens/MyStuffDetailScreen'
 import SettingsScreen from './src/screens/SettingsScreen'
 import ProScreen from './src/screens/ProScreen'
 import DeleteAccountScreen from './src/screens/DeleteAccountScreen'
@@ -74,7 +77,8 @@ function HomeTabs() {
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🎯" focused={focused} />, tabBarLabel: 'Goals' }} />
       <Tab.Screen name="Analytics" component={AnalyticsScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />, tabBarLabel: 'Analytics' }} />
-
+      <Tab.Screen name="MyStuff" component={MyStuffScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🧰" focused={focused} />, tabBarLabel: 'My Stuff' }} />
     </Tab.Navigator>
   )
 }
@@ -109,6 +113,8 @@ function RootNavigator() {
       <Stack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
       <Stack.Screen name="SellProject" component={SellProjectScreen} />
       <Stack.Screen name="GoalCreate" component={GoalCreateScreen} />
+      <Stack.Screen name="MyStuffCreate" component={MyStuffCreateScreen} />
+      <Stack.Screen name="MyStuffDetail" component={MyStuffDetailScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Pro" component={ProScreen} options={{ headerShown: true, title: 'SideFlip Pro', headerTintColor: '#C8402F', headerStyle: { backgroundColor: '#FAFAF7' } }} />
       <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} options={{ headerShown: false }} />
