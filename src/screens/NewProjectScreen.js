@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
-import { createMutationId } from './tradeUpGoalModel'
+import { accessibleActiveGoalsAfterProLoss, createMutationId } from './tradeUpGoalModel'
 import { captureEvent } from '../lib/analytics'
 import { openGoalCreation } from './goalCreationNavigation'
 
@@ -33,21 +33,31 @@ export default function NewProjectScreen({ navigation, route }) {
   const [goalFundingInput, setGoalFundingInput] = useState('0')
   const [saving, setSaving] = useState(false)
   const projectMutationIdRef = useRef(createMutationId())
+  const goalLoadGeneration = useRef(0)
   const [showCats, setShowCats] = useState(false)
 
   useEffect(() => {
     if (!user?.id) return
-    supabase.from('trade_up_goals').select('id,name,goal_ledger(amount)').eq('user_id', user.id).eq('status', 'active').order('created_at', { ascending: false })
+    const request = ++goalLoadGeneration.current
+    supabase.from('trade_up_goals').select('id,name,status,created_at,goal_ledger(amount)').eq('user_id', user.id).eq('status', 'active').order('created_at', { ascending: false })
       .then(({ data, error }) => {
+        if (request !== goalLoadGeneration.current) return
         if (error) console.warn('Could not load active goals:', error.message)
-        else setActiveGoals((data || []).map(goal => ({
-          ...goal,
-          available: Math.max(0, (goal.goal_ledger || []).reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0)),
-        })))
+        else {
+          const preparedGoals = (data || []).map(goal => ({
+            ...goal,
+            available: Math.max(0, (goal.goal_ledger || []).reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0)),
+          }))
+          setActiveGoals(preparedGoals)
+        }
       })
-  }, [user?.id])
+    return () => {
+      if (request === goalLoadGeneration.current) goalLoadGeneration.current += 1
+    }
+  }, [user?.id, plan])
 
-  const selectedGoal = activeGoals.find(goal => goal.id === selectedGoalId)
+  const selectableGoals = accessibleActiveGoalsAfterProLoss(activeGoals, plan)
+  const selectedGoal = selectableGoals.find(goal => goal.id === selectedGoalId)
   const goalAvailable = Number(selectedGoal?.available) || 0
   const purchasePriceValue = roundMoney(purchasePrice)
   const goalFundingValue = roundMoney(goalFundingInput)
@@ -57,7 +67,7 @@ export default function NewProjectScreen({ navigation, route }) {
     openGoalCreation({
       navigation,
       plan,
-      activeGoals,
+      activeGoals: selectableGoals,
       onCreated: goal => {
         setActiveGoals(current => [goal, ...current.filter(item => item.id !== goal.id)])
         setSelectedGoalId(goal.id)
@@ -69,6 +79,7 @@ export default function NewProjectScreen({ navigation, route }) {
   async function handleSave() {
     if (!title.trim()) return Alert.alert('Give your project a name')
     if (!category) return Alert.alert('Select a category', 'Choose the category that best matches this project.')
+    if (selectedGoalId && !selectedGoal) return Alert.alert('Goal locked', 'Your plan changed. Choose the oldest available Goal or upgrade to SideFlip Pro.')
     const rawPrice = Number(purchasePrice || 0)
     const rawFunding = Number(goalFundingInput || 0)
     if (!Number.isFinite(rawPrice) || rawPrice < 0) return Alert.alert('Enter a valid purchase price')
@@ -184,11 +195,11 @@ export default function NewProjectScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
             <Text style={s.goalHint}>Connect this project to a goal. Its purchase and sale will update goal progress.</Text>
-            {activeGoals.length > 0 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.goalChoices}>
+            {selectableGoals.length > 0 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.goalChoices}>
               <TouchableOpacity style={[s.goalChoice, !selectedGoalId && s.goalChoiceActive]} onPress={() => { setSelectedGoalId(null); setGoalFundingInput('0') }}>
                 <Text style={[s.goalChoiceText, !selectedGoalId && s.goalChoiceTextActive]}>No goal</Text>
               </TouchableOpacity>
-              {activeGoals.map(goal => (
+              {selectableGoals.map(goal => (
                 <TouchableOpacity key={goal.id} style={[s.goalChoice, selectedGoalId === goal.id && s.goalChoiceActive]} onPress={() => { setSelectedGoalId(goal.id); setGoalFundingInput('0') }}>
                   <Text style={[s.goalChoiceText, selectedGoalId === goal.id && s.goalChoiceTextActive]} numberOfLines={1}>{goal.name}</Text>
                 </TouchableOpacity>

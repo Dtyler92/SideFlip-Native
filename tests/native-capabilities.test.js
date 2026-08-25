@@ -1,12 +1,46 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calculateGoalSummary, canCompleteGoal, canCreateAnotherGoal } from '../src/screens/tradeUpGoalModel.js'
+import { accessibleActiveGoalsAfterProLoss, calculateGoalSummary, canCompleteGoal, canCreateAnotherGoal, isGoalLockedAfterProLoss } from '../src/screens/tradeUpGoalModel.js'
 
 test('Free allows one active goal and Pro allows multiple active goals', () => {
   assert.equal(canCreateAnotherGoal('free', []), true)
   assert.equal(canCreateAnotherGoal('free', [{ status: 'completed' }]), true)
   assert.equal(canCreateAnotherGoal('free', [{ status: 'active' }]), false)
   assert.equal(canCreateAnotherGoal('pro', [{ status: 'active' }]), true)
+})
+
+test('after Pro loss only the oldest active goal opens while later active goals lock', () => {
+  const goals = [
+    { id: 'newer', status: 'active', created_at: '2026-08-20T00:00:00Z' },
+    { id: 'oldest', status: 'active', created_at: '2026-08-01T00:00:00Z' },
+    { id: 'completed', status: 'completed', created_at: '2026-07-01T00:00:00Z' },
+  ]
+
+  assert.equal(isGoalLockedAfterProLoss(goals[0], goals, 'free'), true)
+  assert.equal(isGoalLockedAfterProLoss(goals[1], goals, 'free'), false)
+  assert.equal(isGoalLockedAfterProLoss(goals[2], goals, 'free'), false)
+  assert.equal(isGoalLockedAfterProLoss(goals[0], goals, 'pro'), false)
+})
+
+test('downgrade goal locking is deterministic when creation timestamps match', () => {
+  const goals = [
+    { id: 'b', status: 'active', created_at: '2026-08-01T00:00:00Z' },
+    { id: 'a', status: 'active', created_at: '2026-08-01T00:00:00Z' },
+  ]
+  assert.equal(isGoalLockedAfterProLoss(goals[0], goals, 'free'), true)
+  assert.equal(isGoalLockedAfterProLoss(goals[1], goals, 'free'), false)
+
+  const undated = { id: 'undated', status: 'active', created_at: null }
+  assert.equal(isGoalLockedAfterProLoss(undated, [undated, goals[1]], 'free'), true)
+})
+
+test('project goal pickers expose only the oldest active goal after Pro loss', () => {
+  const goals = [
+    { id: 'newer', status: 'active', created_at: '2026-08-20T00:00:00Z' },
+    { id: 'oldest', status: 'active', created_at: '2026-08-01T00:00:00Z' },
+  ]
+  assert.deepEqual(accessibleActiveGoalsAfterProLoss(goals, 'free').map(goal => goal.id), ['oldest'])
+  assert.deepEqual(accessibleActiveGoalsAfterProLoss(goals, 'pro').map(goal => goal.id), ['newer', 'oldest'])
 })
 
 test('a goal can only be completed after current progress reaches a positive target', () => {

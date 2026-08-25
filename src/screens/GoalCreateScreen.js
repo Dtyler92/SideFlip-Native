@@ -62,8 +62,15 @@ export default function GoalCreateScreen({ navigation, route }) {
         p_mutation_id: mutationId,
       })
       if (error) throw error
+      const { data: createdGoal, error: createdGoalError } = await supabase
+        .from('trade_up_goals')
+        .select('id,name,status,created_at')
+        .eq('id', goalId)
+        .eq('user_id', user.id)
+        .single()
+      if (createdGoalError) throw createdGoalError
       captureEvent('goal_created', { goal_type: form.goalType })
-      await onCreated?.({ id: goalId, name, status: 'active', available: startingAmount })
+      await onCreated?.({ ...createdGoal, available: startingAmount })
       navigation.goBack()
     } catch (error) {
       Alert.alert('Could not create goal', error.message || 'Please try again.')

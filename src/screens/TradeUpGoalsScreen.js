@@ -22,6 +22,7 @@ import {
   canCompleteGoal,
   canCreateAnotherGoal,
   createMutationId,
+  isGoalLockedAfterProLoss,
   progressColor,
   projectInvested,
 } from './tradeUpGoalModel'
@@ -53,6 +54,10 @@ export default function TradeUpGoalsScreen({ navigation }) {
   const [targetAmountInput, setTargetAmountInput] = useState('')
   const [celebrationVisible, setCelebrationVisible] = useState(false)
   const celebratedGoalIds = useRef(new Set())
+  const currentGoals = useRef(goals)
+  const currentPlan = useRef(plan)
+  currentGoals.current = goals
+  currentPlan.current = plan
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -93,6 +98,10 @@ export default function TradeUpGoalsScreen({ navigation }) {
   const canCreate = canCreateAnotherGoal(plan, goals)
 
   useEffect(() => {
+    if (selected && isGoalLockedAfterProLoss(selected, goals, plan)) closeSelectedGoal()
+  }, [selected?.id, goals, plan])
+
+  useEffect(() => {
     if (!selected || !selectedSummary) return
     const reachedTarget = canCompleteGoal(selected, selectedSummary)
     const completed = selected.status === 'completed' || reachedTarget
@@ -108,6 +117,16 @@ export default function TradeUpGoalsScreen({ navigation }) {
     setShowTargetEditor(false)
     setTargetAmountInput('')
     setSelectedId(null)
+  }
+
+  function getCurrentlyAccessibleGoal(goalId) {
+    const goal = currentGoals.current.find(candidate => candidate.id === goalId)
+    if (!goal || isGoalLockedAfterProLoss(goal, currentGoals.current, currentPlan.current)) {
+      closeSelectedGoal()
+      Alert.alert('Goal locked', 'Your plan changed. Only your oldest active Goal is available without SideFlip Pro.')
+      return null
+    }
+    return goal
   }
 
   function updateForm(key, value) {
@@ -156,11 +175,13 @@ export default function TradeUpGoalsScreen({ navigation }) {
     }
   }
 
-  async function saveStatus(status) {
-    if (!selected || saving) return
-    if (status === 'completed' && !canCompleteGoal(selected, calculateGoalSummary(selected, projects))) {
-      const targetAmount = Number(selected.target_amount) || 0
-      const progressValue = calculateGoalSummary(selected, projects).progressValue
+  async function saveStatus(status, goalId = selected?.id) {
+    if (saving) return
+    const mutationGoal = getCurrentlyAccessibleGoal(goalId)
+    if (!mutationGoal) return
+    if (status === 'completed' && !canCompleteGoal(mutationGoal, calculateGoalSummary(mutationGoal, projects))) {
+      const targetAmount = Number(mutationGoal.target_amount) || 0
+      const progressValue = calculateGoalSummary(mutationGoal, projects).progressValue
       const message = targetAmount > 0
         ? `Current progress must reach ${formatMoney(targetAmount)} before this goal can be completed. ${formatMoney(Math.max(0, targetAmount - progressValue))} remains.`
         : 'Add a positive target amount before this goal can be completed.'
@@ -171,10 +192,10 @@ export default function TradeUpGoalsScreen({ navigation }) {
       const { error } = await supabase
         .from('trade_up_goals')
         .update({ status, completed_at: status === 'completed' ? new Date().toISOString() : null })
-        .eq('id', selected.id)
+        .eq('id', mutationGoal.id)
         .eq('user_id', user.id)
       if (error) throw error
-      if (status === 'completed') captureEvent('goal_completed', { goal_type: selected.goal_type })
+      if (status === 'completed') captureEvent('goal_completed', { goal_type: mutationGoal.goal_type })
       await load({ quiet: true })
     } catch (error) {
       Alert.alert('Could not update goal', error.message || 'Please try again.')
@@ -190,22 +211,24 @@ export default function TradeUpGoalsScreen({ navigation }) {
       completing ? 'You can still view its history after marking it complete.' : 'This will make the goal active again.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: completing ? 'Mark Complete' : 'Reopen', onPress: () => saveStatus(status) },
+        { text: completing ? 'Mark Complete' : 'Reopen', onPress: () => saveStatus(status, selected.id) },
       ],
     )
   }
 
-  async function adjustBalance() {
-    if (!selected || saving) return
+  async function adjustBalance(goalId = selected?.id) {
+    if (saving) return
+    const mutationGoal = getCurrentlyAccessibleGoal(goalId)
+    if (!mutationGoal) return
     const amount = Number(adjustmentAmount)
-    const summary = calculateGoalSummary(selected, projects)
+    const summary = calculateGoalSummary(mutationGoal, projects)
     if (amount <= 0) return Alert.alert('Enter an amount', 'The adjustment must be greater than zero.')
     if (adjustmentType === 'cash_out' && amount > summary.available) return Alert.alert('Amount too high', `You currently have ${formatMoney(summary.available)} available toward this goal.`)
 
     setSaving(true)
     try {
       const { error } = await supabase.rpc('adjust_trade_up_goal', {
-        p_goal_id: selected.id,
+        p_goal_id: mutationGoal.id,
         p_type: adjustmentType,
         p_amount: amount,
         p_note: adjustmentNote.trim() || null,
@@ -222,8 +245,10 @@ export default function TradeUpGoalsScreen({ navigation }) {
     }
   }
 
-  async function updateTargetAmount() {
-    if (!selected || saving) return
+  async function updateTargetAmount(goalId = selected?.id) {
+    if (saving) return
+    const mutationGoal = getCurrentlyAccessibleGoal(goalId)
+    if (!mutationGoal) return
     const targetAmount = Number(targetAmountInput)
     if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
       return Alert.alert('Target amount required', 'Enter an amount greater than zero.')
@@ -234,7 +259,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
       const { error } = await supabase
         .from('trade_up_goals')
         .update({ target_amount: targetAmount })
-        .eq('id', selected.id)
+        .eq('id', mutationGoal.id)
         .eq('user_id', user.id)
       if (error) throw error
       setShowTargetEditor(false)
@@ -247,11 +272,13 @@ export default function TradeUpGoalsScreen({ navigation }) {
     }
   }
 
-  async function deleteGoal() {
-    if (!selected || saving) return
+  async function deleteGoal(goalId = selected?.id) {
+    if (saving) return
+    const mutationGoal = getCurrentlyAccessibleGoal(goalId)
+    if (!mutationGoal) return
     setSaving(true)
     try {
-      const { error } = await supabase.rpc('delete_trade_up_goal', { p_goal_id: selected.id })
+      const { error } = await supabase.rpc('delete_trade_up_goal', { p_goal_id: mutationGoal.id })
       if (error) throw error
       setSelectedId(null)
       await load({ quiet: true })
@@ -265,7 +292,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
   function confirmDelete() {
     Alert.alert('Delete this goal?', 'Linked projects will remain in SideFlip but will no longer belong to this goal.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete Goal', style: 'destructive', onPress: deleteGoal },
+      { text: 'Delete Goal', style: 'destructive', onPress: () => deleteGoal(selected.id) },
     ])
   }
 
@@ -447,13 +474,28 @@ export default function TradeUpGoalsScreen({ navigation }) {
         : goals.map(goal => {
           const summary = calculateGoalSummary(goal, projects)
           const goalComplete = goal.status === 'completed' || canCompleteGoal(goal, summary)
-          return <TouchableOpacity key={goal.id} style={[s.goalCard, goalComplete && s.completedGoalCard]} onPress={() => setSelectedId(goal.id)}>
+          const locked = isGoalLockedAfterProLoss(goal, goals, plan)
+          const goalCardContent = <>
+            <View style={locked && s.lockedGoalContent}>
             <View style={s.rowBetween}>
               <View style={s.flex}><Text style={s.eyebrow}>{goal.goal_type === 'item' ? goal.target_item : 'Amount goal'}</Text><Text style={s.goalName}>{goal.name}</Text></View>
               <StatusPill status={goal.status} />
             </View>
-            {Number(goal.target_amount) > 0 && <Progress summary={summary} target={goal.target_amount} formatMoney={formatMoney} compact />}
-            <Text style={s.goalMeta}>{summary.activeCount} active item{summary.activeCount === 1 ? '' : 's'} · {summary.soldCount} completed step{summary.soldCount === 1 ? '' : 's'}</Text>
+            {Number(goal.target_amount) > 0 && <Progress summary={summary} target={goal.target_amount} formatMoney={formatMoney} compact locked={locked} />}
+            {!locked && <Text style={s.goalMeta}>{summary.activeCount} active item{summary.activeCount === 1 ? '' : 's'} · {summary.soldCount} completed step{summary.soldCount === 1 ? '' : 's'}</Text>}
+            </View>
+            {locked && <View style={s.lockedNotice}>
+              <Text style={s.lockedTitle}>SideFlip Pro required</Text>
+              <Text style={s.lockedText}>Upgrade to unlock this Goal and continue managing it.</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Pro')} accessibilityRole="button">
+                <Text style={s.lockedLink}>View SideFlip Pro</Text>
+              </TouchableOpacity>
+            </View>}
+          </>
+          return locked ? <View key={goal.id} style={[s.goalCard, s.lockedGoalCard]} accessibilityRole="summary" accessibilityState={{ disabled: true }}>
+            {goalCardContent}
+          </View> : <TouchableOpacity key={goal.id} style={[s.goalCard, goalComplete && s.completedGoalCard]} onPress={() => setSelectedId(goal.id)}>
+            {goalCardContent}
           </TouchableOpacity>
         })}
     </ScrollView>
@@ -478,11 +520,11 @@ function StatusPill({ status }) {
   return <View style={[s.status, completed && s.statusCompleted]}><Text style={[s.statusText, completed && s.statusTextCompleted]}>{status}</Text></View>
 }
 
-function Progress({ summary, target, formatMoney, compact }) {
-  const fillColor = progressColor(summary.progressPercent)
+function Progress({ summary, target, formatMoney, compact, locked = false }) {
+  const fillColor = locked ? '#A8A49E' : progressColor(summary.progressPercent)
   return <View style={compact ? s.progressCompact : s.progressBlock}>
-    <View style={s.progressTrack}><View style={[s.progressFill, { width: `${summary.progressPercent}%`, backgroundColor: fillColor }]} /></View>
-    <View style={s.rowBetween}><Text style={s.progressText}>{formatMoney(summary.progressValue)} of {formatMoney(target)}</Text><Text style={s.progressPercent}>{summary.progressPercent}%</Text></View>
+    <View style={[s.progressTrack, locked && s.lockedProgressTrack]}><View style={[s.progressFill, { width: `${summary.progressPercent}%`, backgroundColor: fillColor }]} /></View>
+    <View style={s.rowBetween}><Text style={[s.progressText, locked && s.lockedProgressText]}>{formatMoney(summary.progressValue)} of {formatMoney(target)}</Text><Text style={[s.progressPercent, locked && s.lockedProgressText]}>{summary.progressPercent}%</Text></View>
   </View>
 }
 
@@ -534,6 +576,12 @@ const s = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginTop: 14, marginBottom: 8, borderWidth: 1, borderColor: '#E8E4DE' },
   goalCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E8E4DE' },
   completedGoalCard: { backgroundColor: '#DDF3E7', borderColor: GREEN, borderWidth: 2 },
+  lockedGoalCard: { backgroundColor: '#EFEEE9', borderColor: '#D4D0C8' },
+  lockedGoalContent: { opacity: 0.58 },
+  lockedNotice: { borderTopWidth: 1, borderTopColor: '#D4D0C8', marginTop: 14, paddingTop: 12 },
+  lockedTitle: { color: '#5C5850', fontSize: 13, fontWeight: '800' },
+  lockedText: { color: '#77726A', fontSize: 12, lineHeight: 18, marginTop: 3 },
+  lockedLink: { color: ACCENT, fontSize: 13, fontWeight: '800', marginTop: 8 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
   flex: { flex: 1 },
   eyebrow: { fontSize: 10, color: '#8C8880', textTransform: 'uppercase', letterSpacing: 0.7, fontWeight: '700', marginBottom: 4 },
@@ -546,9 +594,11 @@ const s = StyleSheet.create({
   progressBlock: { marginTop: 18 },
   progressCompact: { marginTop: 14 },
   progressTrack: { height: 8, backgroundColor: '#F5D8D3', borderRadius: 999, overflow: 'hidden' },
+  lockedProgressTrack: { backgroundColor: '#D9D6CF' },
   progressFill: { height: '100%', borderRadius: 999 },
   progressText: { color: '#8C8880', fontSize: 12, marginTop: 6 },
   progressPercent: { color: '#5C5850', fontSize: 12, fontWeight: '700', marginTop: 6 },
+  lockedProgressText: { color: '#68645D' },
   primaryButton: { backgroundColor: ACCENT, borderRadius: 12, padding: 15, alignItems: 'center', marginBottom: 8 },
   primaryText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   secondaryButton: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: ACCENT },

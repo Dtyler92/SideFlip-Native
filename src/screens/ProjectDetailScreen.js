@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
 import { roundLaborHours } from './laborModel'
 import { captureEvent } from '../lib/analytics'
-import { createMutationId } from './tradeUpGoalModel'
+import { accessibleActiveGoalsAfterProLoss, createMutationId } from './tradeUpGoalModel'
 import { openGoalCreation } from './goalCreationNavigation'
 
 const ACCENT = '#C8402F'
@@ -35,12 +35,17 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [activeGoals, setActiveGoals] = useState([])
   const [showAssignGoal, setShowAssignGoal] = useState(false)
   const goalLinkMutationId = useRef(createMutationId())
+  const projectLoadGeneration = useRef(0)
+  const currentPlan = useRef(plan)
+  currentPlan.current = plan
 
   async function load() {
+    const request = ++projectLoadGeneration.current
     const [projectResult, goalResult] = await Promise.all([
       supabase.from('projects').select('*, expenses(*)').eq('id', projectId).single(),
-      supabase.from('trade_up_goals').select('id,name,status').eq('user_id', user.id).eq('status', 'active').order('created_at', { ascending: false }),
+      supabase.from('trade_up_goals').select('id,name,status,created_at').eq('user_id', user.id).eq('status', 'active').order('created_at', { ascending: false }),
     ])
+    if (request !== projectLoadGeneration.current) return
     if (projectResult.error) {
       Alert.alert('Could not load project', projectResult.error.message)
       setLoading(false)
@@ -52,10 +57,17 @@ export default function ProjectDetailScreen({ navigation, route }) {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [projectId])
+  useEffect(() => {
+    load()
+    return () => { projectLoadGeneration.current += 1 }
+  }, [projectId, plan])
 
-  async function assignGoal(goalId) {
+  const selectableGoals = accessibleActiveGoalsAfterProLoss(activeGoals, plan)
+
+  async function assignGoal(goalId, candidateGoals = activeGoals) {
     if (saving) return
+    const allowedGoal = accessibleActiveGoalsAfterProLoss(candidateGoals, currentPlan.current).some(goal => goal.id === goalId)
+    if (!allowedGoal) return Alert.alert('Goal locked', 'Your plan changed. Only your oldest active Goal is available without SideFlip Pro.')
     setSaving(true)
     try {
       const { error } = await supabase.rpc('link_trade_up_project', {
@@ -84,14 +96,15 @@ export default function ProjectDetailScreen({ navigation, route }) {
       plan,
       activeGoals,
       onCreated: async goal => {
-        setActiveGoals(current => [goal, ...current.filter(item => item.id !== goal.id)])
-        await assignGoal(goal.id)
+        const nextGoals = [goal, ...activeGoals.filter(item => item.id !== goal.id)]
+        setActiveGoals(nextGoals)
+        await assignGoal(goal.id, nextGoals)
       },
     })
   }
 
   function beginAssignGoal() {
-    if (activeGoals.length > 0) {
+    if (selectableGoals.length > 0) {
       setShowAssignGoal(true)
       return
     }
@@ -428,7 +441,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
             <Text style={s.assignHint}>Choose the active goal this project should update.</Text>
-            {activeGoals.map(goal => (
+            {selectableGoals.map(goal => (
               <TouchableOpacity key={goal.id} style={s.assignChoice} onPress={() => assignGoal(goal.id)} disabled={saving}>
                 <Text style={s.assignChoiceText}>{goal.name}</Text>
                 {saving && <ActivityIndicator size="small" color={ACCENT} />}

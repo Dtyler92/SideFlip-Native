@@ -56,3 +56,22 @@ export function progressColor(percent) {
 export function canCreateAnotherGoal(plan, goals = []) {
   return plan === 'pro' || !goals.some(goal => goal?.status === 'active')
 }
+
+export function isGoalLockedAfterProLoss(goal, goals = [], plan) {
+  if (plan === 'pro' || goal?.status !== 'active') return false
+  const oldestActive = goals
+    .filter(candidate => candidate?.status === 'active')
+    .slice()
+    .sort((left, right) => {
+      const leftTime = Date.parse(left?.created_at)
+      const rightTime = Date.parse(right?.created_at)
+      const safeLeftTime = Number.isFinite(leftTime) ? leftTime : Number.POSITIVE_INFINITY
+      const safeRightTime = Number.isFinite(rightTime) ? rightTime : Number.POSITIVE_INFINITY
+      return safeLeftTime - safeRightTime || String(left?.id || '').localeCompare(String(right?.id || ''))
+    })[0]
+  return Boolean(oldestActive && goal?.id !== oldestActive.id)
+}
+
+export function accessibleActiveGoalsAfterProLoss(goals = [], plan) {
+  return goals.filter(goal => goal?.status === 'active' && !isGoalLockedAfterProLoss(goal, goals, plan))
+}
