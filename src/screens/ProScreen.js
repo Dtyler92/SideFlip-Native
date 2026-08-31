@@ -139,7 +139,7 @@ export default function ProScreen() {
   const product = id => subscriptions.find(item => item.id === id)
   const catalogReady = PRODUCT_IDS.every(id => {
     const item = product(id)
-    return Boolean(item?.displayPrice && (!id.endsWith('.annual') || monthlyEquivalent(item)))
+    return Boolean(item?.displayPrice)
   })
   async function buy(id) {
     pendingProductRef.current = id
@@ -241,8 +241,10 @@ export default function ProScreen() {
       {PRODUCT_IDS.map(id => {
         const annual = id.endsWith('.annual')
         const item = product(id)
-        const priceText = item ? (annual ? monthlyEquivalent(item) : item.displayPrice) : null
-        const priceUnavailable = !priceText
+        const primaryPrice = item?.displayPrice || null
+        const equivalentPrice = annual ? monthlyEquivalent(item) : null
+        const equivalentText = equivalentPrice ? `Equivalent to ${equivalentPrice}/month` : null
+        const priceUnavailable = !primaryPrice
         return (
           <View key={id} style={[s.card, annual && s.featured]}>
             <View style={s.planRow}>
@@ -250,13 +252,14 @@ export default function ProScreen() {
               {annual && <Text style={s.valueBadge}>BEST VALUE</Text>}
             </View>
             <Text style={[s.price, priceUnavailable && s.priceLoading]}>
-              {priceText || 'Loading Apple price…'}
-              {priceText && <Text style={s.unit}>/month</Text>}
+              {primaryPrice || 'Loading Apple price…'}
+              {primaryPrice && <Text style={s.unit}>{annual ? '/year' : '/month'}</Text>}
             </Text>
-            <Text style={s.detail}>{item?.displayPrice
-              ? (annual ? `${item.displayPrice} billed annually` : 'Billed monthly')
+            <Text style={s.detail}>{primaryPrice
+              ? (annual ? 'Billed annually' : 'Billed monthly')
               : 'Apple prices are provided in your App Store storefront currency.'}
             </Text>
+            {equivalentText && <Text style={s.equivalent}>{equivalentText}</Text>}
             {!hasPro && (
               <TouchableOpacity
                 accessibilityRole="button"
@@ -293,7 +296,9 @@ export default function ProScreen() {
       <View style={s.legalLinks}>
         <TouchableOpacity onPress={() => Linking.openURL('https://sideflip.org/privacy')}><Text style={s.legalLink}>Privacy Policy</Text></TouchableOpacity>
         <Text style={s.legalDot}>•</Text>
-        <TouchableOpacity onPress={() => Linking.openURL('https://sideflip.org/terms')}><Text style={s.legalLink}>Terms of Use</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => Linking.openURL('https://sideflip.org/terms')}><Text style={s.legalLink}>Terms of Service</Text></TouchableOpacity>
+        <Text style={s.legalDot}>•</Text>
+        <TouchableOpacity onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}><Text style={s.legalLink}>Apple EULA</Text></TouchableOpacity>
       </View>
     </ScrollView>
   )
@@ -321,6 +326,7 @@ const s = StyleSheet.create({
   priceLoading: { fontSize: 18, color: '#8C8880' },
   unit: { fontSize: 15, fontWeight: '700', color: '#C8402F' },
   detail: { color: '#8C8880', marginTop: 3 },
+  equivalent: { fontSize: 13, color: '#8C8880', marginTop: 4 },
   button: { backgroundColor: '#C8402F', alignItems: 'center', padding: 14, borderRadius: 10, marginTop: 15 },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: '#fff', fontWeight: '800' },
@@ -331,7 +337,7 @@ const s = StyleSheet.create({
   restore: { alignItems: 'center', padding: 16 },
   restoreText: { color: '#C8402F', fontWeight: '700' },
   legal: { fontSize: 12, color: '#8C8880', textAlign: 'center', lineHeight: 18, marginTop: 8 },
-  legalLinks: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 9, marginTop: 10 },
+  legalLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 9, marginTop: 10 },
   legalLink: { color: '#C8402F', fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' },
   legalDot: { color: '#A8A49E', fontSize: 12 },
 })
