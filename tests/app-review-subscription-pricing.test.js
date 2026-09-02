@@ -22,6 +22,17 @@ test('annual plan emphasizes the actual annual StoreKit charge over its calculat
   assert.ok(primaryIndex >= 0 && equivalentIndex > primaryIndex, 'monthly equivalent must render after the billed annual total')
 })
 
+test('subscription choices appear before the Pro feature list', () => {
+  const pro = source('src/screens/ProScreen.js')
+  const pricingIndex = pro.indexOf("{hasPro ? 'Your subscription options' : 'Choose your plan'}")
+  const featuresIndex = pro.indexOf('Included with Pro')
+  const contentBeforePricing = pro.slice(pro.indexOf('return ('), pricingIndex)
+
+  assert.ok(pricingIndex >= 0, 'pricing heading must render')
+  assert.ok(featuresIndex > pricingIndex, 'pricing must render before the feature list')
+  assert.doesNotMatch(contentBeforePricing, /portfolio insights|listing tools|growing flipper toolkit/, 'feature descriptions must not render before pricing')
+})
+
 test('purchase screen links SideFlip policies and the standard Apple EULA', () => {
   const pro = source('src/screens/ProScreen.js')
 
@@ -33,9 +44,9 @@ test('purchase screen links SideFlip policies and the standard Apple EULA', () =
   assert.match(pro, /legalLinks: \{[^\n]*flexWrap: 'wrap'/)
 })
 
-test('minimal App Review rescue keeps version 1.0.0 and advances only the iOS build to 18', () => {
+test('pricing-first App Review rescue keeps version 1.0.0 and advances only the iOS build to 19', () => {
   const app = JSON.parse(source('app.json'))
   assert.equal(app.expo.version, '1.0.0')
   assert.equal(app.expo.ios.bundleIdentifier, 'com.sideflip.app')
-  assert.equal(app.expo.ios.buildNumber, '18')
+  assert.equal(app.expo.ios.buildNumber, '19')
 })

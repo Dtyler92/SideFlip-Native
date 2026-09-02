@@ -46,6 +46,12 @@ test('StoreKit pricing never falls back to hardcoded USD amounts', () => {
   assert.match(source, /App Store storefront/)
 })
 
+test('each plan button sends its own exact subscription SKU to StoreKit', () => {
+  assert.match(source, /const PRODUCT_IDS = \['com\.sideflip\.app\.pro\.monthly', 'com\.sideflip\.app\.pro\.annual'\]/)
+  assert.match(source, /onPress=\{\(\) => buy\(id\)\}/)
+  assert.match(source, /requestPurchase\(\{ type: 'subs', request: \{ apple: \{ sku: id,/)
+})
+
 test('a disconnected, incomplete, or failed Apple catalog has an in-screen retry', () => {
   assert.match(source, /catalogAttempted/)
   assert.match(source, /PRODUCT_IDS\.every/)

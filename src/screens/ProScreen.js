@@ -224,7 +224,6 @@ export default function ProScreen() {
       <View style={s.hero}>
         <View style={s.heroIcon}><Text style={s.heroIconText}>⚡</Text></View>
         <Text style={s.title}>Do more with every flip</Text>
-        <Text style={s.sub}>SideFlip Pro brings your portfolio insights, listing tools, and growing flipper toolkit together in one native app.</Text>
       </View>
 
       {hasPro && (
@@ -233,9 +232,6 @@ export default function ProScreen() {
           <Text style={s.activeCopy}>Your Pro features are unlocked on this account.</Text>
         </View>
       )}
-
-      <Text style={s.sectionTitle}>Included with Pro</Text>
-      <View style={s.featuresCard}><ProFeatureList /></View>
 
       <Text style={s.sectionTitle}>{hasPro ? 'Your subscription options' : 'Choose your plan'}</Text>
       {PRODUCT_IDS.map(id => {
@@ -289,6 +285,9 @@ export default function ProScreen() {
           </TouchableOpacity>
         </View>
       )}
+      <Text style={s.sectionTitle}>Included with Pro</Text>
+      <View style={s.featuresCard}><ProFeatureList /></View>
+
       <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={restore} style={s.restore}>
         <Text style={s.restoreText}>Restore Purchases</Text>
       </TouchableOpacity>
