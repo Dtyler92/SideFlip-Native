@@ -5,6 +5,7 @@ export const NATIVE_ANALYTICS_EVENTS = new Set([
   'expense_added', 'expense_updated', 'expense_deleted',
   'goal_created', 'goal_completed',
   'ai_listing_requested', 'ai_listing_succeeded', 'ai_listing_failed',
+  'ai_listing_regenerated', 'ai_listing_accepted',
   'paywall_viewed', 'plan_selected',
   'apple_purchase_started', 'apple_purchase_cancelled', 'apple_purchase_failed',
   'apple_store_products_fetch_failed',
@@ -19,6 +20,7 @@ const ALLOWED_PROPERTIES = new Set([
   'source', 'feature', 'result', 'error_type', 'project_category', 'expense_category',
   'goal_type', 'is_pro', 'is_goal_linked', 'billing_period', 'product_id',
   'is_restore', 'verified_count', 'has_campaign',
+  'listing_style', 'humor_level', 'had_existing_description',
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'referral_code',
 ])
 const ATTRIBUTION_KEYS = new Map([

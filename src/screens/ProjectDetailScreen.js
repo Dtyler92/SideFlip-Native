@@ -7,6 +7,7 @@ import { roundLaborHours } from './laborModel'
 import { captureEvent } from '../lib/analytics'
 import { accessibleActiveGoalsAfterProLoss, createMutationId } from './tradeUpGoalModel'
 import { openGoalCreation } from './goalCreationNavigation'
+import { createDescriptionRequest, needsDescriptionPreview, normalizeListingSelection } from './listingGeneratorModel'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -16,6 +17,17 @@ const EXPENSE_CATS = [
   {value:'parts',label:'Parts'},{value:'supplies',label:'Supplies'},
   {value:'labor',label:'Labor'},{value:'transport',label:'Transport'},
   {value:'fees',label:'Fees'},{value:'other',label:'Other'},
+]
+
+const LISTING_STYLES = [
+  { value: 'professional', label: 'Professional' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'funny', label: 'Funny' },
+]
+const HUMOR_LEVELS = [
+  { value: 'subtle', label: 'Subtle' },
+  { value: 'balanced', label: 'Balanced' },
+  { value: 'unhinged', label: 'Unhinged' },
 ]
 
 const EMPTY_EXPENSE = { description: '', amount: '', category: 'parts', laborHours: '' }
@@ -31,12 +43,23 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false)
   const [generatingListing, setGeneratingListing] = useState(false)
   const [listingText, setListingText] = useState('')
+  const [generatedPreview, setGeneratedPreview] = useState('')
+  const [generatedPreviewSelection, setGeneratedPreviewSelection] = useState(null)
   const [showListingModal, setShowListingModal] = useState(false)
+  const [generatorStep, setGeneratorStep] = useState(null)
+  const [showDescriptionPreview, setShowDescriptionPreview] = useState(false)
+  const [selectedListingStyle, setSelectedListingStyle] = useState('normal')
+  const [selectedHumorLevel, setSelectedHumorLevel] = useState('balanced')
   const [activeGoals, setActiveGoals] = useState([])
   const [showAssignGoal, setShowAssignGoal] = useState(false)
   const goalLinkMutationId = useRef(createMutationId())
   const projectLoadGeneration = useRef(0)
+  const generationRequestRef = useRef(0)
+  const generationInFlightRef = useRef(false)
+  const generationAbortRef = useRef(null)
+  const listingTextRef = useRef(listingText)
   const currentPlan = useRef(plan)
+  listingTextRef.current = listingText
   currentPlan.current = plan
 
   async function load() {
@@ -61,6 +84,12 @@ export default function ProjectDetailScreen({ navigation, route }) {
     load()
     return () => { projectLoadGeneration.current += 1 }
   }, [projectId, plan])
+
+  useEffect(() => () => {
+    generationRequestRef.current += 1
+    generationInFlightRef.current = false
+    generationAbortRef.current?.abort()
+  }, [])
 
   const selectableGoals = accessibleActiveGoalsAfterProLoss(activeGoals, plan)
 
@@ -228,37 +257,151 @@ export default function ProjectDetailScreen({ navigation, route }) {
     ])
   }
 
-  async function generateListing() {
-    captureEvent('ai_listing_requested', { project_category: project?.category, is_pro: isPro })
+  function openListingEditor() {
     if (!isPro) {
       navigation.navigate('Pro')
       return
     }
-    setGeneratingListing(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) throw new Error('Please sign in again to generate a sales listing.')
-      const res = await fetch('https://sideflip.org/api/generate-listing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({
-          title: project.title,
-          category: project.category,
-          expenses: project.expenses || [],
-          notes: project.notes,
-        })
-      })
-      const data = await res.json()
-      if (!res.ok || !data.listing) throw new Error(data.error || 'Could not generate listing')
-      captureEvent('ai_listing_succeeded', { project_category: project.category })
-      setListingText(data.listing)
-      setShowListingModal(true)
-    } catch (err) {
-      captureEvent('ai_listing_failed', { project_category: project?.category, error_type: 'generation_failed' })
-      Alert.alert('Could not generate listing', err.message)
-    } finally {
+    setShowListingModal(true)
+  }
+
+  function closeListingEditor() {
+    generationRequestRef.current += 1
+    generationInFlightRef.current = false
+    generationAbortRef.current?.abort()
+    generationAbortRef.current = null
+    setGeneratingListing(false)
+    setGeneratorStep(null)
+    setShowDescriptionPreview(false)
+    setGeneratedPreviewSelection(null)
+    setShowListingModal(false)
+  }
+
+  function closeDescriptionPreview() {
+    if (generationInFlightRef.current) {
+      generationRequestRef.current += 1
+      generationInFlightRef.current = false
+      generationAbortRef.current?.abort()
+      generationAbortRef.current = null
       setGeneratingListing(false)
     }
+    setShowDescriptionPreview(false)
+    setGeneratedPreviewSelection(null)
+  }
+
+  function handleListingTextChange(text) {
+    listingTextRef.current = text
+    setListingText(text)
+  }
+
+  function beginDescriptionGenerator() {
+    if (generatingListing || generationInFlightRef.current) return
+    setGeneratorStep('style')
+  }
+
+  function chooseListingStyle(style) {
+    const selection = normalizeListingSelection(style)
+    setSelectedListingStyle(selection.style)
+    setSelectedHumorLevel(selection.humorLevel || 'balanced')
+    if (selection.style === 'funny') {
+      setGeneratorStep('humor')
+      return
+    }
+    generateListing(selection.style, null)
+  }
+
+  function chooseHumorLevel(humorLevel) {
+    const selection = normalizeListingSelection('funny', humorLevel)
+    setSelectedListingStyle(selection.style)
+    setSelectedHumorLevel(selection.humorLevel)
+    generateListing(selection.style, selection.humorLevel)
+  }
+
+  function choosePreviewStyle(style) {
+    const selection = normalizeListingSelection(style, style === 'funny' ? selectedHumorLevel : null)
+    setSelectedListingStyle(selection.style)
+    setSelectedHumorLevel(selection.humorLevel)
+  }
+
+  function analyticsForSelection(style, humorLevel, extra = {}) {
+    return {
+      project_category: project?.category,
+      listing_style: style,
+      ...(style === 'funny' ? { humor_level: humorLevel || 'balanced' } : {}),
+      had_existing_description: needsDescriptionPreview(listingTextRef.current),
+      ...extra,
+    }
+  }
+
+  async function generateListing(style = selectedListingStyle, humorLevel = selectedHumorLevel, isRegeneration = false) {
+    if (generationInFlightRef.current) return
+    if (!isPro) {
+      setGeneratorStep(null)
+      setShowDescriptionPreview(false)
+      setShowListingModal(false)
+      navigation.navigate('Pro')
+      return
+    }
+
+    const selection = normalizeListingSelection(style, style === 'funny' ? humorLevel : null)
+    const hadExistingDescription = needsDescriptionPreview(listingTextRef.current)
+    const requestBody = createDescriptionRequest(projectId, selection.style, selection.humorLevel, listingTextRef.current)
+    const request = ++generationRequestRef.current
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 25_000)
+    generationInFlightRef.current = true
+    generationAbortRef.current = controller
+    setGeneratorStep(null)
+    setGeneratingListing(true)
+    captureEvent('ai_listing_requested', analyticsForSelection(selection.style, selection.humorLevel, { is_pro: true, had_existing_description: hadExistingDescription }))
+    if (isRegeneration) captureEvent('ai_listing_regenerated', analyticsForSelection(selection.style, selection.humorLevel, { had_existing_description: hadExistingDescription }))
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('auth')
+      const res = await fetch('https://sideflip.org/api/generate-listing', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify(requestBody),
+      })
+      let data = {}
+      try { data = await res.json() } catch { /* show the friendly message below */ }
+      const description = typeof data.description === 'string' ? data.description.trim() : typeof data.listing === 'string' ? data.listing.trim() : ''
+      if (!res.ok || !description || request !== generationRequestRef.current) {
+        if (request !== generationRequestRef.current) return
+        throw new Error('generation')
+      }
+
+      captureEvent('ai_listing_succeeded', analyticsForSelection(selection.style, selection.humorLevel, { had_existing_description: hadExistingDescription }))
+      if (hadExistingDescription) {
+        setGeneratedPreview(description)
+        setGeneratedPreviewSelection({ ...selection, hadExistingDescription })
+        setShowDescriptionPreview(true)
+      } else {
+        handleListingTextChange(description)
+        captureEvent('ai_listing_accepted', analyticsForSelection(selection.style, selection.humorLevel, { had_existing_description: hadExistingDescription }))
+      }
+    } catch (error) {
+      if (request !== generationRequestRef.current) return
+      captureEvent('ai_listing_failed', analyticsForSelection(selection.style, selection.humorLevel, { error_type: error?.name === 'AbortError' ? 'timeout' : 'generation_failed', had_existing_description: hadExistingDescription }))
+      Alert.alert("Couldn't generate a description", 'Try again.')
+    } finally {
+      clearTimeout(timeout)
+      if (request === generationRequestRef.current) {
+        generationInFlightRef.current = false
+        generationAbortRef.current = null
+        setGeneratingListing(false)
+      }
+    }
+  }
+
+  function useGeneratedDescription() {
+    handleListingTextChange(generatedPreview)
+    setShowDescriptionPreview(false)
+    const producingSelection = generatedPreviewSelection || normalizeListingSelection(selectedListingStyle, selectedHumorLevel)
+    setGeneratedPreviewSelection(null)
+    captureEvent('ai_listing_accepted', analyticsForSelection(producingSelection.style, producingSelection.humorLevel, { had_existing_description: generatedPreviewSelection?.hadExistingDescription ?? true }))
   }
 
   if (loading) return <View style={{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#FAFAF7'}}><ActivityIndicator color={ACCENT} /></View>
@@ -388,16 +531,12 @@ export default function ProjectDetailScreen({ navigation, route }) {
               </TouchableOpacity>
             )}
 
-            {/* Sales Listing Generator */}
+            {/* Sales Listing Editor */}
             <TouchableOpacity
-              style={[s.btn, {backgroundColor:'#1A1917', marginBottom:10}, generatingListing && s.btnDisabled]}
-              onPress={generateListing}
-              disabled={generatingListing}
+              style={[s.btn, {backgroundColor:'#1A1917', marginBottom:10}]}
+              onPress={openListingEditor}
             >
-              {generatingListing
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={s.btnText}>Generate Sales Listing</Text>
-              }
+              <Text style={s.btnText}>Create Sales Listing</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[s.btn,{backgroundColor:GREEN}]}
@@ -414,14 +553,10 @@ export default function ProjectDetailScreen({ navigation, route }) {
         {project.status === 'sold' && (
           <>
             <TouchableOpacity
-              style={[s.btn, {backgroundColor:'#1A1917', marginBottom:10}, generatingListing && s.btnDisabled]}
-              onPress={generateListing}
-              disabled={generatingListing}
+              style={[s.btn, {backgroundColor:'#1A1917', marginBottom:10}]}
+              onPress={openListingEditor}
             >
-              {generatingListing
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={s.btnText}>Generate Sales Listing</Text>
-              }
+              <Text style={s.btnText}>Create Sales Listing</Text>
             </TouchableOpacity>
             <View style={s.soldBadge}><Text style={s.soldText}>✅ Sold for {formatMoney(project.sale_price)}</Text></View>
             <TouchableOpacity style={[s.btn, s.undoSaleButton, saving && s.btnDisabled]} onPress={handleUndoSale} disabled={saving}>
@@ -455,34 +590,191 @@ export default function ProjectDetailScreen({ navigation, route }) {
       </Modal>
 
       {/* Listing Editor Modal */}
-      <Modal visible={showListingModal} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={showListingModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={showDescriptionPreview ? closeDescriptionPreview : closeListingEditor}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={s.modalRoot}>
-            <View style={s.modalHeader}>
-              <TouchableOpacity onPress={() => setShowListingModal(false)}>
-                <Text style={s.modalCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <Text style={s.modalTitle}>FB Listing</Text>
-              <TouchableOpacity onPress={() => Share.share({ message: listingText })}>
-                <Text style={s.modalShare}>Share</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={s.modalHint}>Edit the listing below before sharing</Text>
-            <TextInput
-              style={s.listingInput}
-              value={listingText}
-              onChangeText={setListingText}
-              multiline
-              autoFocus
-              scrollEnabled
-              textAlignVertical="top"
-            />
-            <TouchableOpacity
-              style={s.modalShareBtn}
-              onPress={() => Share.share({ message: listingText })}
+            <View
+              style={s.generatorBackground}
+              accessibilityElementsHidden={generatorStep !== null}
+              importantForAccessibility={generatorStep !== null ? 'no-hide-descendants' : 'auto'}
             >
-              <Text style={s.modalShareBtnText}>Share / Copy Listing</Text>
-            </TouchableOpacity>
+              {showDescriptionPreview ? (
+              <>
+                <View style={s.modalHeader}>
+                  <TouchableOpacity onPress={closeDescriptionPreview} accessibilityRole="button" accessibilityLabel="Cancel description preview"><Text style={s.modalCancel}>Cancel</Text></TouchableOpacity>
+                  <Text style={s.modalTitle}>Description Preview</Text>
+                  <View style={s.headerSpacer} />
+                </View>
+                <ScrollView
+                  style={s.modalScroll}
+                  contentContainerStyle={s.modalScrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                  automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+                >
+                  <Text style={s.modalHint}>Your current description is unchanged until you tap Use Description. Change the options, then tap Regenerate to rewrite it.</Text>
+                  <Text style={s.previewLabel}>Style</Text>
+                  <View style={s.previewChoices} accessibilityRole="radiogroup">
+                    {LISTING_STYLES.map(({ value, label }) => (
+                      <TouchableOpacity
+                        key={value}
+                        disabled={generatingListing}
+                        onPress={() => choosePreviewStyle(value)}
+                        accessibilityRole="radio"
+                        accessibilityLabel={`${label} listing style`}
+                        accessibilityState={{ selected: selectedListingStyle === value, disabled: generatingListing }}
+                        style={[s.previewChip, selectedListingStyle === value && s.previewChipActive]}
+                      >
+                        <Text style={[s.previewChipText, selectedListingStyle === value && s.previewChipTextActive]}>{label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {selectedListingStyle === 'funny' && (
+                    <>
+                      <Text style={s.previewLabel}>How funny?</Text>
+                      <View style={s.previewChoices} accessibilityRole="radiogroup">
+                        {HUMOR_LEVELS.map(({ value, label }) => (
+                          <TouchableOpacity
+                            key={value}
+                            disabled={generatingListing}
+                            onPress={() => setSelectedHumorLevel(value)}
+                            accessibilityRole="radio"
+                            accessibilityLabel={`${label} humor level`}
+                            accessibilityState={{ selected: selectedHumorLevel === value, disabled: generatingListing }}
+                            style={[s.previewChip, selectedHumorLevel === value && s.previewChipActive]}
+                          >
+                            <Text style={[s.previewChipText, selectedHumorLevel === value && s.previewChipTextActive]}>{label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </>
+                  )}
+                  {generatingListing && (
+                    <View style={s.writingRow} accessibilityRole="progressbar" accessibilityLabel="Writing your description">
+                      <ActivityIndicator size="small" color={ACCENT} />
+                      <Text style={s.writingText}>Writing your description...</Text>
+                    </View>
+                  )}
+                  <TextInput
+                    style={s.listingInput}
+                    value={generatedPreview}
+                    onChangeText={setGeneratedPreview}
+                    multiline
+                    scrollEnabled
+                    textAlignVertical="top"
+                    accessibilityLabel="Generated description preview"
+                  />
+                  <TouchableOpacity style={[s.modalShareBtn, generatingListing && s.btnDisabled]} disabled={generatingListing} onPress={useGeneratedDescription} accessibilityRole="button">
+                    <Text style={s.modalShareBtnText}>Use Description</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.secondaryModalButton, generatingListing && s.btnDisabled]} disabled={generatingListing} onPress={() => generateListing(selectedListingStyle, selectedHumorLevel, true)} accessibilityRole="button">
+                    <Text style={s.secondaryModalButtonText}>Regenerate</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.generatorCancel} onPress={closeDescriptionPreview} accessibilityRole="button" accessibilityLabel="Cancel description preview"><Text style={s.generatorCancelText}>Cancel</Text></TouchableOpacity>
+                </ScrollView>
+              </>
+            ) : (
+              <>
+                <View style={s.modalHeader}>
+                  <TouchableOpacity onPress={closeListingEditor} accessibilityRole="button" accessibilityLabel="Cancel sales listing">
+                    <Text style={s.modalCancel}>Cancel</Text>
+                  </TouchableOpacity>
+                  <Text style={s.modalTitle}>Sales Listing</Text>
+                  <TouchableOpacity disabled={!listingText.trim() || generatingListing} onPress={() => Share.share({ message: listingText.trim() })} accessibilityRole="button" accessibilityLabel="Share sales listing">
+                    <Text style={[s.modalShare, (!listingText.trim() || generatingListing) && s.mutedAction]}>Share</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView
+                  style={s.modalScroll}
+                  contentContainerStyle={s.modalScrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                  automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+                >
+                  <Text style={s.modalHint}>Write or generate a description, then edit anything before sharing.</Text>
+                  <View style={s.descriptionHeader}>
+                    <Text style={s.descriptionLabel}>Description</Text>
+                    <TouchableOpacity
+                      style={[s.generateDescriptionButton, generatingListing && s.btnDisabled]}
+                      onPress={beginDescriptionGenerator}
+                      disabled={generatingListing}
+                      accessibilityRole="button"
+                      accessibilityLabel="Generate Description"
+                    >
+                      <Text style={s.generateDescriptionText}>✨ Generate Description</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {generatingListing && (
+                    <View style={s.writingRow} accessibilityRole="progressbar" accessibilityLabel="Writing your description">
+                      <ActivityIndicator size="small" color={ACCENT} />
+                      <Text style={s.writingText}>Writing your description...</Text>
+                    </View>
+                  )}
+                  <TextInput
+                    style={s.listingInput}
+                    value={listingText}
+                    onChangeText={handleListingTextChange}
+                    multiline
+                    scrollEnabled
+                    textAlignVertical="top"
+                    placeholder="Add the details a buyer should know..."
+                    placeholderTextColor="#A8A49E"
+                    accessibilityLabel="Sales listing description"
+                  />
+                  <TouchableOpacity
+                    style={[s.modalShareBtn, (!listingText.trim() || generatingListing) && s.btnDisabled]}
+                    disabled={!listingText.trim() || generatingListing}
+                    onPress={() => Share.share({ message: listingText.trim() })}
+                    accessibilityRole="button"
+                    accessibilityLabel="Share or copy sales listing"
+                  >
+                    <Text style={s.modalShareBtnText}>Share / Copy Listing</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </>
+              )}
+            </View>
+
+            {generatorStep !== null && (
+              <View style={s.generatorOverlay} accessibilityViewIsModal importantForAccessibility="yes">
+                <ScrollView style={s.generatorCard} contentContainerStyle={s.generatorCardContent} keyboardShouldPersistTaps="handled" bounces={false}>
+                  <Text style={s.generatorTitle}>{generatorStep === 'humor' ? 'How funny?' : 'Choose a style'}</Text>
+                  {generatorStep === 'style' ? (
+                    <>
+                      {LISTING_STYLES.map(({ value, label }) => (
+                        <TouchableOpacity
+                          key={value}
+                          style={s.generatorChoice}
+                          onPress={() => chooseListingStyle(value)}
+                          accessibilityRole="radio"
+                          accessibilityLabel={`${label} listing style`}
+                          accessibilityState={{ selected: selectedListingStyle === value }}
+                        >
+                          <Text style={s.generatorChoiceText}>{label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      {HUMOR_LEVELS.map(({ value, label }) => (
+                        <TouchableOpacity
+                          key={value}
+                          style={[s.generatorChoice, value === 'balanced' && s.generatorChoiceRecommended]}
+                          onPress={() => chooseHumorLevel(value)}
+                          accessibilityRole="radio"
+                          accessibilityLabel={`${label} humor level`}
+                          accessibilityState={{ selected: selectedHumorLevel === value }}
+                        >
+                          <Text style={s.generatorChoiceText}>{label}</Text>
+                          {value === 'balanced' && <Text style={s.recommendedText}>Recommended</Text>}
+                        </TouchableOpacity>
+                      ))}
+                    </>
+                  )}
+                  <TouchableOpacity style={s.generatorCancel} onPress={() => setGeneratorStep(null)} accessibilityRole="button"><Text style={s.generatorCancelText}>Cancel</Text></TouchableOpacity>
+                </ScrollView>
+              </View>
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -537,13 +829,42 @@ const s = StyleSheet.create({
   soldText:{fontSize:15,fontWeight:'700',color:'#2D7A4F'},
   undoSaleButton:{backgroundColor:'#fff',borderWidth:1.5,borderColor:ACCENT,marginTop:10},
   undoSaleText:{color:ACCENT,fontSize:15,fontWeight:'700'},
-  modalRoot:{flex:1,backgroundColor:'#FAFAF7',padding:20},
-  modalHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:8,paddingTop:8},
+  modalRoot:{flex:1,backgroundColor:'#FAFAF7'},
+  generatorBackground:{flex:1},
+  modalHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:20,paddingTop:20,paddingBottom:8},
+  modalScroll:{flex:1},
+  modalScrollContent:{paddingHorizontal:20,paddingBottom:48},
   modalTitle:{fontSize:17,fontWeight:'700',color:'#1A1917'},
   modalCancel:{fontSize:15,color:'#8C8880'},
   modalShare:{fontSize:15,fontWeight:'700',color:'#C8402F'},
-  modalHint:{fontSize:12,color:'#A8A49E',marginBottom:12},
-  listingInput:{flex:1,backgroundColor:'#fff',borderRadius:12,borderWidth:1,borderColor:'#E8E4DE',padding:16,fontSize:15,color:'#1A1917',lineHeight:22},
+  mutedAction:{opacity:0.4},
+  modalHint:{fontSize:12,color:'#8C8880',marginBottom:12,lineHeight:17},
+  descriptionHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:10},
+  descriptionLabel:{fontSize:14,fontWeight:'700',color:'#1A1917'},
+  generateDescriptionButton:{borderWidth:1,borderColor:ACCENT,borderRadius:18,paddingHorizontal:12,paddingVertical:7,backgroundColor:'#FFF2EE'},
+  generateDescriptionText:{fontSize:13,fontWeight:'700',color:ACCENT},
+  writingRow:{flexDirection:'row',alignItems:'center',gap:8,backgroundColor:'#FFF2EE',borderRadius:10,padding:10,marginBottom:10},
+  writingText:{fontSize:13,fontWeight:'600',color:ACCENT},
+  listingInput:{minHeight:180,backgroundColor:'#fff',borderRadius:12,borderWidth:1,borderColor:'#E8E4DE',padding:16,fontSize:15,color:'#1A1917',lineHeight:22},
   modalShareBtn:{backgroundColor:'#C8402F',borderRadius:12,padding:16,alignItems:'center',marginTop:16},
   modalShareBtnText:{color:'#fff',fontSize:16,fontWeight:'700'},
+  secondaryModalButton:{backgroundColor:'#fff',borderWidth:1.5,borderColor:ACCENT,borderRadius:12,padding:14,alignItems:'center',marginTop:10},
+  secondaryModalButtonText:{color:ACCENT,fontSize:15,fontWeight:'700'},
+  generatorOverlay:{...StyleSheet.absoluteFillObject,backgroundColor:'rgba(0,0,0,0.4)',justifyContent:'flex-end',zIndex:10},
+  generatorCard:{maxHeight:'85%',backgroundColor:'#fff',borderTopLeftRadius:22,borderTopRightRadius:22},
+  generatorCardContent:{padding:20,paddingBottom:34},
+  generatorTitle:{fontSize:20,fontWeight:'800',color:'#1A1917',textAlign:'center',marginBottom:16},
+  generatorChoice:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderWidth:1,borderColor:'#E8E4DE',borderRadius:12,padding:16,marginBottom:10,backgroundColor:'#FAFAF7'},
+  generatorChoiceRecommended:{borderColor:ACCENT,backgroundColor:'#FFF2EE'},
+  generatorChoiceText:{fontSize:16,fontWeight:'700',color:'#1A1917'},
+  recommendedText:{fontSize:11,fontWeight:'700',color:ACCENT,textTransform:'uppercase'},
+  generatorCancel:{alignItems:'center',paddingVertical:12,marginTop:2},
+  generatorCancelText:{fontSize:15,fontWeight:'600',color:'#8C8880'},
+  previewLabel:{fontSize:12,fontWeight:'700',color:'#8C8880',textTransform:'uppercase',letterSpacing:0.5,marginTop:4,marginBottom:7},
+  previewChoices:{flexDirection:'row',gap:8,marginBottom:12},
+  previewChip:{flex:1,borderWidth:1,borderColor:'#E8E4DE',borderRadius:18,paddingVertical:8,paddingHorizontal:8,alignItems:'center',backgroundColor:'#fff'},
+  previewChipActive:{backgroundColor:ACCENT,borderColor:ACCENT},
+  previewChipText:{fontSize:12,fontWeight:'600',color:'#5C5850'},
+  previewChipTextActive:{color:'#fff'},
+  headerSpacer:{width:48},
 })

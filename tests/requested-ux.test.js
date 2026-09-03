@@ -7,8 +7,9 @@ const source = relative => readFileSync(new URL(`../${relative}`, import.meta.ur
 
 test('project actions use requested copy and sold projects can be undone', () => {
   const detail = source('src/screens/ProjectDetailScreen.js')
-  assert.match(detail, />Generate Sales Listing</)
-  assert.doesNotMatch(detail, /Generate FB Listing|✨ Generate|🔒 AI Listing|💰 Mark as Sold|📋 Share/)
+  assert.match(detail, />Create Sales Listing</)
+  assert.match(detail, />✨ Generate Description</)
+  assert.doesNotMatch(detail, /Generate FB Listing|🔒 AI Listing|💰 Mark as Sold|📋 Share/)
   assert.match(detail, /rpc\('undo_goal_project_outcome'/)
   assert.match(detail, /await onReturn\?\.\(\)/)
   assert.match(detail, />Undo Sale</)
@@ -129,7 +130,7 @@ test('V1.1 removes user-visible AI wording without removing listing generation',
   const features = source('src/components/ProFeatureList.js')
   for (const value of [home, detail, features]) assert.doesNotMatch(value, /AI Listing Generator|AI listings/)
   assert.match(home, /sales listing tools/)
-  assert.match(detail, /Generate Sales Listing/)
+  assert.match(detail, /Generate Description/)
   assert.match(features, /Sales Listing Generator/)
 })
 
