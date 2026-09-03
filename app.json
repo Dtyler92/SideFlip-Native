@@ -124,7 +124,8 @@
           "microphonePermission": false
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "expo-notifications"
     ],
     "extra": {
       "eas": {
