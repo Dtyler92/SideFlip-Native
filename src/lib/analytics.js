@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import PostHog, { PostHogPersistedProperty } from 'posthog-react-native'
-import { NATIVE_ANALYTICS_EVENTS, extractAttribution, resolveAnalyticsPreference, sanitizeAnalyticsProperties } from './analyticsModel'
+import { Platform } from 'react-native'
+import { NATIVE_ANALYTICS_EVENTS, buildRuntimeAnalyticsProperties, extractAttribution, resolveAnalyticsPreference } from './analyticsModel'
 import { supabase } from './supabase'
 
 const PROJECT_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY
@@ -104,11 +105,7 @@ export function isAnalyticsReady() {
 export function captureEvent(event, properties = {}) {
   if (!canSendAnalytics() || !NATIVE_ANALYTICS_EVENTS.has(event)) return false
   try {
-    posthog.capture(event, {
-      platform: 'ios',
-      ...sanitizeAnalyticsProperties(properties),
-      $geoip_disable: true,
-    })
+    posthog.capture(event, buildRuntimeAnalyticsProperties(properties, Platform.OS))
     return true
   } catch { return false }
 }
@@ -116,11 +113,7 @@ export function captureEvent(event, properties = {}) {
 export function identifyAnalytics(userId, properties = {}) {
   if (!canSendAnalytics() || userId !== activeUserId) return false
   try {
-    posthog.identify(userId, {
-      platform: 'ios',
-      ...sanitizeAnalyticsProperties(properties),
-      $geoip_disable: true,
-    })
+    posthog.identify(userId, buildRuntimeAnalyticsProperties(properties, Platform.OS))
     return true
   } catch { return false }
 }

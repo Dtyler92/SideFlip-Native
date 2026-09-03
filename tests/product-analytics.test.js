@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { extractAttribution, normalizeScreenName, resolveAnalyticsPreference, sanitizeAnalyticsProperties } from '../src/lib/analyticsModel.js'
+import { NATIVE_ANALYTICS_EVENTS, buildRuntimeAnalyticsProperties, extractAttribution, normalizeScreenName, resolveAnalyticsPreference, sanitizeAnalyticsProperties } from '../src/lib/analyticsModel.js'
 
 const source = relative => readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8')
 
@@ -12,6 +12,59 @@ test('native analytics strips sensitive and high-cardinality values', () => {
     amount: 123, signedTransaction: 'signed', transactionId: 'tx', photo: 'https://photo',
     extra: 'no',
   }), { platform: 'ios', screen: 'project_detail', plan: 'annual', is_pro: true })
+})
+
+test('My Stuff analytics dimensions reject unexpected high-cardinality values', () => {
+  assert.deepEqual(sanitizeAnalyticsProperties({
+    item_category: 'custom-user-entered-value',
+    tracking_mode: 'private-meter-description',
+    source_class: 'https://manufacturer.example/private-document',
+  }), {})
+})
+
+test('My Stuff analytics dimensions keep current production values', () => {
+  assert.deepEqual(sanitizeAnalyticsProperties({
+    item_category: 'recreation',
+    tracking_mode: 'mileage',
+    source_class: 'official',
+  }), {
+    item_category: 'recreation',
+    tracking_mode: 'mileage',
+    source_class: 'official',
+  })
+})
+
+test('native analytics records the actual runtime platform', () => {
+  const analytics = source('src/lib/analytics.js')
+  assert.match(analytics, /import\s*\{\s*Platform\s*\}\s*from\s*['"]react-native['"]/)
+  assert.equal(buildRuntimeAnalyticsProperties({ platform: 'ios', result: 'success' }, 'android').platform, 'android')
+  assert.deepEqual(buildRuntimeAnalyticsProperties({ platform: 'ios', result: 'success' }, 'android'), {
+    platform: 'android', result: 'success', $geoip_disable: true,
+  })
+  assert.match(analytics, /posthog\.capture\(event, buildRuntimeAnalyticsProperties\(properties, Platform\.OS\)\)/)
+  assert.match(analytics, /posthog\.identify\(userId, buildRuntimeAnalyticsProperties\(properties, Platform\.OS\)\)/)
+  assert.doesNotMatch(analytics, /platform:\s*'ios'/)
+})
+
+test('My Stuff V2 analytics allow only privacy-safe lifecycle event names', () => {
+  for (const event of [
+    'my_stuff_opened', 'my_stuff_item_created', 'my_stuff_project_transferred',
+    'my_stuff_free_limit_reached', 'my_stuff_upgrade_prompt_viewed',
+    'my_stuff_research_started', 'my_stuff_research_completed', 'my_stuff_research_failed',
+    'my_stuff_maintenance_completed', 'my_stuff_report_generated',
+    'project_report_generated', 'vin_decode_requested', 'vin_decode_succeeded',
+    'vin_decode_failed',
+  ]) assert.equal(NATIVE_ANALYTICS_EVENTS.has(event), true, event)
+
+  assert.deepEqual(sanitizeAnalyticsProperties({
+    feature: 'vin_decode', result: 'success', provider: 'nhtsa',
+    item_category: 'vehicle', tracking_mode: 'miles', source_class: 'official',
+    vin: '1M8GDM9AXKP042788', serial_number: 'private', notes: 'private',
+    item_id: 'private', project_id: 'private', cost: 100, mileage: 5000,
+  }), {
+    feature: 'vin_decode', result: 'success', provider: 'nhtsa',
+    item_category: 'vehicle', tracking_mode: 'miles', source_class: 'official',
+  })
 })
 
 test('native campaign attribution accepts only bounded UTM and referral fields', () => {
