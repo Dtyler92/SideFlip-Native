@@ -7,26 +7,35 @@ import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffIt
 import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, selectItemType, validateItemDraft } from '../domain/myStuff/itemModel'
 import {
   completeMyStuffMaintenance,
-  createMyStuffSchedule,
+  createMyStuffMaintenanceDefinitionV2,
   deleteMyStuffItem,
   deleteMyStuffSchedule,
   getMyStuffItem,
   getMyStuffItemV2,
   recordMyStuffReadingV2,
+  recordMyStuffServiceOccurrenceV2,
   setMyStuffItemArchivedV2,
+  updateMyStuffMaintenanceDefinitionV2,
   updateMyStuffItemV2,
 } from '../lib/myStuffClient'
-import { buildRecordMyStuffReadingV2WirePayload, buildUpdateMyStuffItemV2WirePayload } from '../lib/myStuffPayloads'
 import {
-  addCalendarDays,
+  buildCreateMaintenanceDefinitionV2WirePayload,
+  buildRecordMyStuffReadingV2WirePayload,
+  buildRecordServiceOccurrenceV2WirePayload,
+  buildUpdateMaintenanceDefinitionV2WirePayload,
+  buildUpdateMyStuffItemV2WirePayload,
+} from '../lib/myStuffPayloads'
+import { runMutationThenRefresh } from '../lib/mutationLifecycle'
+import {
   canCompleteMaintenanceSchedule,
+  canCompleteMaintenanceDefinition,
   createMutationAttemptState,
   createMutationId,
   dueStateLabel,
   filterActiveDueStates,
+  getMaintenanceDefinitionAxes,
   getScheduleCurrentReading,
   getScheduleDueState,
-  getScheduleTrackingModes,
   parseNonNegativeNumber,
   parsePositiveNumber,
   mutationIdForPayload,
@@ -37,8 +46,9 @@ import {
 } from './myStuffModel'
 
 const ACCENT = '#C8402F'
-const EMPTY_SCHEDULE = { name:'', mode:'mileage', interval:'', lastReading:'', lastDate:'' }
-const EMPTY_COMPLETION = { completedAt:todayDateInput(), reading:'', cost:'', notes:'' }
+const EMPTY_DEFINITION = { name:'', description:'', dueSemantics:'whichever_first', intervals:{miles:'',hours:'',cycles:''}, calendarMonths:'' }
+const EMPTY_COMPLETION = { completedAt:todayDateInput(), readings:{miles:'',hours:'',cycles:''}, notes:'' }
+const EMPTY_LEGACY_COMPLETION = { completedAt:todayDateInput(), reading:'', cost:'', notes:'' }
 const EMPTY_USAGE = { type:'miles', value:'', recordedOn:todayDateInput(), correcting:false, correctionReason:'' }
 const AXES = [{key:'miles',label:'Miles'},{key:'hours',label:'Hours'},{key:'cycles',label:'Cycles'}]
 
@@ -48,6 +58,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [item,setItem]=useState(null)
   const [schedules,setSchedules]=useState([])
   const [logs,setLogs]=useState([])
+  const [occurrences,setOccurrences]=useState([])
   const [readings,setReadings]=useState([])
   const [definitions,setDefinitions]=useState([])
   const [dueStates,setDueStates]=useState([])
@@ -60,15 +71,20 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [editing,setEditing]=useState(false)
   const [edit,setEdit]=useState({})
   const [validationErrors,setValidationErrors]=useState({})
-  const [showSchedule,setShowSchedule]=useState(false)
-  const [schedule,setSchedule]=useState(EMPTY_SCHEDULE)
+  const [showDefinition,setShowDefinition]=useState(false)
+  const [editingDefinitionId,setEditingDefinitionId]=useState(null)
+  const [definition,setDefinition]=useState(EMPTY_DEFINITION)
   const [completingId,setCompletingId]=useState(null)
   const [completion,setCompletion]=useState(EMPTY_COMPLETION)
+  const [legacyCompletingId,setLegacyCompletingId]=useState(null)
+  const [legacyCompletion,setLegacyCompletion]=useState(EMPTY_LEGACY_COMPLETION)
   const requestGeneration=useRef(0)
-  const completionMutationId=useRef(null)
+  const serviceMutationAttempt=useRef(createMutationAttemptState())
   const completionInFlight=useRef(false)
-  const scheduleMutationId=useRef(null)
-  const scheduleInFlight=useRef(false)
+  const legacyCompletionMutationAttempt=useRef(createMutationAttemptState())
+  const legacyCompletionInFlight=useRef(false)
+  const definitionMutationAttempt=useRef(createMutationAttemptState())
+  const definitionInFlight=useRef(false)
   const itemMutationAttempt=useRef(createMutationAttemptState())
   const itemInFlight=useRef(false)
   const usageMutationAttempt=useRef(createMutationAttemptState())
@@ -76,7 +92,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const archiveMutationId=useRef(null)
   const archiveInFlight=useRef(false)
 
-  const load=useCallback(async({quiet=false}={})=>{
+  const load=useCallback(async({quiet=false,throwOnError=false}={})=>{
     if(!user?.id||!itemId)return
     const generation=++requestGeneration.current
     if(!quiet)setLoading(true)
@@ -85,13 +101,16 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       const [legacy,result]=await Promise.all([getMyStuffItem(itemId,user.id),getMyStuffItemV2(itemId,user.id)])
       if(generation!==requestGeneration.current)return
       setItem(result.item);setSchedules(legacy.schedules);setLogs(legacy.logs)
-      setReadings(result.readings);setDefinitions(result.definitions);setDueStates(filterActiveDueStates(result.dueStates,result.item))
-    }catch(nextError){if(generation===requestGeneration.current)setError(nextError.message||'Could not load this item.')}
+      setReadings(result.readings);setDefinitions(result.definitions);setOccurrences(result.occurrences);setDueStates(filterActiveDueStates(result.dueStates,result.item))
+    }catch(nextError){
+      if(generation===requestGeneration.current)setError(nextError.message||'Could not load this item.')
+      if(throwOnError)throw nextError
+    }
     finally{if(generation===requestGeneration.current){setLoading(false);setRefreshing(false)}}
   },[itemId,user?.id])
   useFocusEffect(useCallback(()=>{
     load()
-    return()=>{requestGeneration.current+=1;completionInFlight.current=false}
+    return()=>{requestGeneration.current+=1;completionInFlight.current=false;legacyCompletionInFlight.current=false}
   },[load]))
 
   useEffect(()=>{
@@ -102,9 +121,16 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   function setEditValue(key,value){setValidationErrors({});setEdit(current=>({...current,[key]:value}))}
   function setExactType(value){setValidationErrors({});setEdit(current=>selectItemType(current,value))}
   function toggleEditMeasurement(axis){setValidationErrors({});setEdit(current=>({...current,measurements:current.measurements.includes(axis)?current.measurements.filter(value=>value!==axis):[...current.measurements,axis]}))}
-  function setScheduleValue(key,value){setSchedule(current=>({...current,[key]:value}))}
+  function setDefinitionValue(key,value){setDefinition(current=>({...current,[key]:value}))}
+  function setDefinitionInterval(axis,value){setDefinition(current=>({...current,intervals:{...current.intervals,[axis]:value}}))}
   function setCompletionValue(key,value){setCompletion(current=>({...current,[key]:value}))}
+  function setCompletionReading(axis,value){setCompletion(current=>({...current,readings:{...current.readings,[axis]:value}}))}
+  function setLegacyCompletionValue(key,value){setLegacyCompletion(current=>({...current,[key]:value}))}
   function setUsageValue(key,value){setUsage(current=>({...current,[key]:value}))}
+
+  function reportSavedRefreshFailure(title,nextError){
+    Alert.alert(title,`Your change was saved, but the latest item data could not be loaded. The existing data is still shown; pull to refresh.${nextError?.message?`\n\n${nextError.message}`:''}`)
+  }
 
   async function saveItem(){
     if(itemInFlight.current)return
@@ -126,72 +152,160 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     finally{itemInFlight.current=false;setSaving(false)}
   }
 
-  async function addSchedule(){
-    if(scheduleInFlight.current)return
-    if(!schedule.name.trim())return Alert.alert('Maintenance name required','Name this maintenance task.')
-    if(!getScheduleTrackingModes(item).includes(schedule.mode))return Alert.alert('Choose an active measurement','Enable this measurement in Item details before adding a maintenance schedule.')
-    const interval=parsePositiveNumber(schedule.interval)
-    if(!interval.ok)return Alert.alert('Check interval','Interval must be a finite number greater than zero.')
-    let lastCompletedValue=null,lastCompletedAt=null,nextDueValue=null,nextDueAt=null
-    if(schedule.mode==='calendar'){
-      if(!validateCalendarDate(schedule.lastDate))return Alert.alert('Check service date','Use a valid date in YYYY-MM-DD format.')
-      if(!Number.isInteger(interval.value)||interval.value>36500)return Alert.alert('Check interval','Calendar interval must be a whole number from 1 to 36,500 days.')
-      lastCompletedAt=schedule.lastDate
-      nextDueAt=addCalendarDays(lastCompletedAt,interval.value)
-      if(!nextDueAt)return Alert.alert('Check schedule','The next due date must remain within the supported 1900–2200 range.')
-    }else{
-      const reading=parseNonNegativeNumber(schedule.lastReading)
-      if(!reading.ok)return Alert.alert('Check reading','Last service reading must be a finite number of zero or more.')
-      lastCompletedValue=reading.value
-      nextDueValue=reading.value+interval.value
-    }
-    scheduleInFlight.current=true
-    setSaving(true)
-    try{
-      const mutationId=scheduleMutationId.current||(scheduleMutationId.current=createMutationId())
-      await createMyStuffSchedule({itemId:item.id,name:schedule.name.trim(),trackingType:schedule.mode,intervalValue:interval.value,lastCompletedAt,lastCompletedValue,mutationId})
-      scheduleMutationId.current=null;setSchedule(EMPTY_SCHEDULE);setShowSchedule(false);await load({quiet:true})
-    }catch(nextError){Alert.alert('Could not add maintenance',nextError.message||'Please try again.')}
-    finally{scheduleInFlight.current=false;setSaving(false)}
+  function definitionUsageAxes(value) {
+    return getMaintenanceDefinitionAxes(value).filter(axis=>axis!=='calendar')
   }
 
-  function toggleScheduleForm(){
-    if(showSchedule){scheduleMutationId.current=null;setShowSchedule(false);return}
-    const trackingModes=getScheduleTrackingModes(item)
-    scheduleMutationId.current=createMutationId();setSchedule(current=>trackingModes.includes(current.mode)?current:{...current,mode:trackingModes[0]});setShowSchedule(true)
+  function openDefinitionEditor(value=null) {
+    resetMutationAttemptState(definitionMutationAttempt.current)
+    setEditingDefinitionId(value?.id||null)
+    setDefinition(value?{
+      name:value.name||'',description:value.description||'',dueSemantics:value.due_semantics||'whichever_first',
+      intervals:{
+        miles:value.normal_interval_miles==null?'':String(value.normal_interval_miles),
+        hours:value.normal_interval_hours==null?'':String(value.normal_interval_hours),
+        cycles:value.normal_interval_cycles==null?'':String(value.normal_interval_cycles),
+      },
+      calendarMonths:value.normal_calendar_months==null?'':String(value.normal_calendar_months),
+    }:{...EMPTY_DEFINITION,intervals:{...EMPTY_DEFINITION.intervals}})
+    setShowDefinition(true)
+  }
+
+  function cancelDefinitionEditor(){resetMutationAttemptState(definitionMutationAttempt.current);setShowDefinition(false);setEditingDefinitionId(null)}
+
+  async function saveDefinition(){
+    if(definitionInFlight.current)return
+    if(!definition.name.trim())return Alert.alert('Maintenance name required','Name this maintenance task.')
+    const existing=definitions.find(value=>value.id===editingDefinitionId)
+    const allowedAxes=new Set([...(item.measurements||[]),...definitionUsageAxes(existing||{})])
+    const intervals={}
+    let hasCadence=false
+    for(const axis of ['miles','hours','cycles']){
+      if(!allowedAxes.has(axis))continue
+      const raw=definition.intervals[axis]
+      if(String(raw).trim()===''){intervals[axis]=null;continue}
+      const parsed=parsePositiveNumber(raw)
+      if(!parsed.ok||(axis==='cycles'&&!Number.isInteger(parsed.value)))return Alert.alert('Check interval',`${axis==='cycles'?'Cycles':'Usage'} interval must be ${axis==='cycles'?'a whole number':'a finite number'} greater than zero.`)
+      intervals[axis]=parsed.value;hasCadence=true
+    }
+    let calendarMonths=null
+    if(String(definition.calendarMonths).trim()!==''){
+      const parsed=parsePositiveNumber(definition.calendarMonths)
+      if(!parsed.ok||!Number.isInteger(parsed.value)||parsed.value>1200)return Alert.alert('Check calendar interval','Calendar months must be a whole number from 1 to 1,200.')
+      calendarMonths=parsed.value;hasCadence=true
+    }
+    if(!hasCadence)return Alert.alert('Maintenance interval required','Add a calendar interval or at least one active usage interval.')
+    const values={definitionId:editingDefinitionId,itemId:item.id,name:definition.name,description:definition.description,dueSemantics:definition.dueSemantics,activeProfile:item.usage_profile||'normal',cadenceAnchor:'last_completion',intervals,calendarMonths}
+    const wirePayload=editingDefinitionId?buildUpdateMaintenanceDefinitionV2WirePayload(values):buildCreateMaintenanceDefinitionV2WirePayload(values)
+    const mutationId=mutationIdForPayload(definitionMutationAttempt.current,wirePayload)
+    definitionInFlight.current=true;setSaving(true)
+    try{
+      await runMutationThenRefresh({
+        mutate:()=>editingDefinitionId?updateMyStuffMaintenanceDefinitionV2(wirePayload,mutationId):createMyStuffMaintenanceDefinitionV2(wirePayload,mutationId),
+        onMutationSuccess:()=>{resetMutationAttemptState(definitionMutationAttempt.current);setShowDefinition(false);setEditingDefinitionId(null);setDefinition({...EMPTY_DEFINITION,intervals:{...EMPTY_DEFINITION.intervals}})},
+        refresh:()=>load({quiet:true,throwOnError:true}),
+        onMutationError:nextError=>Alert.alert('Could not save maintenance task',nextError.message||'Please try again.'),
+        onRefreshError:nextError=>reportSavedRefreshFailure('Maintenance task saved, but refresh failed',nextError),
+      })
+    }
+    finally{definitionInFlight.current=false;setSaving(false)}
+  }
+
+  function archiveDefinition(value){
+    Alert.alert('Archive this maintenance task?','It will stop affecting due status. Its service history stays visible.',[
+      {text:'Cancel',style:'cancel'},
+      {text:'Archive',onPress:async()=>{
+        if(definitionInFlight.current)return
+        const wirePayload=buildUpdateMaintenanceDefinitionV2WirePayload({definitionId:value.id,enabled:false})
+        const mutationId=mutationIdForPayload(definitionMutationAttempt.current,wirePayload)
+        definitionInFlight.current=true;setSaving(true)
+        try{await runMutationThenRefresh({
+          mutate:()=>updateMyStuffMaintenanceDefinitionV2(wirePayload,mutationId),
+          onMutationSuccess:()=>{resetMutationAttemptState(definitionMutationAttempt.current);setDefinitions(current=>current.map(entry=>entry.id===value.id?{...entry,enabled:false}:entry));setDueStates(current=>current.filter(entry=>entry.definition_id!==value.id))},
+          refresh:()=>load({quiet:true,throwOnError:true}),
+          onMutationError:nextError=>Alert.alert('Could not archive maintenance task',nextError.message||'Please try again.'),
+          onRefreshError:nextError=>reportSavedRefreshFailure('Maintenance task archived, but refresh failed',nextError),
+        })}
+        finally{definitionInFlight.current=false;setSaving(false)}
+      }},
+    ])
   }
 
   function openCompletion(value){
-    const reading=getScheduleCurrentReading(value,item)
-    setCompletion({...EMPTY_COMPLETION,completedAt:todayDateInput(),reading:reading==null?'':String(reading)})
-    completionMutationId.current=createMutationId()
+    if(!canCompleteMaintenanceDefinition(value,item))return Alert.alert('Measurement no longer active','Re-enable every measurement used by this task before recording service.')
+    const nextReadings={miles:'',hours:'',cycles:''}
+    for(const axis of definitionUsageAxes(value))nextReadings[axis]=item.currentUsage[axis]==null?'':String(item.currentUsage[axis])
+    setCompletion({...EMPTY_COMPLETION,completedAt:todayDateInput(),readings:nextReadings})
+    resetMutationAttemptState(serviceMutationAttempt.current)
     setCompletingId(value.id)
   }
 
-  function cancelCompletion(){completionMutationId.current=null;completionInFlight.current=false;setCompletingId(null)}
+  function cancelCompletion(){resetMutationAttemptState(serviceMutationAttempt.current);completionInFlight.current=false;setCompletingId(null)}
 
-  async function finishMaintenance(scheduleValue){
+  async function finishMaintenance(definitionValue){
     if(completionInFlight.current)return
-    if(!canCompleteMaintenanceSchedule(scheduleValue,item))return Alert.alert('Measurement no longer active','Enable this measurement in Item details before completing this maintenance schedule.')
+    if(!definitionValue.enabled||!canCompleteMaintenanceDefinition(definitionValue,item))return Alert.alert('Task cannot be completed','Archived tasks and tasks using disabled measurements are read-only.')
     if(!validateCalendarDate(completion.completedAt))return Alert.alert('Check completion date','Use a valid date in YYYY-MM-DD format.')
-    const cost=parseNonNegativeNumber(completion.cost,{optional:true})
+    const serviceReadings={}
+    const configuredAxes=definitionUsageAxes(definitionValue)
+    for(const axis of configuredAxes){
+      const parsed=parseNonNegativeNumber(completion.readings[axis])
+      if(!parsed.ok||(axis==='cycles'&&!Number.isInteger(parsed.value)))return Alert.alert('Check reading',`${axis==='cycles'?'Cycles':'Service reading'} must be ${axis==='cycles'?'a whole number':'a finite number'} of zero or more.`)
+      serviceReadings[axis]=parsed.value
+    }
+    const wirePayload=buildRecordServiceOccurrenceV2WirePayload({itemId:item.id,definitionId:definitionValue.id,completedAt:`${completion.completedAt}T12:00:00.000Z`,readings:serviceReadings,configuredAxes,notes:completion.notes})
+    const mutationId=mutationIdForPayload(serviceMutationAttempt.current,wirePayload)
+    completionInFlight.current=true;setSaving(true)
+    try{
+      await runMutationThenRefresh({
+        mutate:()=>recordMyStuffServiceOccurrenceV2(wirePayload,mutationId),
+        onMutationSuccess:()=>{resetMutationAttemptState(serviceMutationAttempt.current);setCompletingId(null);setCompletion({...EMPTY_COMPLETION,completedAt:todayDateInput(),readings:{...EMPTY_COMPLETION.readings}})},
+        refresh:()=>load({quiet:true,throwOnError:true}),
+        onMutationError:nextError=>Alert.alert('Could not record service',nextError.message||'Please try again. Service readings cannot move backward.'),
+        onRefreshError:nextError=>reportSavedRefreshFailure('Service recorded, but refresh failed',nextError),
+      })
+    }
+    finally{completionInFlight.current=false;setSaving(false)}
+  }
+
+  function openLegacyCompletion(value){
+    if(!canCompleteMaintenanceSchedule(value,item))return Alert.alert('Measurement no longer active','Re-enable this schedule measurement before completing it.')
+    const reading=getScheduleCurrentReading(value,item)
+    setLegacyCompletion({...EMPTY_LEGACY_COMPLETION,completedAt:todayDateInput(),reading:reading==null?'':String(reading)})
+    resetMutationAttemptState(legacyCompletionMutationAttempt.current)
+    setLegacyCompletingId(value.id)
+  }
+
+  function cancelLegacyCompletion(){resetMutationAttemptState(legacyCompletionMutationAttempt.current);legacyCompletionInFlight.current=false;setLegacyCompletingId(null)}
+
+  async function finishLegacyMaintenance(scheduleValue){
+    if(legacyCompletionInFlight.current)return
+    if(!canCompleteMaintenanceSchedule(scheduleValue,item))return Alert.alert('Measurement no longer active','Enable this measurement in Item details before completing this legacy maintenance schedule.')
+    if(!validateCalendarDate(legacyCompletion.completedAt))return Alert.alert('Check completion date','Use a valid date in YYYY-MM-DD format.')
+    const cost=parseNonNegativeNumber(legacyCompletion.cost,{optional:true})
     if(!cost.ok)return Alert.alert('Check cost','Cost must be a finite number of zero or more.')
     let reading=null
     if(scheduleValue.tracking_type!=='calendar'){
-      const parsed=parseNonNegativeNumber(completion.reading)
+      const parsed=parseNonNegativeNumber(legacyCompletion.reading)
       if(!parsed.ok)return Alert.alert('Check reading','Completion reading must be a finite number of zero or more.')
       reading=parsed.value
     }
-    const validationError=validateMaintenanceCompletion(scheduleValue,completion.completedAt,reading)
+    const validationError=validateMaintenanceCompletion(scheduleValue,legacyCompletion.completedAt,reading)
     if(validationError)return Alert.alert('Check completion',validationError)
-    completionInFlight.current=true
-    setSaving(true)
+    const canonicalPayload={scheduleId:scheduleValue.id,completedAt:legacyCompletion.completedAt,reading,cost:cost.value,notes:legacyCompletion.notes.trim()||null}
+    const mutationId=mutationIdForPayload(legacyCompletionMutationAttempt.current,canonicalPayload)
+    const legacyPayload={...canonicalPayload,mutationId}
+    legacyCompletionInFlight.current=true;setSaving(true)
     try{
-      const mutationId=completionMutationId.current||(completionMutationId.current=createMutationId())
-      await completeMyStuffMaintenance({scheduleId:scheduleValue.id,completedAt:completion.completedAt,reading,cost:cost.value,notes:completion.notes.trim()||null,mutationId})
-      completionMutationId.current=null;setCompletingId(null);await load({quiet:true})
-    }catch(nextError){Alert.alert('Could not complete maintenance',nextError.message||'Please try again.')}
-    finally{completionInFlight.current=false;setSaving(false)}
+      await runMutationThenRefresh({
+        mutate:()=>completeMyStuffMaintenance(legacyPayload),
+        onMutationSuccess:()=>{resetMutationAttemptState(legacyCompletionMutationAttempt.current);setLegacyCompletingId(null);setLegacyCompletion({...EMPTY_LEGACY_COMPLETION,completedAt:todayDateInput()})},
+        refresh:()=>load({quiet:true,throwOnError:true}),
+        onMutationError:nextError=>Alert.alert('Could not complete maintenance',nextError.message||'Please try again.'),
+        onRefreshError:nextError=>reportSavedRefreshFailure('Maintenance completed, but refresh failed',nextError),
+      })
+    }
+    finally{legacyCompletionInFlight.current=false;setSaving(false)}
   }
 
   async function saveUsage(){
@@ -209,9 +323,14 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       const payload={itemId:item.id,readingType:usage.type,value:parsed.value,recordedAt:`${usage.recordedOn}T12:00:00.000Z`,correctsReadingId:usage.correcting?latest.id:null,correctionReason:usage.correcting?usage.correctionReason.trim():null}
       const wirePayload=buildRecordMyStuffReadingV2WirePayload(payload)
       const mutationId=mutationIdForPayload(usageMutationAttempt.current,wirePayload)
-      await recordMyStuffReadingV2(wirePayload,mutationId)
-      resetMutationAttemptState(usageMutationAttempt.current);setUsage({...EMPTY_USAGE,recordedOn:todayDateInput()});setShowUsage(false);await load({quiet:true})
-    }catch(nextError){Alert.alert('Could not save reading',nextError.message||'Please try again. Use correction mode if the effective reading needs to move backward.')}
+      await runMutationThenRefresh({
+        mutate:()=>recordMyStuffReadingV2(wirePayload,mutationId),
+        onMutationSuccess:()=>{resetMutationAttemptState(usageMutationAttempt.current);setUsage({...EMPTY_USAGE,recordedOn:todayDateInput()});setShowUsage(false)},
+        refresh:()=>load({quiet:true,throwOnError:true}),
+        onMutationError:nextError=>Alert.alert('Could not save reading',nextError.message||'Please try again. Use correction mode if the effective reading needs to move backward.'),
+        onRefreshError:nextError=>reportSavedRefreshFailure('Reading saved, but refresh failed',nextError),
+      })
+    }
     finally{usageInFlight.current=false;setSaving(false)}
   }
 
@@ -233,7 +352,13 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   }
 
   function confirmDeleteItem(){Alert.alert('Delete this item?','This permanently deletes its schedules and service history.',[{text:'Cancel',style:'cancel'},{text:'Delete Item',style:'destructive',onPress:async()=>{setSaving(true);try{await deleteMyStuffItem(item.id,user.id);navigation.goBack()}catch(nextError){Alert.alert('Could not delete item',nextError.message)}finally{setSaving(false)}}}])}
-  function confirmDeleteSchedule(value){Alert.alert('Delete this schedule?','Existing service history remains associated with this item.',[{text:'Cancel',style:'cancel'},{text:'Delete Schedule',style:'destructive',onPress:async()=>{try{await deleteMyStuffSchedule(value.id,user.id);await load({quiet:true})}catch(nextError){Alert.alert('Could not delete schedule',nextError.message)}}}])}
+  function confirmDeleteSchedule(value){Alert.alert('Delete this legacy schedule?','Existing service history remains associated with this item.',[{text:'Cancel',style:'cancel'},{text:'Delete Schedule',style:'destructive',onPress:async()=>{await runMutationThenRefresh({
+    mutate:()=>deleteMyStuffSchedule(value.id,user.id),
+    onMutationSuccess:()=>setSchedules(current=>current.filter(entry=>entry.id!==value.id)),
+    refresh:()=>load({quiet:true,throwOnError:true}),
+    onMutationError:nextError=>Alert.alert('Could not delete schedule',nextError.message||'Please try again.'),
+    onRefreshError:nextError=>reportSavedRefreshFailure('Schedule deleted, but refresh failed',nextError),
+  })}}])}
 
   if(loading)return <View style={s.center}><ActivityIndicator size="large" color={ACCENT}/></View>
   if(!item)return <View style={s.center}><Text style={s.errorText}>{error||'Item not found.'}</Text><TouchableOpacity onPress={()=>navigation.goBack()}><Text style={s.link}>Go Back</Text></TouchableOpacity></View>
@@ -291,35 +416,69 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         return <View key={value.definition_id} style={s.card}><View style={s.between}><Text style={s.scheduleName}>{definition?.name||'Maintenance'}</Text><View style={[s.pill,s[`pill_${value.due_status}`]]}><Text style={s.pillText}>{dueStateSummaryLabel(value.due_status)}</Text></View></View><Text style={s.muted}>{dueStateDescription(value)}</Text></View>
       })}
 
-      <View style={s.between}><Text style={s.pageSection}>Maintenance schedules</Text><TouchableOpacity onPress={toggleScheduleForm} accessibilityRole="button" accessibilityLabel={showSchedule?'Cancel adding maintenance schedule':'Add maintenance schedule'}><Text style={s.link}>{showSchedule?'Cancel':'+ Add'}</Text></TouchableOpacity></View>
-      {showSchedule&&<View style={s.card}>
-        <Field label="Maintenance name *" value={schedule.name} onChangeText={value=>setScheduleValue('name',value)} placeholder="e.g. Oil change"/>
-        <Text style={s.label}>Track by</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Maintenance tracking mode">{getScheduleTrackingModes(item).map(mode=><Choice key={mode} label={mode} selected={schedule.mode===mode} onPress={()=>setScheduleValue('mode',mode)}/>)}</View>
-        <Field label={schedule.mode==='calendar'?'Interval in days *':`Interval in ${schedule.mode} *`} value={schedule.interval} onChangeText={value=>setScheduleValue('interval',value)} keyboardType="decimal-pad"/>
-        {schedule.mode==='calendar'?<Field label="Last service date *" value={schedule.lastDate} onChangeText={value=>setScheduleValue('lastDate',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>:<Field label={`Last service ${schedule.mode} *`} value={schedule.lastReading} onChangeText={value=>setScheduleValue('lastReading',value)} keyboardType="decimal-pad"/>}
-        <Button label={saving?'Saving…':'Add Schedule'} onPress={addSchedule} disabled={saving}/>
+      <View style={s.between}><Text style={s.pageSection}>Maintenance tasks</Text><TouchableOpacity onPress={()=>showDefinition?cancelDefinitionEditor():openDefinitionEditor()} accessibilityRole="button" accessibilityLabel={showDefinition?'Cancel maintenance task':'Add maintenance task'}><Text style={s.link}>{showDefinition?'Cancel':'+ Add'}</Text></TouchableOpacity></View>
+      {showDefinition&&<View style={s.card}>
+        <Field label="Maintenance name *" value={definition.name} onChangeText={value=>setDefinitionValue('name',value)} placeholder="e.g. Oil change"/>
+        <Field label="Description (optional)" value={definition.description} onChangeText={value=>setDefinitionValue('description',value)} multiline/>
+        <Text style={s.label}>Combined due behavior</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Combined maintenance due behavior">
+          <Choice label="Whichever first" selected={definition.dueSemantics==='whichever_first'} onPress={()=>setDefinitionValue('dueSemantics','whichever_first')}/>
+          <Choice label="All intervals" selected={definition.dueSemantics==='all'} onPress={()=>setDefinitionValue('dueSemantics','all')}/>
+        </View>
+        <Field label="Calendar interval in months" value={definition.calendarMonths} onChangeText={value=>setDefinitionValue('calendarMonths',value)} keyboardType="number-pad"/>
+        {AXES.filter(axis=>item.measurements.includes(axis.key)||String(definition.intervals[axis.key]||'').trim()!=='').map(axis=><Field key={axis.key} label={`${axis.label} interval${item.measurements.includes(axis.key)?'':' (inactive, retained)'}`} value={definition.intervals[axis.key]} onChangeText={value=>setDefinitionInterval(axis.key,value)} keyboardType="decimal-pad" editable={item.measurements.includes(axis.key)}/>) }
+        <Text style={s.muted}>You can combine calendar and usage intervals. Only measurements enabled on this item can be added to new tasks.</Text>
+        <Button label={saving?'Saving…':editingDefinitionId?'Save Task':'Add Task'} onPress={saveDefinition} disabled={saving}/>
       </View>}
-      {schedules.length===0?<View style={s.empty}><Text style={s.muted}>No maintenance schedules yet.</Text></View>:schedules.map(value=>{
-        const state=getScheduleDueState(value,item)
-        const canComplete=canCompleteMaintenanceSchedule(value,item)
+      {definitions.length===0?<View style={s.empty}><Text style={s.muted}>No maintenance tasks yet.</Text></View>:definitions.map(value=>{
+        const due=dueStates.find(state=>state.definition_id===value.id)
+        const canComplete=value.enabled&&canCompleteMaintenanceDefinition(value,item)
         return <View key={value.id} style={s.card}>
-          <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>{value.name}</Text><Text style={s.muted}>{scheduleDescription(value)}</Text></View><View style={[s.pill,s[`pill_${state}`]]}><Text style={s.pillText}>{dueStateLabel(state)}</Text></View></View>
+          <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>{value.name}</Text><Text style={s.muted}>{definitionDescription(value)}</Text></View><View style={[s.pill,s[`pill_${due?.due_status}`]]}><Text style={s.pillText}>{value.enabled?dueStateSummaryLabel(due?.due_status):'Archived'}</Text></View></View>
+          {!!value.description&&<Text style={s.notes}>{value.description}</Text>}
+          {!canComplete&&value.enabled&&<Text style={s.warning}>Read-only until all task measurements are enabled on this item.</Text>}
           {completingId===value.id&&canComplete?<View style={s.completionBox}>
-            <Field label="Completed on *" value={completion.completedAt} onChangeText={value=>setCompletionValue('completedAt',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
-            {value.tracking_type!=='calendar'&&<Field label={`${value.tracking_type} reading *`} value={completion.reading} onChangeText={next=>setCompletionValue('reading',next)} keyboardType="decimal-pad"/>}
-            <Field label="Cost (optional)" value={completion.cost} onChangeText={next=>setCompletionValue('cost',next)} keyboardType="decimal-pad"/>
+            <Field label="Completed on *" value={completion.completedAt} onChangeText={next=>setCompletionValue('completedAt',next)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
+            {definitionUsageAxes(value).map(axis=><Field key={axis} label={`${axis} reading *`} value={completion.readings[axis]} onChangeText={next=>setCompletionReading(axis,next)} keyboardType="decimal-pad"/>)}
             <Field label="Notes (optional)" value={completion.notes} onChangeText={next=>setCompletionValue('notes',next)} multiline/>
-            <Button label={saving?'Saving…':'Complete Maintenance'} onPress={()=>finishMaintenance(value)} disabled={saving}/><TouchableOpacity onPress={cancelCompletion} accessibilityRole="button" accessibilityLabel="Cancel maintenance completion"><Text style={s.cancelLink}>Cancel</Text></TouchableOpacity>
-          </View>:<View style={s.actions}>{canComplete&&<TouchableOpacity style={s.smallButton} onPress={()=>openCompletion(value)} accessibilityRole="button" accessibilityLabel={`Mark ${value.name} complete`}><Text style={s.smallButtonText}>Mark Complete</Text></TouchableOpacity>}<TouchableOpacity onPress={()=>confirmDeleteSchedule(value)} accessibilityRole="button" accessibilityLabel={`Delete ${value.name} schedule`}><Text style={s.deleteLink}>Delete</Text></TouchableOpacity></View>}
+            <Button label={saving?'Saving…':'Record Service'} onPress={()=>finishMaintenance(value)} disabled={saving}/><TouchableOpacity onPress={cancelCompletion} accessibilityRole="button" accessibilityLabel="Cancel service completion"><Text style={s.cancelLink}>Cancel</Text></TouchableOpacity>
+          </View>:<View style={s.actions}>
+            {canComplete&&<TouchableOpacity style={s.smallButton} onPress={()=>openCompletion(value)} accessibilityRole="button" accessibilityLabel={`Record ${value.name} service`}><Text style={s.smallButtonText}>Record Service</Text></TouchableOpacity>}
+            {value.provenance_type==='manual'&&value.enabled&&<TouchableOpacity onPress={()=>openDefinitionEditor(value)} accessibilityRole="button" accessibilityLabel={`Edit ${value.name} task`}><Text style={s.link}>Edit</Text></TouchableOpacity>}
+            {value.provenance_type==='manual'&&value.enabled&&<TouchableOpacity onPress={()=>archiveDefinition(value)} accessibilityRole="button" accessibilityLabel={`Archive ${value.name} task`}><Text style={s.deleteLink}>Archive</Text></TouchableOpacity>}
+          </View>}
         </View>
       })}
 
       <Text style={s.pageSection}>Service history</Text>
-      {logs.length===0?<View style={s.empty}><Text style={s.muted}>Completed maintenance will appear here.</Text></View>:logs.map(log=>{
+      {occurrences.length===0?<View style={s.empty}><Text style={s.muted}>Recorded V2 service will appear here.</Text></View>:occurrences.map(occurrence=>{
+        const readingsText=serviceReadingDescription(occurrence)
+        return <View key={occurrence.id} style={s.historyRow}><View style={s.flex}><Text style={s.historyName}>{occurrence.service_name}</Text><Text style={s.muted}>{String(occurrence.completed_at||'').slice(0,10)}{readingsText?` · ${readingsText}`:''}</Text>{!!occurrence.latest_revision?.notes&&<Text style={s.notes}>{occurrence.latest_revision.notes}</Text>}<Text style={s.eyebrow}>{occurrence.scheduled?'Scheduled task':'Unscheduled service'} · immutable record</Text></View></View>
+      })}
+
+      <Text style={s.pageSection}>Legacy schedules</Text>
+      {schedules.length===0?<View style={s.empty}><Text style={s.muted}>No legacy maintenance schedules.</Text></View>:schedules.map(value=>{
+        const state=getScheduleDueState(value,item)
+        const canComplete=canCompleteMaintenanceSchedule(value,item)
+        return <View key={value.id} style={s.card}>
+          <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>{value.name}</Text><Text style={s.muted}>{scheduleDescription(value)}</Text></View><View style={[s.pill,s[`pill_${state}`]]}><Text style={s.pillText}>{dueStateLabel(state)}</Text></View></View>
+          {!canComplete&&value.tracking_type!=='calendar'&&<Text style={s.warning}>Legacy schedule retained as read-only because its measurement is no longer active.</Text>}
+          {legacyCompletingId===value.id&&canComplete?<View style={s.completionBox}>
+            <Field label="Completed on *" value={legacyCompletion.completedAt} onChangeText={next=>setLegacyCompletionValue('completedAt',next)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
+            {value.tracking_type!=='calendar'&&<Field label={`${value.tracking_type} reading *`} value={legacyCompletion.reading} onChangeText={next=>setLegacyCompletionValue('reading',next)} keyboardType="decimal-pad"/>}
+            <Field label="Cost (optional)" value={legacyCompletion.cost} onChangeText={next=>setLegacyCompletionValue('cost',next)} keyboardType="decimal-pad"/>
+            <Field label="Notes (optional)" value={legacyCompletion.notes} onChangeText={next=>setLegacyCompletionValue('notes',next)} multiline/>
+            <Button label={saving?'Saving…':'Complete Maintenance'} onPress={()=>finishLegacyMaintenance(value)} disabled={saving}/><TouchableOpacity onPress={cancelLegacyCompletion} accessibilityRole="button" accessibilityLabel="Cancel legacy maintenance completion"><Text style={s.cancelLink}>Cancel</Text></TouchableOpacity>
+          </View>:<View style={s.actions}>{canComplete&&<TouchableOpacity style={s.smallButton} onPress={()=>openLegacyCompletion(value)} accessibilityRole="button" accessibilityLabel={`Mark legacy ${value.name} complete`}><Text style={s.smallButtonText}>Mark Complete</Text></TouchableOpacity>}<TouchableOpacity onPress={()=>confirmDeleteSchedule(value)} accessibilityRole="button" accessibilityLabel={`Delete legacy ${value.name} schedule`}><Text style={s.deleteLink}>Delete</Text></TouchableOpacity></View>}
+          <Text style={s.eyebrow}>Legacy schedule</Text>
+        </View>
+      })}
+
+      <Text style={s.pageSection}>Legacy service history (read-only)</Text>
+      {logs.length===0?<View style={s.empty}><Text style={s.muted}>No legacy service history.</Text></View>:logs.map(log=>{
         const linked=schedules.find(value=>value.id===log.schedule_id)
         const logReading=log.mileage!=null?log.mileage:log.hours!=null?log.hours:null
         const readingSuffix=log.mileage!=null?' mi':log.hours!=null?' hr':''
-        return <View key={log.id} style={s.historyRow}><View style={s.flex}><Text style={s.historyName}>{log.name||linked?.name||'Maintenance'}</Text><Text style={s.muted}>{String(log.completed_at||'').slice(0,10)}{logReading!=null?` · ${Number(logReading).toLocaleString()}${readingSuffix}`:''}</Text>{!!log.notes&&<Text style={s.notes}>{log.notes}</Text>}</View>{log.cost!=null&&<Text style={s.cost}>{formatMoney(log.cost)}</Text>}</View>
+        return <View key={log.id} style={s.historyRow}><View style={s.flex}><Text style={s.historyName}>{log.name||linked?.name||'Maintenance'}</Text><Text style={s.muted}>{String(log.completed_at||'').slice(0,10)}{logReading!=null?` · ${Number(logReading).toLocaleString()}${readingSuffix}`:''}</Text>{!!log.notes&&<Text style={s.notes}>{log.notes}</Text>}<Text style={s.eyebrow}>Legacy · read-only</Text></View>{log.cost!=null&&<Text style={s.cost}>{formatMoney(log.cost)}</Text>}</View>
       })}
       <TouchableOpacity style={s.archiveItem} onPress={confirmArchive} disabled={saving} accessibilityRole="button" accessibilityLabel={item.archived_at?'Restore My Stuff item':'Archive My Stuff item'} accessibilityState={{disabled:saving}}><Text style={s.archiveItemText}>{item.archived_at?'Restore Item':'Archive Item'}</Text></TouchableOpacity>
       <TouchableOpacity style={s.deleteItem} onPress={confirmDeleteItem} disabled={saving} accessibilityRole="button" accessibilityLabel="Delete My Stuff item" accessibilityState={{disabled:saving}}><Text style={s.deleteItemText}>Delete Item Permanently</Text></TouchableOpacity>
@@ -328,6 +487,18 @@ export default function MyStuffDetailScreen({ navigation, route }) {
 }
 
 function scheduleDescription(value){if(value.tracking_type==='calendar')return `Every ${value.interval_value} days · next ${String(value.next_due_at||'').slice(0,10)}`;return `Every ${Number(value.interval_value).toLocaleString()} ${value.tracking_type} · next at ${Number(value.next_due_value).toLocaleString()}`}
+function definitionDescription(value){
+  const prefix=value.active_profile==='severe'?'Severe profile':'Normal profile'
+  const intervals=[]
+  const profile=value.active_profile==='severe'?'severe':'normal'
+  const values={miles:value[`${profile}_interval_miles`]??value.normal_interval_miles,hours:value[`${profile}_interval_hours`]??value.normal_interval_hours,cycles:value[`${profile}_interval_cycles`]??value.normal_interval_cycles,months:value[`${profile}_calendar_months`]??value.normal_calendar_months}
+  if(values.miles!=null)intervals.push(`${Number(values.miles).toLocaleString()} mi`)
+  if(values.hours!=null)intervals.push(`${Number(values.hours).toLocaleString()} hr`)
+  if(values.cycles!=null)intervals.push(`${Number(values.cycles).toLocaleString()} cycles`)
+  if(values.months!=null)intervals.push(`${Number(values.months).toLocaleString()} months`)
+  return `${prefix} · ${intervals.join(value.due_semantics==='all'?' + ':' or ')}`
+}
+function serviceReadingDescription(value){const parts=[];if(value.mileage!=null)parts.push(`${Number(value.mileage).toLocaleString()} mi`);if(value.hours!=null)parts.push(`${Number(value.hours).toLocaleString()} hr`);if(value.cycles!=null)parts.push(`${Number(value.cycles).toLocaleString()} cycles`);return parts.join(' · ')}
 function dueStateSummaryLabel(status){return {overdue:'Overdue',due_now:'Due now',due_soon:'Due soon',needs_usage_update:'Needs usage',upcoming:'Upcoming'}[status]||'Not calculated'}
 function dueStateDescription(value){const details=[];if(value.next_due_at)details.push(`Date ${String(value.next_due_at).slice(0,10)}`);if(value.next_due_mileage!=null)details.push(`${Number(value.next_due_mileage).toLocaleString()} mi`);if(value.next_due_hours!=null)details.push(`${Number(value.next_due_hours).toLocaleString()} hr`);if(value.next_due_cycles!=null)details.push(`${Number(value.next_due_cycles).toLocaleString()} cycles`);return details.join(' · ')||'Update usage to calculate the next service.'}
 function Header({title,onBack}){return <View style={s.header}><TouchableOpacity style={s.headerSide} onPress={onBack} accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10}><Text style={s.back}>‹ Back</Text></TouchableOpacity><Text style={s.headerTitle} numberOfLines={1}>{title}</Text><View style={s.headerSide}/></View>}

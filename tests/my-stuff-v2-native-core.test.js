@@ -110,8 +110,8 @@ test('persisted inactive meters stay historical and cannot drive maintenance UI 
 
   const detail = source('src/screens/MyStuffDetailScreen.js')
   assert.doesNotMatch(detail, /item\.(?:effective_)?current_(?:mileage|hours)/)
-  assert.match(detail, /getScheduleCurrentReading\(value,item\)/)
-  assert.match(detail, /getScheduleTrackingModes\(item\)/)
+  assert.match(detail, /canCompleteMaintenanceDefinition\(value,item\)/)
+  assert.match(detail, /item\.measurements\.includes\(axis\.key\)/)
   assert.match(detail, /logs\.map\(log=>/)
   assert.match(detail, /log\.mileage!=null\?log\.mileage:log\.hours!=null\?log\.hours:null/)
 })
@@ -161,8 +161,8 @@ test('disabled mileage and hours schedules stay visible but cannot be completed'
 
   const detail = source('src/screens/MyStuffDetailScreen.js')
   assert.match(detail, /filterActiveDueStates\(result\.dueStates,result\.item\)/)
-  assert.match(detail, /if\(!canCompleteMaintenanceSchedule\(scheduleValue,item\)\)return/)
-  assert.match(detail, /canCompleteMaintenanceSchedule\(value,item\).*Mark Complete/s)
+  assert.match(detail, /if\(!definitionValue\.enabled\|\|!canCompleteMaintenanceDefinition\(definitionValue,item\)\)return/)
+  assert.match(detail, /canCompleteMaintenanceDefinition\(value,item\).*Record Service/s)
   assert.match(detail, /schedules\.map\(value=>/)
 })
 
@@ -255,11 +255,15 @@ test('rich editable fields survive create and update adaptation', () => {
 
 test('V2 client preserves V1 exports and uses exact owner-scoped reads and RPC contracts', () => {
   const client = source('src/lib/myStuffClient.js')
+  const maintenanceApi = source('src/lib/myStuffMaintenanceApi.js')
   for (const name of ['listMyStuffItems','getMyStuffItem','createMyStuffItem','updateMyStuffItem','deleteMyStuffItem','createMyStuffSchedule','deleteMyStuffSchedule','completeMyStuffMaintenance']) {
     assert.match(client, new RegExp(`export async function ${name}\\(`))
   }
-  for (const rpc of ['create_my_stuff_item_v2','update_my_stuff_item_v2','set_my_stuff_item_archived_v2','record_my_stuff_reading_v2','get_my_stuff_due_state_v2']) {
+  for (const rpc of ['create_my_stuff_item_v2','update_my_stuff_item_v2','set_my_stuff_item_archived_v2']) {
     assert.match(client, new RegExp(`rpc\\('${rpc}'`))
+  }
+  for (const rpc of ['record_my_stuff_reading_v2','get_my_stuff_due_state_v2','create_my_stuff_maintenance_definition_v2','update_my_stuff_maintenance_definition_v2','record_my_stuff_service_occurrence_v2']) {
+    assert.match(maintenanceApi, new RegExp(`rpc\\('${rpc}'`))
   }
   for (const table of ['my_stuff_items','my_stuff_readings','my_stuff_maintenance_definitions','my_stuff_service_occurrences']) {
     assert.match(client, new RegExp(`from\\('${table}'\\).*?eq\\('user_id', userId\\)`, 's'))
@@ -286,7 +290,7 @@ test('native UI exposes rich identity, cycles, append/correction, archive and du
   assert.match(detail, /Correction reason/)
   assert.match(detail, /setMyStuffItemArchivedV2/)
   assert.match(detail, /Due-state summary/)
-  assert.match(detail, /getScheduleCurrentReading/)
+  assert.match(detail, /getMaintenanceDefinitionAxes/)
   assert.doesNotMatch(detail, /current_mileage\s*:/)
   assert.match(list, /listMyStuffItemsV2/)
   assert.match(list, /Archived/)

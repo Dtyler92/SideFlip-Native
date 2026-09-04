@@ -142,6 +142,24 @@ export function getScheduleTrackingModes(item = {}) {
   ]
 }
 
+const DEFINITION_AXES = Object.freeze([
+  ['miles', ['normal_interval_miles', 'severe_interval_miles', 'first_interval_miles']],
+  ['hours', ['normal_interval_hours', 'severe_interval_hours', 'first_interval_hours']],
+  ['cycles', ['normal_interval_cycles', 'severe_interval_cycles', 'first_interval_cycles']],
+  ['calendar', ['normal_calendar_months', 'severe_calendar_months', 'first_calendar_months']],
+])
+
+export function getMaintenanceDefinitionAxes(definition = {}) {
+  return DEFINITION_AXES
+    .filter(([, fields]) => fields.some(field => definition[field] !== null && definition[field] !== undefined))
+    .map(([axis]) => axis)
+}
+
+export function canCompleteMaintenanceDefinition(definition, item = {}) {
+  const measurements = Array.isArray(item?.measurements) ? item.measurements : []
+  return getMaintenanceDefinitionAxes(definition).every(axis => axis === 'calendar' || measurements.includes(axis))
+}
+
 export function dueStateLabel(state) {
   if (state === 'overdue') return 'Overdue'
   if (state === 'due') return 'Due now'

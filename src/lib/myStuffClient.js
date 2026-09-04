@@ -1,5 +1,8 @@
 import { supabase } from './supabase'
 import { adaptSqlItem } from './myStuffAdapters'
+import { createMyStuffMaintenanceApi } from './myStuffMaintenanceApi'
+
+const maintenanceApi = createMyStuffMaintenanceApi(supabase)
 
 export async function listMyStuffItems(userId) {
   const { data, error } = await supabase
@@ -73,25 +76,11 @@ export async function createMyStuffSchedule(values) {
 }
 
 export async function deleteMyStuffSchedule(scheduleId, userId) {
-  const { error } = await supabase
-    .from('my_stuff_schedules')
-    .delete()
-    .eq('id', scheduleId)
-    .eq('user_id', userId)
-  if (error) throw error
+  return maintenanceApi.deleteLegacySchedule(scheduleId, userId)
 }
 
 export async function completeMyStuffMaintenance(values) {
-  const { data, error } = await supabase.rpc('complete_my_stuff_maintenance', {
-    p_schedule_id: values.scheduleId,
-    p_completed_at: values.completedAt,
-    p_reading: values.reading,
-    p_cost: values.cost,
-    p_notes: values.notes,
-    p_mutation_id: values.mutationId,
-  })
-  if (error) throw error
-  return data
+  return maintenanceApi.completeLegacySchedule(values)
 }
 
 export async function listMyStuffItemsV2(userId, { includeArchived = true } = {}) {
@@ -107,22 +96,30 @@ export async function listMyStuffItemsV2(userId, { includeArchived = true } = {}
 }
 
 export async function getMyStuffItemV2(itemId, userId, { asOf = new Date().toISOString() } = {}) {
-  const [itemResult, readingsResult, definitionsResult, occurrencesResult, dueResult] = await Promise.all([
+  const [itemResult, readingsResult, definitionsResult, occurrencesResult, revisionsResult, dueResult] = await Promise.all([
     supabase.from('my_stuff_items').select('*').eq('user_id', userId).eq('id', itemId).single(),
     // The correction RPC defines "latest" by append order, not business date.
     supabase.from('my_stuff_readings').select('*').eq('user_id', userId).eq('item_id', itemId).order('created_at', { ascending: false }).order('id', { ascending: false }),
     supabase.from('my_stuff_maintenance_definitions').select('*').eq('user_id', userId).eq('item_id', itemId).order('created_at', { ascending: true }),
     supabase.from('my_stuff_service_occurrences').select('*').eq('user_id', userId).eq('item_id', itemId).order('completed_at', { ascending: false }),
+    supabase.from('my_stuff_service_occurrence_revisions').select('*').eq('user_id', userId).eq('item_id', itemId).order('revision_number', { ascending: false }),
     supabase.rpc('get_my_stuff_due_state_v2', { p_item_id: itemId, p_as_of: asOf }),
   ])
-  for (const result of [itemResult, readingsResult, definitionsResult, occurrencesResult, dueResult]) {
+  for (const result of [itemResult, readingsResult, definitionsResult, occurrencesResult, revisionsResult, dueResult]) {
     if (result.error) throw result.error
+  }
+  const latestRevisionByOccurrence = new Map()
+  for (const revision of revisionsResult.data || []) {
+    if (!latestRevisionByOccurrence.has(revision.occurrence_id)) latestRevisionByOccurrence.set(revision.occurrence_id, revision)
   }
   return {
     item: adaptSqlItem(itemResult.data),
     readings: readingsResult.data || [],
     definitions: definitionsResult.data || [],
-    occurrences: occurrencesResult.data || [],
+    occurrences: (occurrencesResult.data || []).map(occurrence => ({
+      ...occurrence,
+      latest_revision: latestRevisionByOccurrence.get(occurrence.id) || null,
+    })),
     dueStates: dueResult.data || [],
   }
 }
@@ -157,19 +154,21 @@ export async function setMyStuffItemArchivedV2(values) {
 }
 
 export async function recordMyStuffReadingV2(wirePayload, mutationId) {
-  const { data, error } = await supabase.rpc('record_my_stuff_reading_v2', {
-    ...wirePayload,
-    p_mutation_id: mutationId,
-  })
-  if (error) throw error
-  return data
+  return maintenanceApi.recordReading(wirePayload, mutationId)
 }
 
 export async function getMyStuffDueStateV2(itemId, asOf = new Date().toISOString()) {
-  const { data, error } = await supabase.rpc('get_my_stuff_due_state_v2', {
-    p_item_id: itemId,
-    p_as_of: asOf,
-  })
-  if (error) throw error
-  return data || []
+  return maintenanceApi.getDueState(itemId, asOf)
+}
+
+export async function createMyStuffMaintenanceDefinitionV2(wirePayload, mutationId) {
+  return maintenanceApi.createDefinition(wirePayload, mutationId)
+}
+
+export async function updateMyStuffMaintenanceDefinitionV2(wirePayload, mutationId) {
+  return maintenanceApi.updateDefinition(wirePayload, mutationId)
+}
+
+export async function recordMyStuffServiceOccurrenceV2(wirePayload, mutationId) {
+  return maintenanceApi.recordServiceOccurrence(wirePayload, mutationId)
 }
