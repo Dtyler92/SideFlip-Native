@@ -1,6 +1,7 @@
 import { normalizeVin } from '../domain/myStuff/vinModel.js'
 
 const ENDPOINT = 'https://sideflip.org/api/decode-vin'
+const expoFetch = (...args) => import('expo/fetch').then(module => module.fetch(...args))
 const MAX_RAW_VIN_LENGTH = 256
 const MAX_RESPONSE_BYTES = 64 * 1024
 const VEHICLE_TEXT_FIELDS = new Set([
@@ -125,7 +126,7 @@ function errorFromResponse(status, body) {
   })
 }
 
-export function createVinDecodeClient({ auth, fetchImpl = fetch, timeoutMs = 10_000, maxResponseBytes = MAX_RESPONSE_BYTES } = {}) {
+export function createVinDecodeClient({ auth, fetchImpl = expoFetch, timeoutMs = 10_000, maxResponseBytes = MAX_RESPONSE_BYTES } = {}) {
   if (!auth?.getSession) throw new TypeError('VIN decode auth adapter is required.')
   return {
     async decode({ subjectType, subjectId, vin, signal }) {

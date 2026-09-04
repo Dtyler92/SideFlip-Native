@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
 import VinDecodePanel from '../components/VinDecodePanel'
+import ReportPanel from '../components/ReportPanel'
 import { maskVin } from '../domain/myStuff/vinModel'
 import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, selectItemType, validateItemDraft } from '../domain/myStuff/itemModel'
 import {
@@ -405,6 +406,9 @@ export default function MyStuffDetailScreen({ navigation, route }) {
           {!!item.notes&&<Text style={s.notes}>{item.notes}</Text>}
         </>}
       </View>
+
+      <Text style={s.pageSection}>Shareable report</Text>
+      <ReportPanel subjectType="my_stuff_item" subjectId={item.id} isPro={hasPro} onUpgrade={()=>navigation.navigate('Pro')} />
 
       <View style={s.between}><Text style={s.pageSection}>Usage readings</Text>{item.measurements.length>0&&<TouchableOpacity onPress={()=>{resetMutationAttemptState(usageMutationAttempt.current);setUsage(current=>({...current,type:item.measurements.includes(current.type)?current.type:item.measurements[0]}));setShowUsage(value=>!value)}} accessibilityRole="button" accessibilityLabel={showUsage?'Cancel adding usage reading':'Add usage reading'}><Text style={s.link}>{showUsage?'Cancel':'+ Add'}</Text></TouchableOpacity>}</View>
       {showUsage&&<View style={s.card}>

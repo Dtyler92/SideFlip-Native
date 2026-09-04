@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
 import VinDecodePanel from '../components/VinDecodePanel'
+import ReportPanel from '../components/ReportPanel'
 import { maskVin, validateVinIdentifier } from '../domain/myStuff/vinModel'
 import { roundLaborHours } from './laborModel'
 import { captureEvent } from '../lib/analytics'
@@ -511,6 +512,9 @@ export default function ProjectDetailScreen({ navigation, route }) {
             {savingVehicleDetails ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Save Vehicle Details</Text>}
           </TouchableOpacity>
         </View>
+
+        <Text style={s.sectionTitle}>Shareable report</Text>
+        <ReportPanel subjectType="project" subjectId={projectId} isPro={isPro} onUpgrade={() => navigation.navigate('Pro')} />
 
         {/* Notes */}
         {project.notes && (

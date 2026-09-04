@@ -267,3 +267,22 @@ export function renderReportHtml(report = {}) {
     .join('')
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body><h1>${title}</h1>${body}</body></html>`
 }
+
+function reportDate(value) {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) throw new RangeError('A valid report date is required.')
+  return new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(date)
+}
+
+export function renderCanonicalReportHtml(payload = {}, { generatedAt = new Date().toISOString() } = {}) {
+  if (!payload.report || typeof payload.report !== 'object' || Array.isArray(payload.report)) throw new TypeError('Canonical report data is required.')
+  const titleText = payload.subjectType === 'my_stuff_item' ? 'SideFlip My Stuff Report' : 'SideFlip Project Report'
+  const title = escapeHtml(titleText)
+  const date = escapeHtml(reportDate(generatedAt))
+  const disclaimer = escapeHtml(payload.disclaimer)
+  const body = Object.entries(payload.report)
+    .filter(([, value]) => value !== undefined && value !== null)
+    .map(([key, value]) => `<section><h2>${escapeHtml(key)}</h2>${renderValue(value)}</section>`)
+    .join('')
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1a1917;margin:36px;line-height:1.45}h1{margin-bottom:4px}h2{font-size:15px;text-transform:capitalize;border-bottom:1px solid #ddd;padding-bottom:5px}section{break-inside:avoid;margin-top:22px}dl{margin:6px 0 6px 14px}dt{font-weight:700;margin-top:6px}dd{margin-left:14px;white-space:pre-wrap}.meta,.privacy{color:#5c5850}.privacy{border:1px solid #d7d2cb;border-radius:8px;padding:12px}</style></head><body><h1>${title}</h1><p class="meta">Report date: ${date}</p><p class="privacy"><strong>Private report:</strong> Share only with people you trust. ${disclaimer}</p>${body}</body></html>`
+}
