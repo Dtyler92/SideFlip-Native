@@ -88,9 +88,9 @@ export default function MyStuffScreen({ navigation }) {
               <Text style={s.chevron}>›</Text>
             </View>
             <View style={s.readingRow}>
-              {(item.effective_current_mileage ?? item.current_mileage) != null && <Text style={s.reading}>{Number(item.effective_current_mileage ?? item.current_mileage).toLocaleString()} mi</Text>}
-              {(item.effective_current_hours ?? item.current_hours) != null && <Text style={s.reading}>{Number(item.effective_current_hours ?? item.current_hours).toLocaleString()} hr</Text>}
-              {(item.effective_current_cycles ?? item.current_cycles) != null && <Text style={s.reading}>{Number(item.effective_current_cycles ?? item.current_cycles).toLocaleString()} cycles</Text>}
+              {item.currentUsage.miles != null && <Text style={s.reading}>{item.currentUsage.miles.toLocaleString()} mi</Text>}
+              {item.currentUsage.hours != null && <Text style={s.reading}>{item.currentUsage.hours.toLocaleString()} hr</Text>}
+              {item.currentUsage.cycles != null && <Text style={s.reading}>{item.currentUsage.cycles.toLocaleString()} cycles</Text>}
               {item.acquired_on && <Text style={s.reading}>Acquired {item.acquired_on}</Text>}
             </View>
           </TouchableOpacity>

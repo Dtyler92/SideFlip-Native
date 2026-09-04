@@ -1,21 +1,12 @@
-const SQL_ITEM_TYPES = new Set([
-  'car', 'truck', 'motorcycle', 'boat', 'atv', 'side_by_side', 'mower', 'tractor',
-  'trailer', 'generator', 'rv', 'equipment', 'bicycle', 'watch', 'electronics',
-  'gaming', 'tool', 'exercise', 'instrument', 'furniture', 'house', 'other',
-])
+import { ITEM_TYPE_OPTIONS, deriveItemCategory } from '../domain/myStuff/itemModel.js'
+
+const SQL_ITEM_TYPES = new Set(ITEM_TYPE_OPTIONS.map(option => option.value))
 
 const TYPE_ALIASES = Object.freeze({
   vehicle: 'car', home: 'house', appliance: 'electronics', recreation: 'other',
   'side by side': 'side_by_side', 'lawn mower': 'mower', lawnmower: 'mower',
 })
 
-const CATEGORY_BY_TYPE = Object.freeze({
-  car: 'vehicle', truck: 'vehicle', trailer: 'vehicle', rv: 'vehicle',
-  motorcycle: 'motorcycle', boat: 'boat', atv: 'recreation', side_by_side: 'recreation',
-  mower: 'equipment', tractor: 'equipment', generator: 'equipment', equipment: 'equipment',
-  bicycle: 'recreation', watch: 'accessory', electronics: 'electronics', gaming: 'electronics',
-  tool: 'tool', exercise: 'recreation', instrument: 'other', furniture: 'home', house: 'home', other: 'other',
-})
 
 const FIELD_MAP = Object.freeze({
   customName: 'custom_name', year: 'model_year', modelYear: 'model_year', manufacturer: 'manufacturer',
@@ -40,7 +31,7 @@ export function toSqlItemType(value) {
 }
 
 export function fromSqlItemType(value) {
-  return CATEGORY_BY_TYPE[toSqlItemType(value)] || 'other'
+  return deriveItemCategory(toSqlItemType(value))
 }
 
 export function toSqlUsageDimension(value) {
@@ -120,15 +111,16 @@ export function adaptItemPatchToSql(values = {}) {
 
 export function adaptSqlItem(item = {}) {
   const measurements = Array.isArray(item.usage_dimensions)
-    ? item.usage_dimensions.map(fromSqlUsageDimension).filter(Boolean)
+    ? [...new Set(item.usage_dimensions.map(fromSqlUsageDimension).filter(Boolean))]
     : []
+  const selectedMeasurements = new Set(measurements)
   const currentUsage = {}
   const miles = item.effective_current_mileage ?? item.current_mileage
   const hours = item.effective_current_hours ?? item.current_hours
   const cycles = item.effective_current_cycles ?? item.current_cycles
-  if (miles != null) currentUsage.miles = Number(miles)
-  if (hours != null) currentUsage.hours = Number(hours)
-  if (cycles != null) currentUsage.cycles = Number(cycles)
+  if (selectedMeasurements.has('miles') && miles != null) currentUsage.miles = Number(miles)
+  if (selectedMeasurements.has('hours') && hours != null) currentUsage.hours = Number(hours)
+  if (selectedMeasurements.has('cycles') && cycles != null) currentUsage.cycles = Number(cycles)
   return {
     ...item,
     category: fromSqlItemType(item.item_type || item.category),

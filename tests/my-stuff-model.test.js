@@ -4,7 +4,9 @@ import {
   addCalendarDays,
   canCreateMyStuffItem,
   createMutationId,
+  getScheduleCurrentReading,
   getScheduleDueState,
+  getScheduleTrackingModes,
   parseNonNegativeNumber,
   parsePositiveNumber,
   validateCalendarDate,
@@ -21,16 +23,36 @@ test('Free creation gate allows item one, blocks item two, and never hides exist
 
 test('mileage schedule becomes due at its next reading', () => {
   const schedule = { tracking_type: 'mileage', next_due_value: 12000 }
-  assert.equal(getScheduleDueState(schedule, { current_mileage: 11999 }), 'upcoming')
-  assert.equal(getScheduleDueState(schedule, { current_mileage: 12000 }), 'due')
-  assert.equal(getScheduleDueState(schedule, { current_mileage: 12001 }), 'overdue')
+  assert.equal(getScheduleDueState(schedule, { measurements: ['miles'], currentUsage: { miles: 11999 } }), 'upcoming')
+  assert.equal(getScheduleDueState(schedule, { measurements: ['miles'], currentUsage: { miles: 12000 } }), 'due')
+  assert.equal(getScheduleDueState(schedule, { measurements: ['miles'], currentUsage: { miles: 12001 } }), 'overdue')
 })
 
 test('hours schedule becomes due at its next reading', () => {
   const schedule = { tracking_type: 'hours', next_due_value: 250 }
-  assert.equal(getScheduleDueState(schedule, { current_hours: 249.5 }), 'upcoming')
-  assert.equal(getScheduleDueState(schedule, { current_hours: 250 }), 'due')
-  assert.equal(getScheduleDueState(schedule, { current_hours: 251 }), 'overdue')
+  assert.equal(getScheduleDueState(schedule, { measurements: ['hours'], currentUsage: { hours: 249.5 } }), 'upcoming')
+  assert.equal(getScheduleDueState(schedule, { measurements: ['hours'], currentUsage: { hours: 250 } }), 'due')
+  assert.equal(getScheduleDueState(schedule, { measurements: ['hours'], currentUsage: { hours: 251 } }), 'overdue')
+})
+
+test('inactive retained meters cannot prefill, calculate, or offer meter maintenance', () => {
+  const item = {
+    measurements: [],
+    currentUsage: {},
+    current_mileage: 13000,
+    effective_current_mileage: 12500,
+    current_hours: 400,
+    effective_current_hours: 390,
+  }
+  const mileageSchedule = { tracking_type: 'mileage', next_due_value: 12000 }
+  const hoursSchedule = { tracking_type: 'hours', next_due_value: 380 }
+
+  assert.equal(getScheduleCurrentReading(mileageSchedule, item), null)
+  assert.equal(getScheduleDueState(mileageSchedule, item), 'unknown')
+  assert.equal(getScheduleCurrentReading(hoursSchedule, item), null)
+  assert.equal(getScheduleDueState(hoursSchedule, item), 'unknown')
+  assert.deepEqual(getScheduleTrackingModes(item), ['calendar'])
+  assert.deepEqual(getScheduleTrackingModes({ measurements: ['hours', 'cycles'] }), ['hours', 'calendar'])
 })
 
 test('calendar schedule uses local date-only comparisons without time drift', () => {

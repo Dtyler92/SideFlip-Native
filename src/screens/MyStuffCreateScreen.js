@@ -3,19 +3,22 @@ import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextI
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { createMyStuffItemV2 } from '../lib/myStuffClient'
 import { buildCreateMyStuffItemV2WirePayload } from '../lib/myStuffPayloads'
-import { createMutationAttemptState, mutationIdForPayload, parseNonNegativeNumber, resetMutationAttemptState, validateCalendarDate } from './myStuffModel'
+import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
+import { deriveItemCategory, getItemCategoryContract, selectItemType, validateItemDraft } from '../domain/myStuff/itemModel'
+import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptState, validateCalendarDate } from './myStuffModel'
 
 const ACCENT = '#C8402F'
-const CATEGORIES = ['Vehicle', 'Motorcycle', 'Boat', 'Equipment', 'Tool', 'Home', 'Appliance', 'Electronics', 'Recreation', 'Other']
 const AXES = [{ key: 'miles', label: 'Miles' }, { key: 'hours', label: 'Hours' }, { key: 'cycles', label: 'Cycles' }]
 
 export default function MyStuffCreateScreen({ navigation }) {
-  const [draft, setDraft] = useState({ category: 'Other', measurements: [], usageProfile: 'normal' })
+  const [draft, setDraft] = useState({ itemType: 'other', category: 'other', measurements: [], usageProfile: 'normal' })
+  const [validationErrors, setValidationErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const mutationAttempt = useRef(createMutationAttemptState())
   const saveInFlight = useRef(false)
 
-  function setValue(key, value) { setDraft(current => ({ ...current, [key]: value })) }
+  function setValue(key, value) { setValidationErrors({}); setDraft(current => ({ ...current, [key]: value })) }
+  function setExactType(value) { setValidationErrors({}); setDraft(current => selectItemType(current, value)) }
   function toggleAxis(axis) {
     setDraft(current => ({
       ...current,
@@ -27,22 +30,18 @@ export default function MyStuffCreateScreen({ navigation }) {
 
   async function save() {
     if (saveInFlight.current) return
-    if (!String(draft.name || '').trim()) return Alert.alert('Item name required', 'Enter a name for this item.')
     if (draft.acquiredOn?.trim() && !validateCalendarDate(draft.acquiredOn)) return Alert.alert('Check acquisition date', 'Use a valid date in YYYY-MM-DD format.')
-    if (draft.year && (!Number.isInteger(Number(draft.year)) || Number(draft.year) < 1800 || Number(draft.year) > 2200)) return Alert.alert('Check model year', 'Model year must be a whole number between 1800 and 2200.')
-    const currentUsage = {}
-    for (const axis of draft.measurements) {
-      const parsed = parseNonNegativeNumber(draft[axis], { optional: true })
-      if (!parsed.ok || (axis === 'cycles' && parsed.value != null && !Number.isInteger(parsed.value))) return Alert.alert(`Check ${axis}`, axis === 'cycles' ? 'Cycles must be a whole number of zero or more.' : `${axis} must be a finite number of zero or more.`)
-      if (parsed.value != null) currentUsage[axis] = parsed.value
-    }
+    const rawUsage = Object.fromEntries(draft.measurements.filter(axis => draft[axis] !== '' && draft[axis] != null).map(axis => [axis, draft[axis]]))
+    const validatedDraft = { ...draft, name: String(draft.name || '').trim(), category: deriveItemCategory(draft.itemType), currentUsage: rawUsage }
+    const validation = validateItemDraft(validatedDraft)
+    setValidationErrors(validation.errors)
+    if (!validation.ok) return
+    const currentUsage = Object.fromEntries(Object.entries(rawUsage).map(([axis, value]) => [axis, Number(value)]))
     saveInFlight.current = true
     setSaving(true)
     try {
       const payload = {
-        ...draft,
-        name: draft.name.trim(),
-        category: draft.category.toLowerCase(),
+        ...validatedDraft,
         acquiredOn: draft.acquiredOn?.trim() || null,
         notes: draft.notes?.trim() || null,
         currentUsage,
@@ -66,8 +65,7 @@ export default function MyStuffCreateScreen({ navigation }) {
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
       <Text style={s.section}>Identity</Text>
       <Field label="Item name *" value={draft.name || ''} onChangeText={value => setValue('name', value)} placeholder="e.g. Work Truck" autoFocus maxLength={200} />
-      <Text style={s.label}>Category *</Text>
-      <View style={s.choices} accessibilityRole="radiogroup" accessibilityLabel="Category">{CATEGORIES.map(value => <Choice key={value} label={value} selected={draft.category === value} onPress={() => setValue('category', value)} exclusive />)}</View>
+      <MyStuffItemTypePicker value={draft.itemType} onChange={setExactType} error={validationErrors.itemType || validationErrors.category} />
       <View style={s.twoColumn}>
         <View style={s.flex}><Field label="Model year" value={draft.year || ''} onChangeText={value => setValue('year', value)} keyboardType="number-pad" /></View>
         <View style={s.flex}><Field label="Make" value={draft.make || ''} onChangeText={value => setValue('make', value)} /></View>
@@ -84,11 +82,12 @@ export default function MyStuffCreateScreen({ navigation }) {
 
       <Text style={s.section}>Usage tracking</Text>
       <Text style={s.help}>Choose every measurement that applies. You can append readings later.</Text>
-      <View style={s.choices}>{AXES.map(axis => <Choice key={axis.key} label={axis.label} selected={draft.measurements.includes(axis.key)} onPress={() => toggleAxis(axis.key)} />)}</View>
+      <View style={s.choices} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis => getItemCategoryContract(draft.category).measurements.includes(axis.key)).map(axis => <Choice key={axis.key} label={axis.label} selected={draft.measurements.includes(axis.key)} onPress={() => toggleAxis(axis.key)} />)}</View>
       {AXES.filter(axis => draft.measurements.includes(axis.key)).map(axis => <Field key={axis.key} label={`Current ${axis.label.toLowerCase()} (optional)`} value={draft[axis.key] || ''} onChangeText={value => setValue(axis.key, value)} keyboardType="decimal-pad" />)}
       <Text style={s.label}>Usage profile</Text>
       <View style={s.choices} accessibilityRole="radiogroup" accessibilityLabel="Usage profile">{['normal', 'severe'].map(value => <Choice key={value} label={value === 'normal' ? 'Normal use' : 'Severe use'} selected={draft.usageProfile === value} onPress={() => setValue('usageProfile', value)} exclusive />)}</View>
       <Field label="Notes (optional)" value={draft.notes || ''} onChangeText={value => setValue('notes', value)} multiline maxLength={1000} />
+      <ValidationErrors errors={validationErrors} />
       <TouchableOpacity style={[s.button, saving && s.disabled]} onPress={save} disabled={saving} accessibilityRole="button" accessibilityLabel="Add My Stuff item" accessibilityState={{ disabled: saving, busy: saving }}>
         {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.buttonText}>Add Item</Text>}
       </TouchableOpacity>

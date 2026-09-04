@@ -78,12 +78,68 @@ export function getScheduleDueState(schedule, item = {}, now = new Date()) {
   }
   if (mode !== 'mileage' && mode !== 'hours') return 'unknown'
   const dueRaw = schedule?.next_due_value
-  const currentRaw = mode === 'mileage' ? item?.current_mileage : item?.current_hours
+  const currentRaw = getScheduleCurrentReading(schedule, item)
   const due = Number(dueRaw)
   const current = Number(currentRaw)
   if (dueRaw == null || currentRaw == null || !Number.isFinite(due) || !Number.isFinite(current)) return 'unknown'
   if (current === due) return 'due'
   return current > due ? 'overdue' : 'upcoming'
+}
+
+export function getScheduleCurrentReading(schedule, item = {}) {
+  if (!canCompleteMaintenanceSchedule(schedule, item)) return null
+  if (schedule?.tracking_type === 'mileage') return item?.currentUsage?.miles ?? null
+  if (schedule?.tracking_type === 'hours') return item?.currentUsage?.hours ?? null
+  return null
+}
+
+export function canCompleteMaintenanceSchedule(schedule, item = {}) {
+  const mode = schedule?.tracking_type
+  if (mode === 'calendar') return true
+  const measurements = Array.isArray(item?.measurements) ? item.measurements : []
+  if (mode === 'mileage') return measurements.includes('miles')
+  if (mode === 'hours') return measurements.includes('hours')
+  return false
+}
+
+const DUE_STATE_DIMENSIONS = Object.freeze([
+  { field: 'next_due_at', measurement: null, usage: null },
+  { field: 'next_due_mileage', measurement: 'miles', usage: 'miles' },
+  { field: 'next_due_hours', measurement: 'hours', usage: 'hours' },
+  { field: 'next_due_cycles', measurement: 'cycles', usage: 'cycles' },
+])
+const DISPLAYABLE_DUE_STATUSES = new Set(['overdue', 'due_now', 'due_soon', 'upcoming'])
+
+function hasFiniteValue(value) {
+  return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
+}
+
+export function filterActiveDueStates(rows, item = {}) {
+  if (!Array.isArray(rows)) return []
+  const measurements = Array.isArray(item?.measurements) ? item.measurements : []
+  const usage = item?.currentUsage && typeof item.currentUsage === 'object' ? item.currentUsage : {}
+  return rows.filter(row => {
+    if (!row || typeof row !== 'object') return false
+    // `needs_usage_update` can be caused by a configured meter whose null due
+    // field does not identify the missing axis in the RPC row, so it is unsafe
+    // to display after an item dimension changes.
+    if (!DISPLAYABLE_DUE_STATUSES.has(row.due_status)) return false
+    const dimensions = DUE_STATE_DIMENSIONS.filter(({ field }) => row[field] !== null && row[field] !== undefined)
+    if (dimensions.length === 0) return false
+    return dimensions.every(({ field, measurement, usage: usageKey }) => {
+      if (field === 'next_due_at') return typeof row[field] === 'string' && row[field].trim() !== '' && Number.isFinite(Date.parse(row[field]))
+      return hasFiniteValue(row[field]) && measurements.includes(measurement) && hasFiniteValue(usage[usageKey])
+    })
+  })
+}
+
+export function getScheduleTrackingModes(item = {}) {
+  const measurements = Array.isArray(item?.measurements) ? item.measurements : []
+  return [
+    ...(measurements.includes('miles') ? ['mileage'] : []),
+    ...(measurements.includes('hours') ? ['hours'] : []),
+    'calendar',
+  ]
 }
 
 export function dueStateLabel(state) {

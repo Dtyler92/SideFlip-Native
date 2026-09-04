@@ -10,10 +10,16 @@ import {
   toSqlUsageDimension,
 } from '../src/lib/myStuffAdapters.js'
 import {
+  canCompleteMaintenanceSchedule,
   createMutationAttemptState,
+  filterActiveDueStates,
+  getScheduleCurrentReading,
+  getScheduleDueState,
+  getScheduleTrackingModes,
   mutationIdForPayload,
   resetMutationAttemptState,
 } from '../src/screens/myStuffModel.js'
+import { selectItemType } from '../src/domain/myStuff/itemModel.js'
 import {
   buildCreateMyStuffItemV2WirePayload,
   buildRecordMyStuffReadingV2WirePayload,
@@ -59,6 +65,105 @@ test('SQL item adapter prefers effective readings without lowering retained mete
   assert.deepEqual(item.measurements, ['miles', 'cycles'])
   assert.deepEqual(item.currentUsage, { miles: 4900, cycles: 10 })
   assert.equal(item.current_mileage, 5000)
+})
+
+test('persisted type changes deactivate unsupported current usage without erasing retained meters', () => {
+  const changed = selectItemType({
+    itemType: 'truck', category: 'vehicle', measurements: ['miles'], currentUsage: { miles: 4900 },
+  }, 'electronics')
+  const wirePayload = buildUpdateMyStuffItemV2WirePayload({
+    itemId: 'changed-type',
+    itemType: changed.itemType,
+    category: changed.category,
+    measurements: changed.measurements,
+  })
+  assert.deepEqual(wirePayload, {
+    p_item_id: 'changed-type',
+    p_patch: { item_type: 'electronics', category: 'electronics', usage_dimensions: [] },
+  })
+
+  const persisted = adaptSqlItem({
+    id: wirePayload.p_item_id, item_type: 'electronics', usage_dimensions: wirePayload.p_patch.usage_dimensions,
+    current_mileage: 5000, effective_current_mileage: 4900,
+    current_hours: 80, effective_current_hours: 75,
+    current_cycles: 10, effective_current_cycles: 9,
+  })
+
+  assert.deepEqual(persisted.measurements, [])
+  assert.deepEqual(persisted.currentUsage, {})
+  assert.equal(persisted.current_mileage, 5000)
+  assert.equal(persisted.effective_current_hours, 75)
+})
+
+test('persisted inactive meters stay historical and cannot drive maintenance UI behavior', () => {
+  const persisted = adaptSqlItem({
+    id: 'retained-history', item_type: 'electronics', usage_dimensions: [],
+    current_mileage: 5000, effective_current_mileage: 4900,
+    current_hours: 80, effective_current_hours: 75,
+  })
+  const mileageSchedule = { tracking_type: 'mileage', next_due_value: 4800 }
+
+  assert.deepEqual(persisted.currentUsage, {})
+  assert.equal(getScheduleCurrentReading(mileageSchedule, persisted), null)
+  assert.equal(getScheduleDueState(mileageSchedule, persisted), 'unknown')
+  assert.deepEqual(getScheduleTrackingModes(persisted), ['calendar'])
+
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  assert.doesNotMatch(detail, /item\.(?:effective_)?current_(?:mileage|hours)/)
+  assert.match(detail, /getScheduleCurrentReading\(value,item\)/)
+  assert.match(detail, /getScheduleTrackingModes\(item\)/)
+  assert.match(detail, /logs\.map\(log=>/)
+  assert.match(detail, /log\.mileage!=null\?log\.mileage:log\.hours!=null\?log\.hours:null/)
+})
+
+test('V2 due-state rows fail closed for disabled or ambiguous meter dimensions', () => {
+  const rows = [
+    { definition_id: 'calendar', next_due_at: '2026-10-01T00:00:00Z', next_due_mileage: null, next_due_hours: null, next_due_cycles: null, due_status: 'due_soon' },
+    { definition_id: 'mileage', next_due_at: null, next_due_mileage: 5000, next_due_hours: null, next_due_cycles: null, due_status: 'overdue' },
+    { definition_id: 'hours', next_due_at: null, next_due_mileage: null, next_due_hours: 100, next_due_cycles: null, due_status: 'due_now' },
+    { definition_id: 'cycles', next_due_at: null, next_due_mileage: null, next_due_hours: null, next_due_cycles: 25, due_status: 'upcoming' },
+    { definition_id: 'mixed-disabled-hours', next_due_at: '2026-10-01T00:00:00Z', next_due_mileage: 5000, next_due_hours: 100, next_due_cycles: null, due_status: 'overdue' },
+    { definition_id: 'calendar-with-unknown-meter', next_due_at: '2026-10-01T00:00:00Z', next_due_mileage: null, next_due_hours: null, next_due_cycles: null, due_status: 'needs_usage_update' },
+    { definition_id: 'invalid-status', next_due_at: '2026-10-01T00:00:00Z', next_due_mileage: null, next_due_hours: null, next_due_cycles: null, due_status: 'stale_backend_value' },
+    { definition_id: 'ambiguous', next_due_at: null, next_due_mileage: null, next_due_hours: null, next_due_cycles: null, due_status: 'overdue' },
+  ]
+  const item = {
+    measurements: ['miles', 'cycles'],
+    currentUsage: { miles: 4900, hours: 999, cycles: 20 },
+  }
+
+  assert.deepEqual(filterActiveDueStates(rows, item).map(row => row.definition_id), ['calendar', 'mileage', 'cycles'])
+  assert.deepEqual(filterActiveDueStates(rows, {
+    measurements: ['hours'],
+    currentUsage: { miles: 99999, hours: 90 },
+  }).map(row => row.definition_id), ['calendar', 'hours'])
+  assert.deepEqual(filterActiveDueStates(rows, {
+    measurements: ['miles', 'hours', 'cycles'],
+    currentUsage: { miles: 4900, hours: null, cycles: 20 },
+  }).map(row => row.definition_id), ['calendar', 'mileage', 'cycles'])
+})
+
+test('disabled mileage and hours schedules stay visible but cannot be completed', () => {
+  const schedules = [
+    { id: 'mileage-history', tracking_type: 'mileage', next_due_value: 5000 },
+    { id: 'hours-history', tracking_type: 'hours', next_due_value: 100 },
+    { id: 'calendar-active', tracking_type: 'calendar', next_due_at: '2026-10-01T00:00:00Z' },
+  ]
+  const mileageDisabled = { measurements: ['hours'], currentUsage: { miles: 99999, hours: 90 } }
+  const hoursDisabled = { measurements: ['miles'], currentUsage: { miles: 4900, hours: 999 } }
+
+  assert.equal(schedules.length, 3, 'retained schedules remain visible')
+  assert.equal(canCompleteMaintenanceSchedule(schedules[0], mileageDisabled), false)
+  assert.equal(canCompleteMaintenanceSchedule(schedules[1], hoursDisabled), false)
+  assert.equal(canCompleteMaintenanceSchedule(schedules[2], mileageDisabled), true)
+  assert.equal(canCompleteMaintenanceSchedule(schedules[0], hoursDisabled), true)
+  assert.equal(canCompleteMaintenanceSchedule(schedules[1], mileageDisabled), true)
+
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  assert.match(detail, /filterActiveDueStates\(result\.dueStates,result\.item\)/)
+  assert.match(detail, /if\(!canCompleteMaintenanceSchedule\(scheduleValue,item\)\)return/)
+  assert.match(detail, /canCompleteMaintenanceSchedule\(value,item\).*Mark Complete/s)
+  assert.match(detail, /schedules\.map\(value=>/)
 })
 
 test('every exact SQL item type survives read-edit-write round trips', () => {
@@ -181,11 +286,11 @@ test('native UI exposes rich identity, cycles, append/correction, archive and du
   assert.match(detail, /Correction reason/)
   assert.match(detail, /setMyStuffItemArchivedV2/)
   assert.match(detail, /Due-state summary/)
-  assert.match(detail, /effective_current_mileage/)
+  assert.match(detail, /getScheduleCurrentReading/)
   assert.doesNotMatch(detail, /current_mileage\s*:/)
   assert.match(list, /listMyStuffItemsV2/)
   assert.match(list, /Archived/)
-  assert.match(list, /effective_current_cycles/)
+  assert.match(list, /item\.currentUsage\.cycles/)
   for (const sourceText of [create, detail]) {
     assert.match(sourceText, /mutationIdForPayload/)
     assert.match(sourceText, /InFlight/)
@@ -200,4 +305,38 @@ test('native UI exposes rich identity, cycles, append/correction, archive and du
   }
   assert.match(create, /accessibilityRole="radiogroup"/)
   assert.match(detail, /accessibilityRole="radiogroup"/)
+})
+
+test('create and edit render the shared exact item-type picker and block invalid V2 drafts', () => {
+  const picker = source('src/components/MyStuffItemTypePicker.js')
+  const create = source('src/screens/MyStuffCreateScreen.js')
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  assert.match(picker, /ITEM_TYPE_OPTIONS\.map/)
+  assert.match(picker, /accessibilityRole="radiogroup"/)
+  assert.match(picker, /accessibilityState=\{\{ selected/)
+  for (const screen of [create, detail]) {
+    assert.match(screen, /MyStuffItemTypePicker/)
+    assert.match(screen, /validateItemDraft/)
+    assert.match(screen, /ValidationErrors/)
+  }
+  assert.match(create, /itemType: 'other'/)
+  assert.match(detail, /value=\{edit\.itemType\}/)
+  assert.match(detail, /measurements:edit\.measurements/)
+})
+
+test('detail uses checkbox semantics for multi-select usage axes and only displays active current readings', () => {
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  const list = source('src/screens/MyStuffScreen.js')
+  assert.match(detail, /multiple=\{true\}/)
+  assert.match(detail, /accessibilityRole=\{multiple\?'checkbox':'radio'\}/)
+  assert.match(detail, /accessibilityState=\{multiple\?\{checked:selected\}:\{selected\}\}/)
+  assert.match(detail, /item\.measurements\.map\(axis=>/)
+  assert.match(detail, /item\.currentUsage\[axis\]/)
+  assert.doesNotMatch(detail, /<Reading label="Mileage" value=\{item\.effective_current_mileage/)
+  assert.match(detail, /readings\.slice\(0,8\)\.map/)
+  assert.match(detail, /logs\.map\(log=>/)
+  assert.match(list, /item\.currentUsage\.miles/)
+  assert.match(list, /item\.currentUsage\.hours/)
+  assert.match(list, /item\.currentUsage\.cycles/)
+  assert.doesNotMatch(list, /item\.effective_current_/)
 })

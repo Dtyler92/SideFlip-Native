@@ -3,6 +3,8 @@ import { ActivityIndicator, Alert, Platform, RefreshControl, ScrollView, StyleSh
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
+import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
+import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, selectItemType, validateItemDraft } from '../domain/myStuff/itemModel'
 import {
   completeMyStuffMaintenance,
   createMyStuffSchedule,
@@ -17,10 +19,14 @@ import {
 import { buildRecordMyStuffReadingV2WirePayload, buildUpdateMyStuffItemV2WirePayload } from '../lib/myStuffPayloads'
 import {
   addCalendarDays,
+  canCompleteMaintenanceSchedule,
   createMutationAttemptState,
   createMutationId,
   dueStateLabel,
+  filterActiveDueStates,
+  getScheduleCurrentReading,
   getScheduleDueState,
+  getScheduleTrackingModes,
   parseNonNegativeNumber,
   parsePositiveNumber,
   mutationIdForPayload,
@@ -34,6 +40,7 @@ const ACCENT = '#C8402F'
 const EMPTY_SCHEDULE = { name:'', mode:'mileage', interval:'', lastReading:'', lastDate:'' }
 const EMPTY_COMPLETION = { completedAt:todayDateInput(), reading:'', cost:'', notes:'' }
 const EMPTY_USAGE = { type:'miles', value:'', recordedOn:todayDateInput(), correcting:false, correctionReason:'' }
+const AXES = [{key:'miles',label:'Miles'},{key:'hours',label:'Hours'},{key:'cycles',label:'Cycles'}]
 
 export default function MyStuffDetailScreen({ navigation, route }) {
   const { user, formatMoney } = useAuth()
@@ -52,6 +59,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [error,setError]=useState('')
   const [editing,setEditing]=useState(false)
   const [edit,setEdit]=useState({})
+  const [validationErrors,setValidationErrors]=useState({})
   const [showSchedule,setShowSchedule]=useState(false)
   const [schedule,setSchedule]=useState(EMPTY_SCHEDULE)
   const [completingId,setCompletingId]=useState(null)
@@ -77,7 +85,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       const [legacy,result]=await Promise.all([getMyStuffItem(itemId,user.id),getMyStuffItemV2(itemId,user.id)])
       if(generation!==requestGeneration.current)return
       setItem(result.item);setSchedules(legacy.schedules);setLogs(legacy.logs)
-      setReadings(result.readings);setDefinitions(result.definitions);setDueStates(result.dueStates)
+      setReadings(result.readings);setDefinitions(result.definitions);setDueStates(filterActiveDueStates(result.dueStates,result.item))
     }catch(nextError){if(generation===requestGeneration.current)setError(nextError.message||'Could not load this item.')}
     finally{if(generation===requestGeneration.current){setLoading(false);setRefreshing(false)}}
   },[itemId,user?.id])
@@ -91,20 +99,24 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     setEdit({name:item.name||'',category:item.category||'other',itemType:item.itemType,year:item.model_year==null?'':String(item.model_year),make:item.make||'',model:item.model||'',trim:item.trim||'',modelNumber:item.model_number||'',serialNumber:item.serial_number||'',engine:item.engine||'',transmission:item.transmission||'',drivetrain:item.drivetrain||'',fuelType:item.fuel_power_type||'',acquiredOn:item.acquired_on||'',notes:item.notes||'',usageProfile:item.usage_profile||'normal',measurements:item.measurements||[]})
   },[item?.id,item?.updated_at])
 
-  function setEditValue(key,value){setEdit(current=>({...current,[key]:value}))}
+  function setEditValue(key,value){setValidationErrors({});setEdit(current=>({...current,[key]:value}))}
+  function setExactType(value){setValidationErrors({});setEdit(current=>selectItemType(current,value))}
+  function toggleEditMeasurement(axis){setValidationErrors({});setEdit(current=>({...current,measurements:current.measurements.includes(axis)?current.measurements.filter(value=>value!==axis):[...current.measurements,axis]}))}
   function setScheduleValue(key,value){setSchedule(current=>({...current,[key]:value}))}
   function setCompletionValue(key,value){setCompletion(current=>({...current,[key]:value}))}
   function setUsageValue(key,value){setUsage(current=>({...current,[key]:value}))}
 
   async function saveItem(){
     if(itemInFlight.current)return
-    if(!edit.name?.trim())return Alert.alert('Item name required','Enter a name for this item.')
     if(edit.acquiredOn?.trim()&&!validateCalendarDate(edit.acquiredOn))return Alert.alert('Check acquisition date','Use a valid date in YYYY-MM-DD format.')
-    if(edit.year&&(!Number.isInteger(Number(edit.year))||Number(edit.year)<1800||Number(edit.year)>2200))return Alert.alert('Check model year','Model year must be a whole number between 1800 and 2200.')
+    const validatedEdit={...edit,name:String(edit.name||'').trim(),category:deriveItemCategory(edit.itemType),measurements:edit.measurements||[]}
+    const validation=validateItemDraft(validatedEdit)
+    setValidationErrors(validation.errors)
+    if(!validation.ok)return
     itemInFlight.current=true;setSaving(true)
     try{
-      const {itemType,...editable}=edit
-      const payload={...editable,itemId:item.id,category:edit.category.trim()||'other',acquiredOn:edit.acquiredOn.trim()||null,notes:edit.notes.trim()||null}
+      const {itemType,...editable}=validatedEdit
+      const payload={...editable,itemId:item.id,acquiredOn:edit.acquiredOn.trim()||null,notes:edit.notes.trim()||null}
       if(itemType!==item.itemType)payload.itemType=itemType
       const wirePayload=buildUpdateMyStuffItemV2WirePayload(payload)
       const mutationId=mutationIdForPayload(itemMutationAttempt.current,wirePayload)
@@ -117,6 +129,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   async function addSchedule(){
     if(scheduleInFlight.current)return
     if(!schedule.name.trim())return Alert.alert('Maintenance name required','Name this maintenance task.')
+    if(!getScheduleTrackingModes(item).includes(schedule.mode))return Alert.alert('Choose an active measurement','Enable this measurement in Item details before adding a maintenance schedule.')
     const interval=parsePositiveNumber(schedule.interval)
     if(!interval.ok)return Alert.alert('Check interval','Interval must be a finite number greater than zero.')
     let lastCompletedValue=null,lastCompletedAt=null,nextDueValue=null,nextDueAt=null
@@ -144,11 +157,12 @@ export default function MyStuffDetailScreen({ navigation, route }) {
 
   function toggleScheduleForm(){
     if(showSchedule){scheduleMutationId.current=null;setShowSchedule(false);return}
-    scheduleMutationId.current=createMutationId();setShowSchedule(true)
+    const trackingModes=getScheduleTrackingModes(item)
+    scheduleMutationId.current=createMutationId();setSchedule(current=>trackingModes.includes(current.mode)?current:{...current,mode:trackingModes[0]});setShowSchedule(true)
   }
 
   function openCompletion(value){
-    const reading=value.tracking_type==='mileage'?(item.effective_current_mileage??item.current_mileage):value.tracking_type==='hours'?(item.effective_current_hours??item.current_hours):''
+    const reading=getScheduleCurrentReading(value,item)
     setCompletion({...EMPTY_COMPLETION,completedAt:todayDateInput(),reading:reading==null?'':String(reading)})
     completionMutationId.current=createMutationId()
     setCompletingId(value.id)
@@ -158,6 +172,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
 
   async function finishMaintenance(scheduleValue){
     if(completionInFlight.current)return
+    if(!canCompleteMaintenanceSchedule(scheduleValue,item))return Alert.alert('Measurement no longer active','Enable this measurement in Item details before completing this maintenance schedule.')
     if(!validateCalendarDate(completion.completedAt))return Alert.alert('Check completion date','Use a valid date in YYYY-MM-DD format.')
     const cost=parseNonNegativeNumber(completion.cost,{optional:true})
     if(!cost.ok)return Alert.alert('Check cost','Cost must be a finite number of zero or more.')
@@ -181,6 +196,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
 
   async function saveUsage(){
     if(usageInFlight.current)return
+    if(!item.measurements.includes(usage.type))return Alert.alert('Choose a tracked measurement',`Enable ${usage.type} in Item details before adding this reading.`)
     if(!validateCalendarDate(usage.recordedOn))return Alert.alert('Check reading date','Use a valid date in YYYY-MM-DD format.')
     const parsed=parseNonNegativeNumber(usage.value)
     if(!parsed.ok||(usage.type==='cycles'&&!Number.isInteger(parsed.value)))return Alert.alert('Check reading',usage.type==='cycles'?'Cycles must be a whole number of zero or more.':'Reading must be a finite number of zero or more.')
@@ -230,7 +246,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         <View style={s.between}><Text style={s.sectionTitle}>Item details</Text><TouchableOpacity onPress={()=>setEditing(value=>!value)} accessibilityRole="button" accessibilityLabel={editing?'Cancel editing item':'Edit item'}><Text style={s.link}>{editing?'Cancel':'Edit'}</Text></TouchableOpacity></View>
         {editing?<>
           <Field label="Item name *" value={edit.name} onChangeText={value=>setEditValue('name',value)}/>
-          <Field label="Category" value={edit.category} onChangeText={value=>setEditValue('category',value)}/>
+          <MyStuffItemTypePicker value={edit.itemType} onChange={setExactType} error={validationErrors.itemType||validationErrors.category}/>
           <Field label="Model year" value={edit.year} onChangeText={value=>setEditValue('year',value)} keyboardType="number-pad"/>
           <Field label="Make" value={edit.make} onChangeText={value=>setEditValue('make',value)}/>
           <Field label="Model" value={edit.model} onChangeText={value=>setEditValue('model',value)}/>
@@ -242,26 +258,30 @@ export default function MyStuffDetailScreen({ navigation, route }) {
           <Field label="Drivetrain" value={edit.drivetrain} onChangeText={value=>setEditValue('drivetrain',value)}/>
           <Field label="Fuel / power type" value={edit.fuelType} onChangeText={value=>setEditValue('fuelType',value)}/>
           <Field label="Acquired on" value={edit.acquiredOn} onChangeText={value=>setEditValue('acquiredOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
+          <Text style={s.label}>Usage measurements</Text><View style={s.modeRow} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis=>getItemCategoryContract(edit.category).measurements.includes(axis.key)).map(axis=><Choice key={axis.key} label={axis.label} selected={edit.measurements.includes(axis.key)} onPress={()=>toggleEditMeasurement(axis.key)} multiple={true}/>)}</View>
+          <Text style={s.label}>Usage profile</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Usage profile">{['normal','severe'].map(value=><Choice key={value} label={value==='normal'?'Normal use':'Severe use'} selected={edit.usageProfile===value} onPress={()=>setEditValue('usageProfile',value)}/>)}</View>
           <Field label="Notes" value={edit.notes} onChangeText={value=>setEditValue('notes',value)} multiline/>
+          <ValidationErrors errors={validationErrors}/>
           <Button label={saving?'Saving…':'Save Item'} onPress={saveItem} disabled={saving}/>
         </>:<>
-          <Text style={s.itemName}>{item.name}</Text><Text style={s.muted}>{item.category||'Other'}{item.model_year?` · ${item.model_year}`:''}{item.make?` · ${item.make}`:''}{item.model?` ${item.model}`:''}</Text>
+          <Text style={s.itemName}>{item.name}</Text><Text style={s.muted}>{getItemTypeOption(item.itemType)?.label||'Other'} · {getItemCategoryContract(item.category)?.label||'Other'}{item.model_year?` · ${item.model_year}`:''}{item.make?` · ${item.make}`:''}{item.model?` ${item.model}`:''}</Text>
           {!!item.serial_number&&<Text style={s.muted}>Serial: {item.serial_number}</Text>}
           {!!item.archived_at&&<Text style={s.archiveBadge}>Archived · history retained</Text>}
-          <View style={s.readingRow}><Reading label="Mileage" value={item.effective_current_mileage??item.current_mileage} suffix="mi"/><Reading label="Operating hours" value={item.effective_current_hours??item.current_hours} suffix="hr"/><Reading label="Cycles" value={item.effective_current_cycles??item.current_cycles} suffix="cycles"/></View>
+          {item.measurements.length>0&&<View style={s.readingRow}>{item.measurements.map(axis=>{const config=AXES.find(value=>value.key===axis);return <Reading key={axis} label={config?.label||axis} value={item.currentUsage[axis]} suffix={axis==='miles'?'mi':axis==='hours'?'hr':'cycles'}/>})}</View>}
           {!!item.notes&&<Text style={s.notes}>{item.notes}</Text>}
         </>}
       </View>
 
-      <View style={s.between}><Text style={s.pageSection}>Usage readings</Text><TouchableOpacity onPress={()=>{resetMutationAttemptState(usageMutationAttempt.current);setShowUsage(value=>!value)}} accessibilityRole="button" accessibilityLabel={showUsage?'Cancel adding usage reading':'Add usage reading'}><Text style={s.link}>{showUsage?'Cancel':'+ Add'}</Text></TouchableOpacity></View>
+      <View style={s.between}><Text style={s.pageSection}>Usage readings</Text>{item.measurements.length>0&&<TouchableOpacity onPress={()=>{resetMutationAttemptState(usageMutationAttempt.current);setUsage(current=>({...current,type:item.measurements.includes(current.type)?current.type:item.measurements[0]}));setShowUsage(value=>!value)}} accessibilityRole="button" accessibilityLabel={showUsage?'Cancel adding usage reading':'Add usage reading'}><Text style={s.link}>{showUsage?'Cancel':'+ Add'}</Text></TouchableOpacity>}</View>
       {showUsage&&<View style={s.card}>
-        <Text style={s.label}>Measurement</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Reading measurement">{['miles','hours','cycles'].map(type=><Choice key={type} label={type} selected={usage.type===type} onPress={()=>setUsageValue('type',type)}/>)}</View>
+        <Text style={s.label}>Measurement</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Reading measurement">{item.measurements.map(type=><Choice key={type} label={type} selected={usage.type===type} onPress={()=>setUsageValue('type',type)}/>)}</View>
         <Field label="Reading *" value={usage.value} onChangeText={value=>setUsageValue('value',value)} keyboardType="decimal-pad"/>
         <Field label="Recorded on *" value={usage.recordedOn} onChangeText={value=>setUsageValue('recordedOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
         <TouchableOpacity style={s.correctionToggle} onPress={()=>setUsageValue('correcting',!usage.correcting)} accessibilityRole="checkbox" accessibilityState={{checked:usage.correcting}}><Text style={s.link}>{usage.correcting?'✓ Correction mode':'Correct the latest reading'}</Text></TouchableOpacity>
         {usage.correcting&&<><Text style={s.warning}>Corrections append an audit record. They never lower the retained meter column.</Text><Field label="Correction reason *" value={usage.correctionReason} onChangeText={value=>setUsageValue('correctionReason',value)} multiline/></>}
         <Button label={saving?'Saving…':usage.correcting?'Append Correction':'Append Reading'} onPress={saveUsage} disabled={saving}/>
       </View>}
+      {item.measurements.length===0&&<View style={s.empty}><Text style={s.muted}>No usage measurements selected. Edit Item details to enable one.</Text></View>}
       {readings.slice(0,8).map(value=><View key={value.id} style={s.historyRow}><View style={s.flex}><Text style={s.historyName}>{value.reading_type==='mileage'?'Mileage':value.reading_type}</Text><Text style={s.muted}>{Number(value.reading_value).toLocaleString()} · {String(value.recorded_at||'').slice(0,10)}</Text>{value.source==='correction'&&<Text style={s.warning}>Correction · {value.correction_reason}</Text>}</View></View>)}
       {readings.length===0&&<View style={s.empty}><Text style={s.muted}>No appended usage readings yet.</Text></View>}
 
@@ -274,22 +294,23 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       <View style={s.between}><Text style={s.pageSection}>Maintenance schedules</Text><TouchableOpacity onPress={toggleScheduleForm} accessibilityRole="button" accessibilityLabel={showSchedule?'Cancel adding maintenance schedule':'Add maintenance schedule'}><Text style={s.link}>{showSchedule?'Cancel':'+ Add'}</Text></TouchableOpacity></View>
       {showSchedule&&<View style={s.card}>
         <Field label="Maintenance name *" value={schedule.name} onChangeText={value=>setScheduleValue('name',value)} placeholder="e.g. Oil change"/>
-        <Text style={s.label}>Track by</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Maintenance tracking mode">{['mileage','hours','calendar'].map(mode=><Choice key={mode} label={mode} selected={schedule.mode===mode} onPress={()=>setScheduleValue('mode',mode)}/>)}</View>
+        <Text style={s.label}>Track by</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Maintenance tracking mode">{getScheduleTrackingModes(item).map(mode=><Choice key={mode} label={mode} selected={schedule.mode===mode} onPress={()=>setScheduleValue('mode',mode)}/>)}</View>
         <Field label={schedule.mode==='calendar'?'Interval in days *':`Interval in ${schedule.mode} *`} value={schedule.interval} onChangeText={value=>setScheduleValue('interval',value)} keyboardType="decimal-pad"/>
         {schedule.mode==='calendar'?<Field label="Last service date *" value={schedule.lastDate} onChangeText={value=>setScheduleValue('lastDate',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>:<Field label={`Last service ${schedule.mode} *`} value={schedule.lastReading} onChangeText={value=>setScheduleValue('lastReading',value)} keyboardType="decimal-pad"/>}
         <Button label={saving?'Saving…':'Add Schedule'} onPress={addSchedule} disabled={saving}/>
       </View>}
       {schedules.length===0?<View style={s.empty}><Text style={s.muted}>No maintenance schedules yet.</Text></View>:schedules.map(value=>{
         const state=getScheduleDueState(value,item)
+        const canComplete=canCompleteMaintenanceSchedule(value,item)
         return <View key={value.id} style={s.card}>
           <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>{value.name}</Text><Text style={s.muted}>{scheduleDescription(value)}</Text></View><View style={[s.pill,s[`pill_${state}`]]}><Text style={s.pillText}>{dueStateLabel(state)}</Text></View></View>
-          {completingId===value.id?<View style={s.completionBox}>
+          {completingId===value.id&&canComplete?<View style={s.completionBox}>
             <Field label="Completed on *" value={completion.completedAt} onChangeText={value=>setCompletionValue('completedAt',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
             {value.tracking_type!=='calendar'&&<Field label={`${value.tracking_type} reading *`} value={completion.reading} onChangeText={next=>setCompletionValue('reading',next)} keyboardType="decimal-pad"/>}
             <Field label="Cost (optional)" value={completion.cost} onChangeText={next=>setCompletionValue('cost',next)} keyboardType="decimal-pad"/>
             <Field label="Notes (optional)" value={completion.notes} onChangeText={next=>setCompletionValue('notes',next)} multiline/>
             <Button label={saving?'Saving…':'Complete Maintenance'} onPress={()=>finishMaintenance(value)} disabled={saving}/><TouchableOpacity onPress={cancelCompletion} accessibilityRole="button" accessibilityLabel="Cancel maintenance completion"><Text style={s.cancelLink}>Cancel</Text></TouchableOpacity>
-          </View>:<View style={s.actions}><TouchableOpacity style={s.smallButton} onPress={()=>openCompletion(value)} accessibilityRole="button" accessibilityLabel={`Mark ${value.name} complete`}><Text style={s.smallButtonText}>Mark Complete</Text></TouchableOpacity><TouchableOpacity onPress={()=>confirmDeleteSchedule(value)} accessibilityRole="button" accessibilityLabel={`Delete ${value.name} schedule`}><Text style={s.deleteLink}>Delete</Text></TouchableOpacity></View>}
+          </View>:<View style={s.actions}>{canComplete&&<TouchableOpacity style={s.smallButton} onPress={()=>openCompletion(value)} accessibilityRole="button" accessibilityLabel={`Mark ${value.name} complete`}><Text style={s.smallButtonText}>Mark Complete</Text></TouchableOpacity>}<TouchableOpacity onPress={()=>confirmDeleteSchedule(value)} accessibilityRole="button" accessibilityLabel={`Delete ${value.name} schedule`}><Text style={s.deleteLink}>Delete</Text></TouchableOpacity></View>}
         </View>
       })}
 
@@ -311,7 +332,7 @@ function dueStateSummaryLabel(status){return {overdue:'Overdue',due_now:'Due now
 function dueStateDescription(value){const details=[];if(value.next_due_at)details.push(`Date ${String(value.next_due_at).slice(0,10)}`);if(value.next_due_mileage!=null)details.push(`${Number(value.next_due_mileage).toLocaleString()} mi`);if(value.next_due_hours!=null)details.push(`${Number(value.next_due_hours).toLocaleString()} hr`);if(value.next_due_cycles!=null)details.push(`${Number(value.next_due_cycles).toLocaleString()} cycles`);return details.join(' · ')||'Update usage to calculate the next service.'}
 function Header({title,onBack}){return <View style={s.header}><TouchableOpacity style={s.headerSide} onPress={onBack} accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10}><Text style={s.back}>‹ Back</Text></TouchableOpacity><Text style={s.headerTitle} numberOfLines={1}>{title}</Text><View style={s.headerSide}/></View>}
 function Field({label,multiline,...props}){return <View><Text style={s.label}>{label}</Text><TextInput style={[s.input,multiline&&s.textarea]} placeholderTextColor="#A8A49E" multiline={multiline} {...props}/></View>}
-function Choice({label,selected,onPress}){return <TouchableOpacity style={[s.choice,selected&&s.choiceActive]} onPress={onPress} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{selected}}><Text style={[s.choiceText,selected&&s.choiceTextActive]}>{label}</Text></TouchableOpacity>}
+function Choice({label,selected,onPress,multiple=false}){return <TouchableOpacity style={[s.choice,selected&&s.choiceActive]} onPress={onPress} accessibilityRole={multiple?'checkbox':'radio'} accessibilityLabel={label} accessibilityState={multiple?{checked:selected}:{selected}}><Text style={[s.choiceText,selected&&s.choiceTextActive]}>{label}</Text></TouchableOpacity>}
 function Button({label,onPress,disabled}){return <TouchableOpacity style={[s.button,disabled&&s.disabled]} onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{disabled,busy:disabled}}><Text style={s.buttonText}>{label}</Text></TouchableOpacity>}
 function Reading({label,value,suffix}){return <View style={s.reading}><Text style={s.eyebrow}>{label}</Text><Text style={s.readingValue}>{value==null?'Not set':`${Number(value).toLocaleString()} ${suffix}`}</Text></View>}
 
