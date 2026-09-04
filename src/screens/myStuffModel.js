@@ -1,4 +1,6 @@
-const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+import { dateOnlyFromIso, validateCalendarDate } from '../domain/myStuff/maintenanceModel.js'
+
+export { validateCalendarDate } from '../domain/myStuff/maintenanceModel.js'
 
 export function createMutationId() {
   const random = Math.random().toString(36).slice(2)
@@ -24,16 +26,6 @@ export function parseNonNegativeNumber(input, { optional = false } = {}) {
     : { ok: false, value: null }
 }
 
-export function validateCalendarDate(input) {
-  const match = DATE_PATTERN.exec(String(input || '').trim())
-  if (!match) return false
-  const year = Number(match[1])
-  const month = Number(match[2])
-  const day = Number(match[3])
-  const date = new Date(Date.UTC(year, month - 1, day))
-  return year >= 1900 && year <= 2200 && date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-}
-
 export function todayDateInput(now = new Date()) {
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
@@ -50,7 +42,7 @@ function compareDateOnly(value, now) {
 export function getScheduleDueState(schedule, item = {}, now = new Date()) {
   const mode = schedule?.tracking_type
   if (mode === 'calendar') {
-    const comparison = compareDateOnly(String(schedule.next_due_at || '').slice(0, 10), now)
+    const comparison = compareDateOnly(dateOnlyFromIso(schedule.next_due_at), now)
     if (comparison === null) return 'unknown'
     if (comparison === 0) return 'due'
     return comparison < 0 ? 'overdue' : 'upcoming'
@@ -83,8 +75,8 @@ export function addCalendarDays(dateInput, interval) {
 export function validateMaintenanceCompletion(schedule, completedAt, reading) {
   if (!validateCalendarDate(completedAt)) return 'Use a valid completion date between 1900 and 2200.'
   if (schedule?.tracking_type === 'calendar') {
-    const lastDate = String(schedule.last_completed_at || '').slice(0, 10)
-    if (lastDate && validateCalendarDate(lastDate) && completedAt < lastDate) return 'Completion date cannot be before the previous completion.'
+    const lastDate = dateOnlyFromIso(schedule.last_completed_at)
+    if (lastDate && completedAt < lastDate) return 'Completion date cannot be before the previous completion.'
     return null
   }
   const current = Number(reading)

@@ -45,6 +45,7 @@ test('invalid or incomplete schedules report unknown', () => {
   assert.equal(getScheduleDueState({ tracking_type: 'mileage', next_due_value: 100 }, { current_mileage: null }), 'unknown')
   assert.equal(getScheduleDueState({ tracking_type: 'hours', next_due_value: 10 }, { current_hours: undefined }), 'unknown')
   assert.equal(getScheduleDueState({ tracking_type: 'calendar', next_due_at: 'not-a-date' }, {}), 'unknown')
+  assert.equal(getScheduleDueState({ tracking_type: 'calendar', next_due_at: '2026-08-24garbage' }, {}), 'unknown')
 })
 
 test('numeric and calendar validators reject unsafe synthetic values', () => {
@@ -80,4 +81,5 @@ test('maintenance completion cannot rewind readings or calendar dates', () => {
   assert.equal(validateMaintenanceCompletion({ tracking_type:'mileage', last_completed_value:100 }, '2026-08-24', 100), null)
   assert.match(validateMaintenanceCompletion({ tracking_type:'calendar', last_completed_at:'2026-08-24T12:00:00Z' }, '2026-08-23', null), /cannot be before/)
   assert.equal(validateMaintenanceCompletion({ tracking_type:'calendar', last_completed_at:'2026-08-24T12:00:00Z' }, '2026-08-24', null), null)
+  assert.equal(validateMaintenanceCompletion({ tracking_type:'calendar', last_completed_at:'2026-08-24garbage' }, '2026-08-23', null), null)
 })
