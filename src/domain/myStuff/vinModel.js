@@ -8,12 +8,53 @@ const TRANSLITERATION = Object.freeze({
 })
 const WEIGHTS = Object.freeze([8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2])
 
+// Projects use an unbounded text column; 256 matches the shared request cap.
+// My Stuff V2 has an explicit 64-character database constraint.
+export const VIN_IDENTIFIER_MAX_LENGTHS = Object.freeze({ project: 256, my_stuff_item: 64 })
+
 export const VIN_SUGGESTION_FIELDS = Object.freeze([
   'year', 'make', 'model', 'trim', 'engine', 'transmission', 'drivetrain', 'fuelType', 'bodyClass',
 ])
 
 export function normalizeVin(input) {
   return String(input ?? '').trim().toUpperCase().replace(/[ -]/g, '')
+}
+
+export function validateVinIdentifier(input, subjectType) {
+  const maxLength = VIN_IDENTIFIER_MAX_LENGTHS[subjectType]
+  if (!maxLength) return { ok: false, maxLength: 0, reason: 'Choose a supported VIN destination.' }
+  const value = String(input ?? '')
+  return value.length <= maxLength
+    ? { ok: true, maxLength, reason: null }
+    : { ok: false, maxLength, reason: `VIN / identifier must be ${maxLength} characters or fewer.` }
+}
+
+export function createVinDecodeRequestGate() {
+  let generation = 0
+  let activeController = null
+  return {
+    begin(vin) {
+      activeController?.abort()
+      const request = { generation: ++generation, normalizedVin: normalizeVin(vin), controller: new AbortController() }
+      activeController = request.controller
+      return request
+    },
+    invalidate() {
+      generation += 1
+      activeController?.abort()
+      activeController = null
+    },
+    isCurrent(request, vin) {
+      return request?.generation === generation
+        && request.normalizedVin === normalizeVin(vin)
+        && request.controller.signal.aborted === false
+    },
+    finish(request) {
+      if (request?.generation !== generation) return false
+      activeController = null
+      return true
+    },
+  }
 }
 
 export function isVinCheckDigitApplicable(input, context = {}) {
@@ -125,4 +166,36 @@ export function mergeDecodedSuggestions(existing = {}, decoded = {}) {
     }
   }
   return { values, fields }
+}
+
+export function decodedVehicleSuggestions(vehicle = {}) {
+  const cylinders = vehicle.engineCylinders
+  const displacement = vehicle.displacementLiters
+  const engineParts = []
+  if (Number.isFinite(displacement)) engineParts.push(`${displacement}L`)
+  if (Number.isFinite(cylinders)) engineParts.push(`${cylinders} cylinder${cylinders === 1 ? '' : 's'}`)
+  const mapped = {
+    year: vehicle.modelYear,
+    make: vehicle.make,
+    model: vehicle.model,
+    trim: vehicle.trim,
+    engine: engineParts.join(' · '),
+    transmission: vehicle.transmissionStyle,
+    drivetrain: vehicle.driveType,
+    fuelType: vehicle.fuelTypePrimary,
+    bodyClass: vehicle.bodyClass,
+  }
+  return Object.fromEntries(Object.entries(mapped).filter(([, value]) => !isBlank(value)))
+}
+
+export function applyVinSuggestions(existing = {}, previewFields = {}, { mode = 'selected', fields = [] } = {}) {
+  const result = clone(existing)
+  const selected = new Set(fields)
+  for (const [field, preview] of Object.entries(previewFields)) {
+    if (!preview || !Object.prototype.hasOwnProperty.call(preview, 'suggestion')) continue
+    if (mode === 'fill_blanks') {
+      if (preview.status === 'suggested' && isBlank(existing[field])) result[field] = clone(preview.suggestion)
+    } else if (selected.has(field)) result[field] = clone(preview.suggestion)
+  }
+  return result
 }

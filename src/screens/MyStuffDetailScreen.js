@@ -4,6 +4,8 @@ import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
+import VinDecodePanel from '../components/VinDecodePanel'
+import { maskVin } from '../domain/myStuff/vinModel'
 import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, selectItemType, validateItemDraft } from '../domain/myStuff/itemModel'
 import {
   completeMyStuffMaintenance,
@@ -53,7 +55,7 @@ const EMPTY_USAGE = { type:'miles', value:'', recordedOn:todayDateInput(), corre
 const AXES = [{key:'miles',label:'Miles'},{key:'hours',label:'Hours'},{key:'cycles',label:'Cycles'}]
 
 export default function MyStuffDetailScreen({ navigation, route }) {
-  const { user, formatMoney } = useAuth()
+  const { user, isPro: hasPro, formatMoney } = useAuth()
   const itemId = route.params?.itemId
   const [item,setItem]=useState(null)
   const [schedules,setSchedules]=useState([])
@@ -115,7 +117,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
 
   useEffect(()=>{
     if(!item)return
-    setEdit({name:item.name||'',category:item.category||'other',itemType:item.itemType,year:item.model_year==null?'':String(item.model_year),make:item.make||'',model:item.model||'',trim:item.trim||'',modelNumber:item.model_number||'',serialNumber:item.serial_number||'',engine:item.engine||'',transmission:item.transmission||'',drivetrain:item.drivetrain||'',fuelType:item.fuel_power_type||'',acquiredOn:item.acquired_on||'',notes:item.notes||'',usageProfile:item.usage_profile||'normal',measurements:item.measurements||[]})
+    setEdit({name:item.name||'',category:item.category||'other',itemType:item.itemType,year:item.model_year==null?'':String(item.model_year),make:item.make||'',model:item.model||'',trim:item.trim||'',modelNumber:item.model_number||'',serialNumber:item.serial_number||'',vin:item.vin||'',engine:item.engine||'',transmission:item.transmission||'',drivetrain:item.drivetrain||'',fuelType:item.fuel_power_type||'',acquiredOn:item.acquired_on||'',notes:item.notes||'',usageProfile:item.usage_profile||'normal',measurements:item.measurements||[]})
   },[item?.id,item?.updated_at])
 
   function setEditValue(key,value){setValidationErrors({});setEdit(current=>({...current,[key]:value}))}
@@ -146,9 +148,14 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       if(itemType!==item.itemType)payload.itemType=itemType
       const wirePayload=buildUpdateMyStuffItemV2WirePayload(payload)
       const mutationId=mutationIdForPayload(itemMutationAttempt.current,wirePayload)
-      await updateMyStuffItemV2(wirePayload,mutationId)
-      resetMutationAttemptState(itemMutationAttempt.current);setEditing(false);await load({quiet:true})
-    }catch(nextError){Alert.alert('Could not update item',nextError.message||'Please try again.')}
+      await runMutationThenRefresh({
+        mutate:()=>updateMyStuffItemV2(wirePayload,mutationId),
+        onMutationSuccess:()=>{resetMutationAttemptState(itemMutationAttempt.current);setEditing(false)},
+        refresh:()=>load({quiet:true,throwOnError:true}),
+        onMutationError:nextError=>Alert.alert('Could not update item',nextError.message||'Please try again.'),
+        onRefreshError:nextError=>reportSavedRefreshFailure('Item details saved, but refresh failed',nextError),
+      })
+    }
     finally{itemInFlight.current=false;setSaving(false)}
   }
 
@@ -382,15 +389,17 @@ export default function MyStuffDetailScreen({ navigation, route }) {
           <Field label="Transmission" value={edit.transmission} onChangeText={value=>setEditValue('transmission',value)}/>
           <Field label="Drivetrain" value={edit.drivetrain} onChangeText={value=>setEditValue('drivetrain',value)}/>
           <Field label="Fuel / power type" value={edit.fuelType} onChangeText={value=>setEditValue('fuelType',value)}/>
+          <VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} isPro={hasPro} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} onUpgrade={()=>navigation.navigate('Pro')} suggestionFields={['year','make','model','trim','engine','transmission','drivetrain','fuelType']}/>
           <Field label="Acquired on" value={edit.acquiredOn} onChangeText={value=>setEditValue('acquiredOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
           <Text style={s.label}>Usage measurements</Text><View style={s.modeRow} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis=>getItemCategoryContract(edit.category).measurements.includes(axis.key)).map(axis=><Choice key={axis.key} label={axis.label} selected={edit.measurements.includes(axis.key)} onPress={()=>toggleEditMeasurement(axis.key)} multiple={true}/>)}</View>
           <Text style={s.label}>Usage profile</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Usage profile">{['normal','severe'].map(value=><Choice key={value} label={value==='normal'?'Normal use':'Severe use'} selected={edit.usageProfile===value} onPress={()=>setEditValue('usageProfile',value)}/>)}</View>
           <Field label="Notes" value={edit.notes} onChangeText={value=>setEditValue('notes',value)} multiline/>
           <ValidationErrors errors={validationErrors}/>
-          <Button label={saving?'Saving…':'Save Item'} onPress={saveItem} disabled={saving}/>
+          <Button label={saving?'Saving…':'Save Item Details'} onPress={saveItem} disabled={saving}/>
         </>:<>
           <Text style={s.itemName}>{item.name}</Text><Text style={s.muted}>{getItemTypeOption(item.itemType)?.label||'Other'} · {getItemCategoryContract(item.category)?.label||'Other'}{item.model_year?` · ${item.model_year}`:''}{item.make?` · ${item.make}`:''}{item.model?` ${item.model}`:''}</Text>
           {!!item.serial_number&&<Text style={s.muted}>Serial: {item.serial_number}</Text>}
+          {!!item.vin&&<Text style={s.muted}>VIN: {maskVin(item.vin)}</Text>}
           {!!item.archived_at&&<Text style={s.archiveBadge}>Archived · history retained</Text>}
           {item.measurements.length>0&&<View style={s.readingRow}>{item.measurements.map(axis=>{const config=AXES.find(value=>value.key===axis);return <Reading key={axis} label={config?.label||axis} value={item.currentUsage[axis]} suffix={axis==='miles'?'mi':axis==='hours'?'hr':'cycles'}/>})}</View>}
           {!!item.notes&&<Text style={s.notes}>{item.notes}</Text>}

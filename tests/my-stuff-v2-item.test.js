@@ -48,6 +48,7 @@ test('V2 validation rejects type/category drift, unsupported axes, orphan readin
   assert.match(validateItemDraft({ name: 'TV', itemType: 'electronics', category: 'electronics', measurements: [], currentUsage: { cycles: 2 } }).errors.currentUsage, /select Cycles/i)
   assert.match(validateItemDraft({ name: 'TV', itemType: 'electronics', category: 'electronics', usageProfile: 'extreme' }).errors.usageProfile, /Normal or Severe/)
   assert.match(validateItemDraft({ name: 'Mystery', itemType: 'not_real', category: 'other' }).errors.itemType, /specific item type/)
+  assert.match(validateItemDraft({ name: 'Truck', category: 'vehicle', vin: 'x'.repeat(65) }).errors.vin, /64 characters/)
 })
 
 test('manual non-automotive items remain usable without measurements or automotive fields', () => {

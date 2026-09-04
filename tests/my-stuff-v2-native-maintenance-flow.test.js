@@ -137,7 +137,20 @@ test('native maintenance UI separates managed legacy schedules from all new V2 m
   assert.match(detail, /runMutationThenRefresh\(/)
   assert.match(detail, /refresh:\(\)=>load\(\{quiet:true,throwOnError:true\}\)/)
   assert.match(detail, /saved, but refresh failed/)
-  assert.doesNotMatch(detail, /isPro.*(?:maintenance|service)|(?:maintenance|service).*isPro/is)
+  assert.doesNotMatch(detail, /\{(?:isPro|hasPro)&&[^}\n]*(?:maintenance|service)/i)
+})
+
+test('V2 item save finalizes retry state before a separately reported refresh failure', () => {
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  const start = detail.indexOf('async function saveItem()')
+  const end = detail.indexOf('function definitionUsageAxes', start)
+  const saveItem = detail.slice(start, end)
+  assert.match(saveItem, /runMutationThenRefresh\(/)
+  assert.match(saveItem, /mutate:\(\)=>updateMyStuffItemV2\(wirePayload,mutationId\)/)
+  assert.match(saveItem, /onMutationSuccess:\(\)=>\{resetMutationAttemptState\(itemMutationAttempt\.current\);setEditing\(false\)\}/)
+  assert.match(saveItem, /refresh:\(\)=>load\(\{quiet:true,throwOnError:true\}\)/)
+  assert.match(saveItem, /Item details saved, but refresh failed/)
+  assert.doesNotMatch(saveItem, /await updateMyStuffItemV2\(wirePayload,mutationId\)/)
 })
 
 test('legacy completion retains the canonical V1 RPC contract and deletion stays owner scoped', async () => {

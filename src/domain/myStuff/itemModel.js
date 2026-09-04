@@ -1,3 +1,5 @@
+import { validateVinIdentifier } from './vinModel.js'
+
 export const MEASUREMENT_TYPES = Object.freeze(['miles', 'hours', 'cycles'])
 
 const CONTRACTS = Object.freeze({
@@ -126,6 +128,8 @@ export function validateItemDraft(item = {}) {
   if (item.usageProfile != null && !['normal', 'severe'].includes(item.usageProfile)) {
     errors.usageProfile = 'Usage profile must be Normal or Severe.'
   }
+  const vinValidation = validateVinIdentifier(item.vin, 'my_stuff_item')
+  if (!vinValidation.ok) errors.vin = vinValidation.reason
 
   const readingErrors = []
   const usage = item.currentUsage || {}

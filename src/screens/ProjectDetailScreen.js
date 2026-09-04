@@ -3,6 +3,8 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert,
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
+import VinDecodePanel from '../components/VinDecodePanel'
+import { maskVin, validateVinIdentifier } from '../domain/myStuff/vinModel'
 import { roundLaborHours } from './laborModel'
 import { captureEvent } from '../lib/analytics'
 import { accessibleActiveGoalsAfterProLoss, createMutationId } from './tradeUpGoalModel'
@@ -31,6 +33,7 @@ const HUMOR_LEVELS = [
 ]
 
 const EMPTY_EXPENSE = { description: '', amount: '', category: 'parts', laborHours: '' }
+const EMPTY_VEHICLE_DETAILS = { vin: '', year: '', make: '', model: '', engine: '' }
 
 export default function ProjectDetailScreen({ navigation, route }) {
   const { user, isPro, plan, formatMoney } = useAuth()
@@ -51,6 +54,8 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [selectedListingStyle, setSelectedListingStyle] = useState('normal')
   const [selectedHumorLevel, setSelectedHumorLevel] = useState('balanced')
   const [activeGoals, setActiveGoals] = useState([])
+  const [vehicleDetails, setVehicleDetails] = useState(EMPTY_VEHICLE_DETAILS)
+  const [savingVehicleDetails, setSavingVehicleDetails] = useState(false)
   const [showAssignGoal, setShowAssignGoal] = useState(false)
   const goalLinkMutationId = useRef(createMutationId())
   const projectLoadGeneration = useRef(0)
@@ -75,6 +80,13 @@ export default function ProjectDetailScreen({ navigation, route }) {
       return
     }
     setProject(projectResult.data)
+    setVehicleDetails({
+      vin: projectResult.data.vin || '',
+      year: projectResult.data.vehicle_year == null ? '' : String(projectResult.data.vehicle_year),
+      make: projectResult.data.vehicle_make || '',
+      model: projectResult.data.vehicle_model || '',
+      engine: projectResult.data.engine_model || '',
+    })
     if (goalResult.error) Alert.alert('Could not load goals', goalResult.error.message)
     else setActiveGoals(goalResult.data || [])
     setLoading(false)
@@ -149,6 +161,35 @@ export default function ProjectDetailScreen({ navigation, route }) {
     const { error } = await supabase.from('projects').update({ photo, photos }).eq('id', projectId)
     if (error) throw new Error(`Could not save project photos: ${error.message}`)
     setProject(p => ({ ...p, photo, photos }))
+  }
+
+  async function saveVehicleDetails() {
+    if (savingVehicleDetails) return
+    const yearText = String(vehicleDetails.year || '').trim()
+    const year = yearText === '' ? null : Number(yearText)
+    if (yearText && (!Number.isInteger(year) || year < 1800 || year > 2200)) {
+      return Alert.alert('Check model year', 'Enter a whole year from 1800 to 2200, or leave it blank.')
+    }
+    const vinValidation = validateVinIdentifier(vehicleDetails.vin,'project')
+    if (!vinValidation.ok) return Alert.alert('Check VIN / identifier', vinValidation.reason)
+    const values = {
+      vin: String(vehicleDetails.vin || '').trim() || null,
+      vehicle_year: year,
+      vehicle_make: String(vehicleDetails.make || '').trim() || null,
+      vehicle_model: String(vehicleDetails.model || '').trim() || null,
+      engine_model: String(vehicleDetails.engine || '').trim() || null,
+    }
+    setSavingVehicleDetails(true)
+    try {
+      const { data, error } = await supabase.from('projects').update(values).eq('id', projectId).eq('user_id', user.id).select('*').single()
+      if (error) throw error
+      setProject(current => ({ ...current, ...data }))
+      Alert.alert('Vehicle details saved', 'Your manual and applied VIN details were saved.')
+    } catch (error) {
+      Alert.alert('Could not save vehicle details', error.message || 'Your entries are still here. Please try again.')
+    } finally {
+      setSavingVehicleDetails(false)
+    }
   }
 
   function beginAddExpense() {
@@ -456,6 +497,19 @@ export default function ProjectDetailScreen({ navigation, route }) {
               <Text style={s.profitAmount}>{profit>=0?'+':''}{formatMoney(profit)}</Text>
             </View>
           )}
+        </View>
+
+        <Text style={s.sectionTitle}>Vehicle details</Text>
+        <View style={s.card}>
+          <Text style={s.inputHint}>Manual entry is always available. Saved VIN display: {vehicleDetails.vin ? maskVin(vehicleDetails.vin) : 'Not set'}</Text>
+          <ProjectVehicleField label="Model year" value={vehicleDetails.year} onChangeText={year => setVehicleDetails(current => ({ ...current, year }))} keyboardType="number-pad" />
+          <ProjectVehicleField label="Make" value={vehicleDetails.make} onChangeText={make => setVehicleDetails(current => ({ ...current, make }))} />
+          <ProjectVehicleField label="Model" value={vehicleDetails.model} onChangeText={model => setVehicleDetails(current => ({ ...current, model }))} />
+          <ProjectVehicleField label="Engine" value={vehicleDetails.engine} onChangeText={engine => setVehicleDetails(current => ({ ...current, engine }))} />
+          <VinDecodePanel subjectType="project" subjectId={projectId} isPro={isPro} values={vehicleDetails} onChange={setVehicleDetails} onUpgrade={() => navigation.navigate('Pro')} suggestionFields={['year','make','model','engine']} />
+          <TouchableOpacity style={[s.btn,{marginTop:12},savingVehicleDetails&&s.btnDisabled]} onPress={saveVehicleDetails} disabled={savingVehicleDetails} accessibilityRole="button" accessibilityLabel="Save Vehicle Details" accessibilityState={{disabled:savingVehicleDetails,busy:savingVehicleDetails}}>
+            {savingVehicleDetails ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Save Vehicle Details</Text>}
+          </TouchableOpacity>
         </View>
 
         {/* Notes */}
@@ -780,6 +834,10 @@ export default function ProjectDetailScreen({ navigation, route }) {
       </Modal>
     </View>
   )
+}
+
+function ProjectVehicleField({ label, ...props }) {
+  return <View><Text style={[s.label,{marginTop:12,marginBottom:6}]}>{label}</Text><TextInput style={s.input} placeholderTextColor="#A8A49E" {...props}/></View>
 }
 
 const s = StyleSheet.create({
