@@ -27,9 +27,11 @@ test('sale guidance uses the selected currency symbol instead of hardcoded dolla
   assert.doesNotMatch(source, /greater than \$0|between \$0|Leave \$0/)
 })
 
-test('shared app version advances for V1.1 while accepted iOS build remains frozen', () => {
+test('Android V1.2 advances version code while accepted iOS build remains frozen', () => {
   const app = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'))
-  assert.equal(app.expo.version, '1.1.1')
+  assert.equal(app.expo.version, '1.2.0')
+  assert.equal(app.expo.android.package, 'com.sideflip.app')
+  assert.equal(app.expo.android.versionCode, 6)
   assert.equal(app.expo.ios.bundleIdentifier, 'com.sideflip.app')
   assert.equal(app.expo.ios.buildNumber, '17')
 })
