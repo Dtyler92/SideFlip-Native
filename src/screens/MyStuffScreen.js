@@ -3,7 +3,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, Toucha
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
-import { listMyStuffItems } from '../lib/myStuffClient'
+import { listMyStuffItemsV2 } from '../lib/myStuffClient'
 import { canCreateMyStuffItem } from './myStuffModel'
 
 const ACCENT = '#C8402F'
@@ -22,7 +22,7 @@ export default function MyStuffScreen({ navigation }) {
     if (!quiet) setLoading(true)
     setError('')
     try {
-      const nextItems = await listMyStuffItems(user.id)
+      const nextItems = await listMyStuffItemsV2(user.id, { includeArchived: true })
       if (generation !== requestGeneration.current) return
       setItems(nextItems)
     } catch (nextError) {
@@ -83,13 +83,14 @@ export default function MyStuffScreen({ navigation }) {
             <View style={s.row}>
               <View style={s.flex}>
                 <Text style={s.itemName}>{item.name}</Text>
-                <Text style={s.category}>{item.category || 'Other'}</Text>
+                <Text style={s.category}>{item.category || 'Other'}{item.archived_at ? ' · Archived' : ''}</Text>
               </View>
               <Text style={s.chevron}>›</Text>
             </View>
             <View style={s.readingRow}>
-              {item.current_mileage != null && <Text style={s.reading}>{Number(item.current_mileage).toLocaleString()} mi</Text>}
-              {item.current_hours != null && <Text style={s.reading}>{Number(item.current_hours).toLocaleString()} hr</Text>}
+              {(item.effective_current_mileage ?? item.current_mileage) != null && <Text style={s.reading}>{Number(item.effective_current_mileage ?? item.current_mileage).toLocaleString()} mi</Text>}
+              {(item.effective_current_hours ?? item.current_hours) != null && <Text style={s.reading}>{Number(item.effective_current_hours ?? item.current_hours).toLocaleString()} hr</Text>}
+              {(item.effective_current_cycles ?? item.current_cycles) != null && <Text style={s.reading}>{Number(item.effective_current_cycles ?? item.current_cycles).toLocaleString()} cycles</Text>}
               {item.acquired_on && <Text style={s.reading}>Acquired {item.acquired_on}</Text>}
             </View>
           </TouchableOpacity>

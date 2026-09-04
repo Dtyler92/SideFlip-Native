@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { adaptSqlItem } from './myStuffAdapters'
 
 export async function listMyStuffItems(userId) {
   const { data, error } = await supabase
@@ -91,4 +92,84 @@ export async function completeMyStuffMaintenance(values) {
   })
   if (error) throw error
   return data
+}
+
+export async function listMyStuffItemsV2(userId, { includeArchived = true } = {}) {
+  let query = supabase
+    .from('my_stuff_items')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+  if (!includeArchived) query = query.is('archived_at', null)
+  const { data, error } = await query
+  if (error) throw error
+  return (data || []).map(adaptSqlItem)
+}
+
+export async function getMyStuffItemV2(itemId, userId, { asOf = new Date().toISOString() } = {}) {
+  const [itemResult, readingsResult, definitionsResult, occurrencesResult, dueResult] = await Promise.all([
+    supabase.from('my_stuff_items').select('*').eq('user_id', userId).eq('id', itemId).single(),
+    // The correction RPC defines "latest" by append order, not business date.
+    supabase.from('my_stuff_readings').select('*').eq('user_id', userId).eq('item_id', itemId).order('created_at', { ascending: false }).order('id', { ascending: false }),
+    supabase.from('my_stuff_maintenance_definitions').select('*').eq('user_id', userId).eq('item_id', itemId).order('created_at', { ascending: true }),
+    supabase.from('my_stuff_service_occurrences').select('*').eq('user_id', userId).eq('item_id', itemId).order('completed_at', { ascending: false }),
+    supabase.rpc('get_my_stuff_due_state_v2', { p_item_id: itemId, p_as_of: asOf }),
+  ])
+  for (const result of [itemResult, readingsResult, definitionsResult, occurrencesResult, dueResult]) {
+    if (result.error) throw result.error
+  }
+  return {
+    item: adaptSqlItem(itemResult.data),
+    readings: readingsResult.data || [],
+    definitions: definitionsResult.data || [],
+    occurrences: occurrencesResult.data || [],
+    dueStates: dueResult.data || [],
+  }
+}
+
+export async function createMyStuffItemV2(wirePayload, mutationId) {
+  const { data, error } = await supabase.rpc('create_my_stuff_item_v2', {
+    ...wirePayload,
+    p_mutation_id: mutationId,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function updateMyStuffItemV2(wirePayload, mutationId) {
+  const { data, error } = await supabase.rpc('update_my_stuff_item_v2', {
+    ...wirePayload,
+    p_mutation_id: mutationId,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function setMyStuffItemArchivedV2(values) {
+  const { data, error } = await supabase.rpc('set_my_stuff_item_archived_v2', {
+    p_item_id: values.itemId,
+    p_archived: values.archived,
+    p_reason: values.reason || null,
+    p_mutation_id: values.mutationId,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function recordMyStuffReadingV2(wirePayload, mutationId) {
+  const { data, error } = await supabase.rpc('record_my_stuff_reading_v2', {
+    ...wirePayload,
+    p_mutation_id: mutationId,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function getMyStuffDueStateV2(itemId, asOf = new Date().toISOString()) {
+  const { data, error } = await supabase.rpc('get_my_stuff_due_state_v2', {
+    p_item_id: itemId,
+    p_as_of: asOf,
+  })
+  if (error) throw error
+  return data || []
 }

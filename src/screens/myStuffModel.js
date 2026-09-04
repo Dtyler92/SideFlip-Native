@@ -7,6 +7,35 @@ export function createMutationId() {
   return `${Date.now().toString(36)}-${random}-${Math.random().toString(36).slice(2)}`
 }
 
+function stablePayloadValue(value) {
+  if (Array.isArray(value)) return value.map(stablePayloadValue)
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce((result, key) => {
+      if (value[key] !== undefined) result[key] = stablePayloadValue(value[key])
+      return result
+    }, {})
+  }
+  return value
+}
+
+export function createMutationAttemptState() {
+  return { mutationId: null, payloadKey: null }
+}
+
+export function mutationIdForPayload(state, payload, generate = createMutationId) {
+  const payloadKey = JSON.stringify(stablePayloadValue(payload))
+  if (!state.mutationId || state.payloadKey !== payloadKey) {
+    state.mutationId = generate()
+    state.payloadKey = payloadKey
+  }
+  return state.mutationId
+}
+
+export function resetMutationAttemptState(state) {
+  state.mutationId = null
+  state.payloadKey = null
+}
+
 export function canCreateMyStuffItem({ isPro, itemCount }) {
   return Boolean(isPro) || Number(itemCount) < 1
 }

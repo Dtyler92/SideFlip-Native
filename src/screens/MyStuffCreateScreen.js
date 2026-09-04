@@ -1,44 +1,56 @@
 import { useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { createMyStuffItem } from '../lib/myStuffClient'
-import { createMutationId, parseNonNegativeNumber, validateCalendarDate } from './myStuffModel'
+import { createMyStuffItemV2 } from '../lib/myStuffClient'
+import { buildCreateMyStuffItemV2WirePayload } from '../lib/myStuffPayloads'
+import { createMutationAttemptState, mutationIdForPayload, parseNonNegativeNumber, resetMutationAttemptState, validateCalendarDate } from './myStuffModel'
 
 const ACCENT = '#C8402F'
-const CATEGORIES = ['Vehicle', 'Equipment', 'Tool', 'Home', 'Electronics', 'Recreation', 'Other']
+const CATEGORIES = ['Vehicle', 'Motorcycle', 'Boat', 'Equipment', 'Tool', 'Home', 'Appliance', 'Electronics', 'Recreation', 'Other']
+const AXES = [{ key: 'miles', label: 'Miles' }, { key: 'hours', label: 'Hours' }, { key: 'cycles', label: 'Cycles' }]
 
 export default function MyStuffCreateScreen({ navigation }) {
-  const [name, setName] = useState('')
-  const [category, setCategory] = useState('Other')
-  const [acquiredOn, setAcquiredOn] = useState('')
-  const [notes, setNotes] = useState('')
-  const [currentMileage, setCurrentMileage] = useState('')
-  const [currentHours, setCurrentHours] = useState('')
+  const [draft, setDraft] = useState({ category: 'Other', measurements: [], usageProfile: 'normal' })
   const [saving, setSaving] = useState(false)
-  const mutationId = useRef(createMutationId())
+  const mutationAttempt = useRef(createMutationAttemptState())
   const saveInFlight = useRef(false)
+
+  function setValue(key, value) { setDraft(current => ({ ...current, [key]: value })) }
+  function toggleAxis(axis) {
+    setDraft(current => ({
+      ...current,
+      measurements: current.measurements.includes(axis)
+        ? current.measurements.filter(value => value !== axis)
+        : [...current.measurements, axis],
+    }))
+  }
 
   async function save() {
     if (saveInFlight.current) return
-    if (!name.trim()) return Alert.alert('Item name required', 'Enter a name for this item.')
-    if (acquiredOn.trim() && !validateCalendarDate(acquiredOn)) return Alert.alert('Check acquisition date', 'Use a valid date in YYYY-MM-DD format.')
-    const mileage = parseNonNegativeNumber(currentMileage, { optional: true })
-    const hours = parseNonNegativeNumber(currentHours, { optional: true })
-    if (!mileage.ok) return Alert.alert('Check mileage', 'Mileage must be a finite number of zero or more.')
-    if (!hours.ok) return Alert.alert('Check operating hours', 'Operating hours must be a finite number of zero or more.')
-
+    if (!String(draft.name || '').trim()) return Alert.alert('Item name required', 'Enter a name for this item.')
+    if (draft.acquiredOn?.trim() && !validateCalendarDate(draft.acquiredOn)) return Alert.alert('Check acquisition date', 'Use a valid date in YYYY-MM-DD format.')
+    if (draft.year && (!Number.isInteger(Number(draft.year)) || Number(draft.year) < 1800 || Number(draft.year) > 2200)) return Alert.alert('Check model year', 'Model year must be a whole number between 1800 and 2200.')
+    const currentUsage = {}
+    for (const axis of draft.measurements) {
+      const parsed = parseNonNegativeNumber(draft[axis], { optional: true })
+      if (!parsed.ok || (axis === 'cycles' && parsed.value != null && !Number.isInteger(parsed.value))) return Alert.alert(`Check ${axis}`, axis === 'cycles' ? 'Cycles must be a whole number of zero or more.' : `${axis} must be a finite number of zero or more.`)
+      if (parsed.value != null) currentUsage[axis] = parsed.value
+    }
     saveInFlight.current = true
     setSaving(true)
     try {
-      const itemId = await createMyStuffItem({
-        name: name.trim(),
-        category: category.toLowerCase(),
-        acquiredOn: acquiredOn.trim() || null,
-        notes: notes.trim() || null,
-        currentMileage: mileage.value,
-        currentHours: hours.value,
-        mutationId: mutationId.current,
-      })
+      const payload = {
+        ...draft,
+        name: draft.name.trim(),
+        category: draft.category.toLowerCase(),
+        acquiredOn: draft.acquiredOn?.trim() || null,
+        notes: draft.notes?.trim() || null,
+        currentUsage,
+      }
+      const wirePayload = buildCreateMyStuffItemV2WirePayload(payload)
+      const mutationId = mutationIdForPayload(mutationAttempt.current, wirePayload)
+      const itemId = await createMyStuffItemV2(wirePayload, mutationId)
+      resetMutationAttemptState(mutationAttempt.current)
       navigation.replace('MyStuffDetail', { itemId })
     } catch (error) {
       if (String(error?.message || '').includes('Free accounts can have one My Stuff item')) return navigation.replace('Pro')
@@ -49,34 +61,45 @@ export default function MyStuffCreateScreen({ navigation }) {
     }
   }
 
-  return (
-    <SafeAreaView style={s.root} edges={['top']}>
-      <Header title="Add Item" onBack={() => navigation.goBack()} />
-      <ScrollView
-        contentContainerStyle={s.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-      >
-        <Label text="Item name *" />
-        <TextInput style={s.input} value={name} onChangeText={setName} placeholder="e.g. Work Truck" placeholderTextColor="#A8A49E" autoFocus maxLength={120} />
-        <Label text="Category *" />
-        <View style={s.choices}>{CATEGORIES.map(value => <Choice key={value} label={value} selected={category === value} onPress={() => setCategory(value)} />)}</View>
-        <Label text="Acquired on (optional)" />
-        <TextInput style={s.input} value={acquiredOn} onChangeText={setAcquiredOn} placeholder="YYYY-MM-DD" placeholderTextColor="#A8A49E" keyboardType="numbers-and-punctuation" autoCapitalize="none" />
-        <Label text="Current mileage (optional)" />
-        <TextInput style={s.input} value={currentMileage} onChangeText={setCurrentMileage} placeholder="0" placeholderTextColor="#A8A49E" keyboardType="decimal-pad" />
-        <Label text="Current operating hours (optional)" />
-        <TextInput style={s.input} value={currentHours} onChangeText={setCurrentHours} placeholder="0" placeholderTextColor="#A8A49E" keyboardType="decimal-pad" />
-        <Label text="Notes (optional)" />
-        <TextInput style={[s.input,s.textarea]} value={notes} onChangeText={setNotes} placeholder="Model, serial number, or anything useful" placeholderTextColor="#A8A49E" multiline maxLength={1000} />
-        <TouchableOpacity style={[s.button,saving&&s.disabled]} onPress={save} disabled={saving} accessibilityRole="button" accessibilityLabel="Add My Stuff item" accessibilityState={{disabled:saving,busy:saving}}>{saving ? <ActivityIndicator color="#fff" /> : <Text style={s.buttonText}>Add Item</Text>}</TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
-  )
+  return <SafeAreaView style={s.root} edges={['top']}>
+    <Header title="Add Item" onBack={() => navigation.goBack()} />
+    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
+      <Text style={s.section}>Identity</Text>
+      <Field label="Item name *" value={draft.name || ''} onChangeText={value => setValue('name', value)} placeholder="e.g. Work Truck" autoFocus maxLength={200} />
+      <Text style={s.label}>Category *</Text>
+      <View style={s.choices} accessibilityRole="radiogroup" accessibilityLabel="Category">{CATEGORIES.map(value => <Choice key={value} label={value} selected={draft.category === value} onPress={() => setValue('category', value)} exclusive />)}</View>
+      <View style={s.twoColumn}>
+        <View style={s.flex}><Field label="Model year" value={draft.year || ''} onChangeText={value => setValue('year', value)} keyboardType="number-pad" /></View>
+        <View style={s.flex}><Field label="Make" value={draft.make || ''} onChangeText={value => setValue('make', value)} /></View>
+      </View>
+      <Field label="Model" value={draft.model || ''} onChangeText={value => setValue('model', value)} />
+      <Field label="Trim / version" value={draft.trim || ''} onChangeText={value => setValue('trim', value)} />
+      <Field label="Model number" value={draft.modelNumber || ''} onChangeText={value => setValue('modelNumber', value)} />
+      <Field label="Serial number" value={draft.serialNumber || ''} onChangeText={value => setValue('serialNumber', value)} autoCapitalize="characters" />
+      <Field label="Engine / power system" value={draft.engine || ''} onChangeText={value => setValue('engine', value)} />
+      <Field label="Transmission" value={draft.transmission || ''} onChangeText={value => setValue('transmission', value)} />
+      <Field label="Drivetrain" value={draft.drivetrain || ''} onChangeText={value => setValue('drivetrain', value)} />
+      <Field label="Fuel / power type" value={draft.fuelType || ''} onChangeText={value => setValue('fuelType', value)} />
+      <Field label="Acquired on" value={draft.acquiredOn || ''} onChangeText={value => setValue('acquiredOn', value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" autoCapitalize="none" />
+
+      <Text style={s.section}>Usage tracking</Text>
+      <Text style={s.help}>Choose every measurement that applies. You can append readings later.</Text>
+      <View style={s.choices}>{AXES.map(axis => <Choice key={axis.key} label={axis.label} selected={draft.measurements.includes(axis.key)} onPress={() => toggleAxis(axis.key)} />)}</View>
+      {AXES.filter(axis => draft.measurements.includes(axis.key)).map(axis => <Field key={axis.key} label={`Current ${axis.label.toLowerCase()} (optional)`} value={draft[axis.key] || ''} onChangeText={value => setValue(axis.key, value)} keyboardType="decimal-pad" />)}
+      <Text style={s.label}>Usage profile</Text>
+      <View style={s.choices} accessibilityRole="radiogroup" accessibilityLabel="Usage profile">{['normal', 'severe'].map(value => <Choice key={value} label={value === 'normal' ? 'Normal use' : 'Severe use'} selected={draft.usageProfile === value} onPress={() => setValue('usageProfile', value)} exclusive />)}</View>
+      <Field label="Notes (optional)" value={draft.notes || ''} onChangeText={value => setValue('notes', value)} multiline maxLength={1000} />
+      <TouchableOpacity style={[s.button, saving && s.disabled]} onPress={save} disabled={saving} accessibilityRole="button" accessibilityLabel="Add My Stuff item" accessibilityState={{ disabled: saving, busy: saving }}>
+        {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.buttonText}>Add Item</Text>}
+      </TouchableOpacity>
+    </ScrollView>
+  </SafeAreaView>
 }
 
-function Header({ title, onBack }) { return <View style={s.header}><TouchableOpacity style={s.headerSide} onPress={onBack} accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10}><Text style={s.back}>‹ Back</Text></TouchableOpacity><Text style={s.headerTitle}>{title}</Text><View style={s.headerSide}/></View> }
-function Label({ text }) { return <Text style={s.label}>{text}</Text> }
-function Choice({ label, selected, onPress }) { return <TouchableOpacity style={[s.choice,selected&&s.choiceActive]} onPress={onPress} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{selected}}><Text style={[s.choiceText,selected&&s.choiceTextActive]}>{label}</Text></TouchableOpacity> }
-const s=StyleSheet.create({root:{flex:1,backgroundColor:'#FAFAF7'},header:{paddingTop:0,paddingBottom:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E8E4DE'},headerSide:{width:75},back:{color:ACCENT,fontWeight:'700',fontSize:15},headerTitle:{fontWeight:'800',fontSize:17,color:'#1A1917'},content:{padding:20,paddingBottom:100},label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:17,marginBottom:6},input:{backgroundColor:'#fff',borderWidth:1,borderColor:'#D7D2CB',borderRadius:10,padding:14,fontSize:15,color:'#1A1917'},textarea:{minHeight:110,textAlignVertical:'top'},choices:{flexDirection:'row',flexWrap:'wrap',gap:8},choice:{borderWidth:1,borderColor:'#D7D2CB',backgroundColor:'#fff',paddingHorizontal:12,paddingVertical:10,borderRadius:10},choiceActive:{borderColor:ACCENT,backgroundColor:'#FFF2EE'},choiceText:{color:'#5C5850',fontWeight:'600'},choiceTextActive:{color:ACCENT},button:{marginTop:26,backgroundColor:ACCENT,borderRadius:11,padding:16,alignItems:'center'},buttonText:{color:'#fff',fontWeight:'800',fontSize:16},disabled:{opacity:.6}})
+function Header({ title, onBack }) { return <View style={s.header}><TouchableOpacity style={s.headerSide} onPress={onBack} accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10}><Text style={s.back}>‹ Back</Text></TouchableOpacity><Text style={s.headerTitle}>{title}</Text><View style={s.headerSide} /></View> }
+function Field({ label, multiline, ...props }) { return <View><Text style={s.label}>{label}</Text><TextInput style={[s.input, multiline && s.textarea]} placeholderTextColor="#A8A49E" multiline={multiline} {...props} /></View> }
+function Choice({ label, selected, onPress, exclusive = false }) { return <TouchableOpacity style={[s.choice, selected && s.choiceActive]} onPress={onPress} accessibilityRole={exclusive ? 'radio' : 'checkbox'} accessibilityLabel={label} accessibilityState={exclusive ? { selected } : { checked: selected }}><Text style={[s.choiceText, selected && s.choiceTextActive]}>{label}</Text></TouchableOpacity> }
+
+const s = StyleSheet.create({
+  root:{flex:1,backgroundColor:'#FAFAF7'},header:{paddingBottom:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E8E4DE'},headerSide:{width:75},back:{color:ACCENT,fontWeight:'700',fontSize:15},headerTitle:{fontWeight:'800',fontSize:17,color:'#1A1917'},content:{padding:20,paddingBottom:120},section:{fontSize:18,fontWeight:'800',color:'#1A1917',marginTop:14,marginBottom:2},help:{fontSize:13,color:'#6B665E',lineHeight:19,marginBottom:10},label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:15,marginBottom:6},input:{backgroundColor:'#fff',borderWidth:1,borderColor:'#D7D2CB',borderRadius:10,padding:14,fontSize:15,color:'#1A1917'},textarea:{minHeight:110,textAlignVertical:'top'},choices:{flexDirection:'row',flexWrap:'wrap',gap:8},choice:{borderWidth:1,borderColor:'#D7D2CB',backgroundColor:'#fff',paddingHorizontal:12,paddingVertical:10,borderRadius:10},choiceActive:{borderColor:ACCENT,backgroundColor:'#FFF2EE'},choiceText:{color:'#5C5850',fontWeight:'600'},choiceTextActive:{color:ACCENT},twoColumn:{flexDirection:'row',gap:10},flex:{flex:1},button:{marginTop:26,backgroundColor:ACCENT,borderRadius:11,padding:16,alignItems:'center'},buttonText:{color:'#fff',fontWeight:'800',fontSize:16},disabled:{opacity:.6},
+})
