@@ -17,6 +17,7 @@ const OPTION_ROWS = [
 ]
 
 export default function ReportPanel({ subjectType, subjectId, isPro, onUpgrade }) {
+  const [expanded, setExpanded] = useState(false)
   const [options, setOptions] = useState(PRIVATE_DEFAULTS)
   const [generating, setGenerating] = useState(false)
   const [message, setMessage] = useState('')
@@ -28,6 +29,7 @@ export default function ReportPanel({ subjectType, subjectId, isPro, onUpgrade }
     setGenerating(false)
     setMessage('')
     setOptions(PRIVATE_DEFAULTS)
+    setExpanded(false)
     return () => gate.current.invalidate()
   }, [subjectType, subjectId])
 
@@ -62,39 +64,55 @@ export default function ReportPanel({ subjectType, subjectId, isPro, onUpgrade }
     }
   }
 
-  return <View style={styles.panel}>
-    <Text style={styles.title}>Private PDF Report <Text style={styles.pro}>PRO</Text></Text>
-    <Text style={styles.disclosure}>Photos and documents are not included. Identifiers and detailed costs are excluded by default; turn on only what you intend to share. SideFlip sends these selections to the authenticated report service, which enforces Pro access and returns canonical bounded report data.</Text>
-    <Text style={styles.date}>The PDF includes its report date. Creating or sharing it never changes this record.</Text>
-    {OPTION_ROWS.map(option => <TouchableOpacity
-      key={option.key}
-      style={styles.option}
-      onPress={() => toggle(option.key)}
-      disabled={generating}
-      accessibilityRole="checkbox"
-      accessibilityLabel={option.label}
-      accessibilityHint={option.detail}
-      accessibilityState={{ checked: options[option.key], disabled: generating }}
-    >
-      <View style={[styles.checkbox, options[option.key] && styles.checkboxOn]}><Text style={styles.check}>{options[option.key] ? '✓' : ''}</Text></View>
-      <View style={styles.optionCopy}><Text style={styles.optionLabel}>{option.label}</Text><Text style={styles.optionDetail}>{option.detail}</Text></View>
-    </TouchableOpacity>)}
+  return <View style={[styles.panel, !expanded && styles.panelCollapsed]}>
     <TouchableOpacity
-      style={[styles.button, generating && styles.disabled]}
-      onPress={generate}
+      style={styles.header}
+      onPress={() => !generating && setExpanded(value => !value)}
       disabled={generating}
       accessibilityRole="button"
-      accessibilityLabel={isPro ? 'Create and Share PDF' : 'Unlock Pro PDF Reports'}
-      accessibilityState={{ disabled: generating, busy: generating }}
+      accessibilityLabel={expanded ? 'Hide PDF options' : 'Show PDF options'}
+      accessibilityState={{ expanded }}
     >
-      {generating ? <><ActivityIndicator color="#fff" size="small"/><Text style={styles.buttonText}>Preparing private PDF…</Text></> : <Text style={styles.buttonText}>{isPro ? 'Create & Share PDF' : 'Unlock Pro PDF Reports'}</Text>}
+      <View style={styles.headerCopy}>
+        <Text style={styles.title}>Private PDF Report <Text style={styles.pro}>PRO</Text></Text>
+        {!expanded && <Text style={styles.summary}>Create a private report when you need it.</Text>}
+      </View>
+      <Text style={styles.chevron}>{expanded ? '▲' : '▼'}</Text>
     </TouchableOpacity>
-    {!!message && <Text style={styles.message} accessibilityLiveRegion="polite">{message}</Text>}
+    {expanded && <>
+      <Text style={styles.disclosure}>Photos and documents are not included. Identifiers and detailed costs are excluded by default; turn on only what you intend to share. SideFlip sends these selections to the authenticated report service, which enforces Pro access and returns canonical bounded report data.</Text>
+      <Text style={styles.date}>The PDF includes its report date. Creating or sharing it never changes this record.</Text>
+      {OPTION_ROWS.map(option => <TouchableOpacity
+        key={option.key}
+        style={styles.option}
+        onPress={() => toggle(option.key)}
+        disabled={generating}
+        accessibilityRole="checkbox"
+        accessibilityLabel={option.label}
+        accessibilityHint={option.detail}
+        accessibilityState={{ checked: options[option.key], disabled: generating }}
+      >
+        <View style={[styles.checkbox, options[option.key] && styles.checkboxOn]}><Text style={styles.check}>{options[option.key] ? '✓' : ''}</Text></View>
+        <View style={styles.optionCopy}><Text style={styles.optionLabel}>{option.label}</Text><Text style={styles.optionDetail}>{option.detail}</Text></View>
+      </TouchableOpacity>)}
+      <TouchableOpacity
+        style={[styles.button, generating && styles.disabled]}
+        onPress={generate}
+        disabled={generating}
+        accessibilityRole="button"
+        accessibilityLabel={isPro ? 'Create and Share PDF' : 'Unlock Pro PDF Reports'}
+        accessibilityState={{ disabled: generating, busy: generating }}
+      >
+        {generating ? <><ActivityIndicator color="#fff" size="small"/><Text style={styles.buttonText}>Preparing private PDF…</Text></> : <Text style={styles.buttonText}>{isPro ? 'Create & Share PDF' : 'Unlock Pro PDF Reports'}</Text>}
+      </TouchableOpacity>
+      {!!message && <Text style={styles.message} accessibilityLiveRegion="polite">{message}</Text>}
+    </>}
   </View>
 }
 
 const styles = StyleSheet.create({
   panel:{backgroundColor:'#fff',borderRadius:14,padding:16,borderWidth:1,borderColor:'#E8E4DE',marginBottom:12},
+  panelCollapsed:{paddingVertical:13},header:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},headerCopy:{flex:1},summary:{fontSize:12,color:'#79736A',marginTop:3},chevron:{fontSize:13,color:ACCENT,marginLeft:12},
   title:{fontSize:17,fontWeight:'800',color:'#1A1917'},pro:{fontSize:11,color:ACCENT},
   disclosure:{fontSize:12,color:'#5C5850',lineHeight:18,marginTop:7},date:{fontSize:11,color:'#79736A',lineHeight:16,marginTop:6,marginBottom:6},
   option:{flexDirection:'row',alignItems:'flex-start',paddingVertical:10,borderTopWidth:1,borderTopColor:'#F0EDE8'},

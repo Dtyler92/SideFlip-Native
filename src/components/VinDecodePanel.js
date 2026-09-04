@@ -15,7 +15,7 @@ import {
 const ACCENT = '#C8402F'
 const client = createVinDecodeClient({ auth: supabase.auth })
 
-export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, fieldLabels = {}, suggestionFields }) {
+export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false }) {
   const [decoding, setDecoding] = useState(false)
   const [preview, setPreview] = useState(null)
   const [warnings, setWarnings] = useState([])
@@ -57,11 +57,17 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
     try {
       const result = await client.decode({ subjectType, subjectId, vin: request.normalizedVin, signal: request.controller.signal })
       if (!requestGate.current.isCurrent(request, valuesRef.current?.vin)) return
-      const decoded = decodedVehicleSuggestions(result.vehicle)
+      const decoded = mapSuggestions(result.vehicle)
       const supported = Array.isArray(suggestionFields)
         ? Object.fromEntries(Object.entries(decoded).filter(([field]) => suggestionFields.includes(field)))
         : decoded
-      setPreview({ ...mergeDecodedSuggestions(valuesRef.current, supported), requestVin: request.normalizedVin })
+      const currentValues = autoFillBlanks
+        ? { ...valuesRef.current, vin: request.normalizedVin }
+        : valuesRef.current
+      const merged = mergeDecodedSuggestions(currentValues, supported)
+      const next = autoFillBlanks ? merged.values : currentValues
+      if (autoFillBlanks) update(next)
+      setPreview({ ...mergeDecodedSuggestions(next, supported), requestVin: request.normalizedVin })
       setWarnings(result.nhtsaWarnings)
     } catch (error) {
       if (!requestGate.current.isCurrent(request, valuesRef.current?.vin)) return
@@ -91,7 +97,7 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
 
   return <View style={s.panel}>
     <Text style={s.title}>VIN Decoder <Text style={s.pro}>PRO</Text></Text>
-    <Text style={s.hint}>Enter or edit identifiers manually at any time. Decoding only suggests values and never saves or replaces details automatically.</Text>
+    <Text style={s.hint}>{autoFillBlanks ? 'Blank fields fill after decoding. Existing values stay unchanged until you accept each conflicting suggestion.' : 'Enter or edit identifiers manually at any time. Decoding only suggests values and never saves or replaces details automatically.'}</Text>
     <Text style={s.label}>VIN / identifier</Text>
     <TextInput
       style={s.input}

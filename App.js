@@ -3,7 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, useRef } from 'react'
-import { ActivityIndicator, AppState, View, Text } from 'react-native'
+import { ActivityIndicator, AppState, Platform, View, Text } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
 import LoginScreen from './src/screens/LoginScreen'
@@ -29,6 +29,7 @@ import { normalizeScreenName } from './src/lib/analyticsModel'
 
 const Stack = createNativeStackNavigator()
 const Tab = createBottomTabNavigator()
+const ANDROID_NAV_COMFORT = 10
 
 function AnalyticsLifecycle({ onReady }) {
   const { analyticsReady } = useAuth()
@@ -53,6 +54,7 @@ function TabIcon({ emoji, focused }) {
 
 function HomeTabs() {
   const insets = useSafeAreaInsets()
+  const navComfort = Platform.OS === 'android' ? ANDROID_NAV_COMFORT : 0
   return (
     <Tab.Navigator
       screenOptions={{
@@ -60,8 +62,8 @@ function HomeTabs() {
         tabBarStyle: {
           backgroundColor: '#fff',
           borderTopColor: '#E8E4DE',
-          height: 56 + insets.bottom,
-          paddingBottom: insets.bottom,
+          height: 56 + insets.bottom + navComfort,
+          paddingBottom: insets.bottom + navComfort,
           paddingTop: 10,
         },
         tabBarActiveTintColor: '#C8402F',

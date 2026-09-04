@@ -131,7 +131,7 @@ export function createVinDecodeClient({ auth, fetchImpl = expoFetch, timeoutMs =
   return {
     async decode({ subjectType, subjectId, vin, signal }) {
       if (!SUBJECT_VALUES.has(subjectType)) throw new VinDecodeError('Choose a supported VIN destination.', { code: 'SUBJECT_TYPE_INVALID' })
-      if (typeof subjectId !== 'string' || !UUID_PATTERN.test(subjectId)) throw new VinDecodeError('The selected item is invalid.', { code: 'SUBJECT_ID_INVALID' })
+      if (subjectId !== null && (typeof subjectId !== 'string' || !UUID_PATTERN.test(subjectId))) throw new VinDecodeError('The selected item is invalid.', { code: 'SUBJECT_ID_INVALID' })
       if (typeof vin !== 'string' || utf8ByteLength(vin) > MAX_RAW_VIN_LENGTH) {
         throw new VinDecodeError('The VIN input is too large. Use manual entry.', { code: 'VIN_INPUT_TOO_LARGE' })
       }

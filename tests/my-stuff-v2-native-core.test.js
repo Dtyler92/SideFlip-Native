@@ -162,7 +162,7 @@ test('disabled mileage and hours schedules stay visible but cannot be completed'
   const detail = source('src/screens/MyStuffDetailScreen.js')
   assert.match(detail, /filterActiveDueStates\(result\.dueStates,result\.item\)/)
   assert.match(detail, /if\(!definitionValue\.enabled\|\|!canCompleteMaintenanceDefinition\(definitionValue,item\)\)return/)
-  assert.match(detail, /canCompleteMaintenanceDefinition\(value,item\).*Record Service/s)
+  assert.match(detail, /canCompleteMaintenanceDefinition\(value,item\).*Complete Maintenance/s)
   assert.match(detail, /schedules\.map\(value=>/)
 })
 
@@ -323,7 +323,7 @@ test('create and edit render the shared exact item-type picker and block invalid
     assert.match(screen, /validateItemDraft/)
     assert.match(screen, /ValidationErrors/)
   }
-  assert.match(create, /itemType: 'other'/)
+  assert.match(create, /itemType: '', category: ''/)
   assert.match(detail, /value=\{edit\.itemType\}/)
   assert.match(detail, /measurements:edit\.measurements/)
 })
@@ -337,7 +337,8 @@ test('detail uses checkbox semantics for multi-select usage axes and only displa
   assert.match(detail, /item\.measurements\.map\(axis=>/)
   assert.match(detail, /item\.currentUsage\[axis\]/)
   assert.doesNotMatch(detail, /<Reading label="Mileage" value=\{item\.effective_current_mileage/)
-  assert.match(detail, /readings\.slice\(0,8\)\.map/)
+  assert.doesNotMatch(detail, />Usage readings</)
+  assert.match(detail, />Current usage</)
   assert.match(detail, /logs\.map\(log=>/)
   assert.match(list, /item\.currentUsage\.miles/)
   assert.match(list, /item\.currentUsage\.hours/)

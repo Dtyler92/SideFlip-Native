@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Alert, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
@@ -81,6 +81,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [completion,setCompletion]=useState(EMPTY_COMPLETION)
   const [legacyCompletingId,setLegacyCompletingId]=useState(null)
   const [legacyCompletion,setLegacyCompletion]=useState(EMPTY_LEGACY_COMPLETION)
+  const [completionCelebration,setCompletionCelebration]=useState(null)
   const requestGeneration=useRef(0)
   const serviceMutationAttempt=useRef(createMutationAttemptState())
   const completionInFlight=useRef(false)
@@ -267,7 +268,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     try{
       await runMutationThenRefresh({
         mutate:()=>recordMyStuffServiceOccurrenceV2(wirePayload,mutationId),
-        onMutationSuccess:()=>{resetMutationAttemptState(serviceMutationAttempt.current);setCompletingId(null);setCompletion({...EMPTY_COMPLETION,completedAt:todayDateInput(),readings:{...EMPTY_COMPLETION.readings}})},
+        onMutationSuccess:()=>{resetMutationAttemptState(serviceMutationAttempt.current);setCompletingId(null);setCompletion({...EMPTY_COMPLETION,completedAt:todayDateInput(),readings:{...EMPTY_COMPLETION.readings}});setCompletionCelebration({name:definitionValue.name||'Maintenance'})},
         refresh:()=>load({quiet:true,throwOnError:true}),
         onMutationError:nextError=>Alert.alert('Could not record service',nextError.message||'Please try again. Service readings cannot move backward.'),
         onRefreshError:nextError=>reportSavedRefreshFailure('Service recorded, but refresh failed',nextError),
@@ -307,7 +308,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     try{
       await runMutationThenRefresh({
         mutate:()=>completeMyStuffMaintenance(legacyPayload),
-        onMutationSuccess:()=>{resetMutationAttemptState(legacyCompletionMutationAttempt.current);setLegacyCompletingId(null);setLegacyCompletion({...EMPTY_LEGACY_COMPLETION,completedAt:todayDateInput()})},
+        onMutationSuccess:()=>{resetMutationAttemptState(legacyCompletionMutationAttempt.current);setLegacyCompletingId(null);setLegacyCompletion({...EMPTY_LEGACY_COMPLETION,completedAt:todayDateInput()});setCompletionCelebration({name:scheduleValue.name||'Maintenance'})},
         refresh:()=>load({quiet:true,throwOnError:true}),
         onMutationError:nextError=>Alert.alert('Could not complete maintenance',nextError.message||'Please try again.'),
         onRefreshError:nextError=>reportSavedRefreshFailure('Maintenance completed, but refresh failed',nextError),
@@ -402,34 +403,32 @@ export default function MyStuffDetailScreen({ navigation, route }) {
           {!!item.serial_number&&<Text style={s.muted}>Serial: {item.serial_number}</Text>}
           {!!item.vin&&<Text style={s.muted}>VIN: {maskVin(item.vin)}</Text>}
           {!!item.archived_at&&<Text style={s.archiveBadge}>Archived · history retained</Text>}
-          {item.measurements.length>0&&<View style={s.readingRow}>{item.measurements.map(axis=>{const config=AXES.find(value=>value.key===axis);return <Reading key={axis} label={config?.label||axis} value={item.currentUsage[axis]} suffix={axis==='miles'?'mi':axis==='hours'?'hr':'cycles'}/>})}</View>}
           {!!item.notes&&<Text style={s.notes}>{item.notes}</Text>}
         </>}
       </View>
 
-      <Text style={s.pageSection}>Shareable report</Text>
-      <ReportPanel subjectType="my_stuff_item" subjectId={item.id} isPro={hasPro} onUpgrade={()=>navigation.navigate('Pro')} />
+      <View style={s.between}><Text style={s.pageSection}>Maintenance schedules</Text><TouchableOpacity onPress={()=>showDefinition?cancelDefinitionEditor():openDefinitionEditor()} accessibilityRole="button" accessibilityLabel={showDefinition?'Cancel maintenance task':'Add maintenance task'}><Text style={s.link}>{showDefinition?'Cancel':'+ Add'}</Text></TouchableOpacity></View>
 
-      <View style={s.between}><Text style={s.pageSection}>Usage readings</Text>{item.measurements.length>0&&<TouchableOpacity onPress={()=>{resetMutationAttemptState(usageMutationAttempt.current);setUsage(current=>({...current,type:item.measurements.includes(current.type)?current.type:item.measurements[0]}));setShowUsage(value=>!value)}} accessibilityRole="button" accessibilityLabel={showUsage?'Cancel adding usage reading':'Add usage reading'}><Text style={s.link}>{showUsage?'Cancel':'+ Add'}</Text></TouchableOpacity>}</View>
-      {showUsage&&<View style={s.card}>
-        <Text style={s.label}>Measurement</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Reading measurement">{item.measurements.map(type=><Choice key={type} label={type} selected={usage.type===type} onPress={()=>setUsageValue('type',type)}/>)}</View>
-        <Field label="Reading *" value={usage.value} onChangeText={value=>setUsageValue('value',value)} keyboardType="decimal-pad"/>
-        <Field label="Recorded on *" value={usage.recordedOn} onChangeText={value=>setUsageValue('recordedOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
-        <TouchableOpacity style={s.correctionToggle} onPress={()=>setUsageValue('correcting',!usage.correcting)} accessibilityRole="checkbox" accessibilityState={{checked:usage.correcting}}><Text style={s.link}>{usage.correcting?'✓ Correction mode':'Correct the latest reading'}</Text></TouchableOpacity>
-        {usage.correcting&&<><Text style={s.warning}>Corrections append an audit record. They never lower the retained meter column.</Text><Field label="Correction reason *" value={usage.correctionReason} onChangeText={value=>setUsageValue('correctionReason',value)} multiline/></>}
-        <Button label={saving?'Saving…':usage.correcting?'Append Correction':'Append Reading'} onPress={saveUsage} disabled={saving}/>
-      </View>}
-      {item.measurements.length===0&&<View style={s.empty}><Text style={s.muted}>No usage measurements selected. Edit Item details to enable one.</Text></View>}
-      {readings.slice(0,8).map(value=><View key={value.id} style={s.historyRow}><View style={s.flex}><Text style={s.historyName}>{value.reading_type==='mileage'?'Mileage':value.reading_type}</Text><Text style={s.muted}>{Number(value.reading_value).toLocaleString()} · {String(value.recorded_at||'').slice(0,10)}</Text>{value.source==='correction'&&<Text style={s.warning}>Correction · {value.correction_reason}</Text>}</View></View>)}
-      {readings.length===0&&<View style={s.empty}><Text style={s.muted}>No appended usage readings yet.</Text></View>}
+      <View style={s.card}>
+        <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>Current usage</Text><Text style={s.muted}>Updating miles or hours immediately refreshes every schedule’s due status.</Text></View>{item.measurements.length>0&&<TouchableOpacity onPress={()=>{resetMutationAttemptState(usageMutationAttempt.current);const type=item.measurements.includes(usage.type)?usage.type:item.measurements[0];setUsage({...EMPTY_USAGE,type,value:item.currentUsage[type]==null?'':String(item.currentUsage[type]),recordedOn:todayDateInput()});setShowUsage(value=>!value)}} accessibilityRole="button" accessibilityLabel={showUsage?'Cancel current usage update':'Update current usage'}><Text style={s.link}>{showUsage?'Cancel':'Update current usage'}</Text></TouchableOpacity>}</View>
+        {item.measurements.length>0&&<View style={s.readingRow}>{item.measurements.map(axis=>{const config=AXES.find(value=>value.key===axis);return <Reading key={axis} label={config?.label||axis} value={item.currentUsage[axis]} suffix={axis==='miles'?'mi':axis==='hours'?'hr':'cycles'}/>})}</View>}
+        {showUsage&&<View>
+          <Text style={s.label}>Measurement</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Current usage measurement">{item.measurements.map(type=><Choice key={type} label={type} selected={usage.type===type} onPress={()=>setUsage(current=>({...current,type,value:item.currentUsage[type]==null?'':String(item.currentUsage[type])}))}/>)}</View>
+          <Field label="Current reading *" value={usage.value} onChangeText={value=>setUsageValue('value',value)} keyboardType="decimal-pad"/>
+          <Field label="Recorded on *" value={usage.recordedOn} onChangeText={value=>setUsageValue('recordedOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
+          <TouchableOpacity style={s.correctionToggle} onPress={()=>setUsageValue('correcting',!usage.correcting)} accessibilityRole="checkbox" accessibilityState={{checked:usage.correcting}}><Text style={s.link}>{usage.correcting?'✓ Correction mode':'Correct the latest reading'}</Text></TouchableOpacity>
+          {usage.correcting&&<><Text style={s.warning}>Corrections append an audit record. They never lower the retained meter column.</Text><Field label="Correction reason *" value={usage.correctionReason} onChangeText={value=>setUsageValue('correctionReason',value)} multiline/></>}
+          <Button label={saving?'Saving…':usage.correcting?'Save Usage Correction':'Save Current Usage'} onPress={saveUsage} disabled={saving}/>
+        </View>}
+        {item.measurements.length===0&&<Text style={s.muted}>Edit Item details to enable miles, hours, or cycles.</Text>}
+      </View>
 
       <Text style={s.pageSection}>Due-state summary</Text>
-      {dueStates.length===0?<View style={s.empty}><Text style={s.muted}>No V2 maintenance definitions are due yet.</Text></View>:dueStates.map(value=>{
+      {dueStates.length===0?<View style={s.empty}><Text style={s.muted}>No maintenance schedules are due yet.</Text></View>:dueStates.map(value=>{
         const definition=definitions.find(entry=>entry.id===value.definition_id)
         return <View key={value.definition_id} style={s.card}><View style={s.between}><Text style={s.scheduleName}>{definition?.name||'Maintenance'}</Text><View style={[s.pill,s[`pill_${value.due_status}`]]}><Text style={s.pillText}>{dueStateSummaryLabel(value.due_status)}</Text></View></View><Text style={s.muted}>{dueStateDescription(value)}</Text></View>
       })}
 
-      <View style={s.between}><Text style={s.pageSection}>Maintenance tasks</Text><TouchableOpacity onPress={()=>showDefinition?cancelDefinitionEditor():openDefinitionEditor()} accessibilityRole="button" accessibilityLabel={showDefinition?'Cancel maintenance task':'Add maintenance task'}><Text style={s.link}>{showDefinition?'Cancel':'+ Add'}</Text></TouchableOpacity></View>
       {showDefinition&&<View style={s.card}>
         <Field label="Maintenance name *" value={definition.name} onChangeText={value=>setDefinitionValue('name',value)} placeholder="e.g. Oil change"/>
         <Field label="Description (optional)" value={definition.description} onChangeText={value=>setDefinitionValue('description',value)} multiline/>
@@ -439,28 +438,30 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         </View>
         <Field label="Calendar interval in months" value={definition.calendarMonths} onChangeText={value=>setDefinitionValue('calendarMonths',value)} keyboardType="number-pad"/>
         {AXES.filter(axis=>item.measurements.includes(axis.key)||String(definition.intervals[axis.key]||'').trim()!=='').map(axis=><Field key={axis.key} label={`${axis.label} interval${item.measurements.includes(axis.key)?'':' (inactive, retained)'}`} value={definition.intervals[axis.key]} onChangeText={value=>setDefinitionInterval(axis.key,value)} keyboardType="decimal-pad" editable={item.measurements.includes(axis.key)}/>) }
-        <Text style={s.muted}>You can combine calendar and usage intervals. Only measurements enabled on this item can be added to new tasks.</Text>
-        <Button label={saving?'Saving…':editingDefinitionId?'Save Task':'Add Task'} onPress={saveDefinition} disabled={saving}/>
+        <Text style={s.muted}>You can combine calendar and usage intervals. Only measurements enabled on this item can be added to new schedules.</Text>
+        <Button label={saving?'Saving…':editingDefinitionId?'Save Schedule':'Add Schedule'} onPress={saveDefinition} disabled={saving}/>
       </View>}
-      {definitions.length===0?<View style={s.empty}><Text style={s.muted}>No maintenance tasks yet.</Text></View>:definitions.map(value=>{
+      {definitions.length===0?<View style={s.empty}><Text style={s.muted}>No maintenance schedules yet.</Text></View>:definitions.map(value=>{
         const due=dueStates.find(state=>state.definition_id===value.id)
         const canComplete=value.enabled&&canCompleteMaintenanceDefinition(value,item)
         return <View key={value.id} style={s.card}>
-          <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>{value.name}</Text><Text style={s.muted}>{definitionDescription(value)}</Text></View><View style={[s.pill,s[`pill_${due?.due_status}`]]}><Text style={s.pillText}>{value.enabled?dueStateSummaryLabel(due?.due_status):'Archived'}</Text></View></View>
+          <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>{value.name}</Text><Text style={s.muted}>{definitionDescription(value)}</Text>{due&&<Text style={s.nextDue}>{dueStateDescription(due)}</Text>}</View><View style={[s.pill,s[`pill_${due?.due_status}`]]}><Text style={s.pillText}>{value.enabled?dueStateSummaryLabel(due?.due_status):'Archived'}</Text></View></View>
           {!!value.description&&<Text style={s.notes}>{value.description}</Text>}
-          {!canComplete&&value.enabled&&<Text style={s.warning}>Read-only until all task measurements are enabled on this item.</Text>}
+          {!canComplete&&value.enabled&&<Text style={s.warning}>Read-only until all schedule measurements are enabled on this item.</Text>}
           {completingId===value.id&&canComplete?<View style={s.completionBox}>
             <Field label="Completed on *" value={completion.completedAt} onChangeText={next=>setCompletionValue('completedAt',next)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
-            {definitionUsageAxes(value).map(axis=><Field key={axis} label={`${axis} reading *`} value={completion.readings[axis]} onChangeText={next=>setCompletionReading(axis,next)} keyboardType="decimal-pad"/>)}
+            {definitionUsageAxes(value).map(axis=><Field key={axis} label={`${axis==='miles'?'Mileage':axis[0].toUpperCase()+axis.slice(1)} at completion *`} value={completion.readings[axis]} onChangeText={next=>setCompletionReading(axis,next)} keyboardType="decimal-pad"/>)}
             <Field label="Notes (optional)" value={completion.notes} onChangeText={next=>setCompletionValue('notes',next)} multiline/>
-            <Button label={saving?'Saving…':'Record Service'} onPress={()=>finishMaintenance(value)} disabled={saving}/><TouchableOpacity onPress={cancelCompletion} accessibilityRole="button" accessibilityLabel="Cancel service completion"><Text style={s.cancelLink}>Cancel</Text></TouchableOpacity>
+            <Button label={saving?'Saving…':'Complete Maintenance'} onPress={()=>finishMaintenance(value)} disabled={saving}/><TouchableOpacity onPress={cancelCompletion} accessibilityRole="button" accessibilityLabel="Cancel service completion"><Text style={s.cancelLink}>Cancel</Text></TouchableOpacity>
           </View>:<View style={s.actions}>
-            {canComplete&&<TouchableOpacity style={s.smallButton} onPress={()=>openCompletion(value)} accessibilityRole="button" accessibilityLabel={`Record ${value.name} service`}><Text style={s.smallButtonText}>Record Service</Text></TouchableOpacity>}
-            {value.provenance_type==='manual'&&value.enabled&&<TouchableOpacity onPress={()=>openDefinitionEditor(value)} accessibilityRole="button" accessibilityLabel={`Edit ${value.name} task`}><Text style={s.link}>Edit</Text></TouchableOpacity>}
-            {value.provenance_type==='manual'&&value.enabled&&<TouchableOpacity onPress={()=>archiveDefinition(value)} accessibilityRole="button" accessibilityLabel={`Archive ${value.name} task`}><Text style={s.deleteLink}>Archive</Text></TouchableOpacity>}
+            {canComplete&&<TouchableOpacity style={s.smallButton} onPress={()=>openCompletion(value)} accessibilityRole="button" accessibilityLabel={`Complete ${value.name} maintenance`}><Text style={s.smallButtonText}>Complete</Text></TouchableOpacity>}
+            {value.provenance_type==='manual'&&value.enabled&&<TouchableOpacity onPress={()=>openDefinitionEditor(value)} accessibilityRole="button" accessibilityLabel={`Edit ${value.name} schedule`}><Text style={s.link}>Edit</Text></TouchableOpacity>}
+            {value.provenance_type==='manual'&&value.enabled&&<TouchableOpacity onPress={()=>archiveDefinition(value)} accessibilityRole="button" accessibilityLabel={`Archive ${value.name} schedule`}><Text style={s.deleteLink}>Archive</Text></TouchableOpacity>}
           </View>}
         </View>
       })}
+
+      <ReportPanel subjectType="my_stuff_item" subjectId={item.id} isPro={hasPro} onUpgrade={()=>navigation.navigate('Pro')} />
 
       <Text style={s.pageSection}>Service history</Text>
       {occurrences.length===0?<View style={s.empty}><Text style={s.muted}>Recorded V2 service will appear here.</Text></View>:occurrences.map(occurrence=>{
@@ -496,6 +497,16 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       <TouchableOpacity style={s.archiveItem} onPress={confirmArchive} disabled={saving} accessibilityRole="button" accessibilityLabel={item.archived_at?'Restore My Stuff item':'Archive My Stuff item'} accessibilityState={{disabled:saving}}><Text style={s.archiveItemText}>{item.archived_at?'Restore Item':'Archive Item'}</Text></TouchableOpacity>
       <TouchableOpacity style={s.deleteItem} onPress={confirmDeleteItem} disabled={saving} accessibilityRole="button" accessibilityLabel="Delete My Stuff item" accessibilityState={{disabled:saving}}><Text style={s.deleteItemText}>Delete Item Permanently</Text></TouchableOpacity>
     </ScrollView>
+    <Modal visible={!!completionCelebration} transparent animationType="fade" onRequestClose={()=>setCompletionCelebration(null)}>
+      <View style={s.celebrationOverlay}>
+        <View style={s.celebrationCard} accessibilityViewIsModal>
+          <Text style={s.celebrationIcon}>🎉</Text>
+          <Text style={s.celebrationTitle}>Good Job!</Text>
+          <Text style={s.celebrationText}>{completionCelebration?.name||'Maintenance'} was completed and saved.</Text>
+          <TouchableOpacity style={s.celebrationButton} onPress={()=>setCompletionCelebration(null)} accessibilityRole="button" accessibilityLabel="Close maintenance success"><Text style={s.celebrationButtonText}>Done</Text></TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   </SafeAreaView>
 }
 
@@ -520,4 +531,4 @@ function Choice({label,selected,onPress,multiple=false}){return <TouchableOpacit
 function Button({label,onPress,disabled}){return <TouchableOpacity style={[s.button,disabled&&s.disabled]} onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{disabled,busy:disabled}}><Text style={s.buttonText}>{label}</Text></TouchableOpacity>}
 function Reading({label,value,suffix}){return <View style={s.reading}><Text style={s.eyebrow}>{label}</Text><Text style={s.readingValue}>{value==null?'Not set':`${Number(value).toLocaleString()} ${suffix}`}</Text></View>}
 
-const s=StyleSheet.create({root:{flex:1,backgroundColor:'#FAFAF7'},center:{flex:1,justifyContent:'center',alignItems:'center',padding:30,backgroundColor:'#FAFAF7'},header:{paddingTop:0,paddingBottom:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E8E4DE'},headerSide:{width:70},back:{color:ACCENT,fontWeight:'700'},headerTitle:{flex:1,textAlign:'center',fontWeight:'800',fontSize:17,color:'#1A1917'},content:{padding:18,paddingBottom:100},card:{backgroundColor:'#fff',borderRadius:14,padding:16,borderWidth:1,borderColor:'#E8E4DE',marginBottom:10},between:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},flex:{flex:1},sectionTitle:{fontSize:17,fontWeight:'800',color:'#1A1917'},pageSection:{fontSize:18,fontWeight:'800',color:'#1A1917',marginTop:18,marginBottom:10},link:{color:ACCENT,fontWeight:'700'},itemName:{fontSize:23,fontWeight:'800',color:'#1A1917',marginTop:12},muted:{color:'#6B665E',lineHeight:20},notes:{color:'#444039',lineHeight:20,marginTop:8},archiveBadge:{alignSelf:'flex-start',marginTop:10,color:'#6B4B16',backgroundColor:'#FFF1C9',paddingHorizontal:9,paddingVertical:5,borderRadius:10,fontWeight:'700'},readingRow:{flexDirection:'row',flexWrap:'wrap',gap:10,marginTop:16},reading:{minWidth:'29%',flex:1,backgroundColor:'#F3F1EC',borderRadius:10,padding:12},eyebrow:{fontSize:11,fontWeight:'700',color:'#79736A',textTransform:'uppercase'},readingValue:{fontWeight:'700',color:'#1A1917',marginTop:4},label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:14,marginBottom:5},input:{borderWidth:1,borderColor:'#D7D2CB',borderRadius:10,padding:12,fontSize:15,color:'#1A1917',backgroundColor:'#fff'},textarea:{minHeight:90,textAlignVertical:'top'},modeRow:{flexDirection:'row',gap:7},choice:{flex:1,borderWidth:1,borderColor:'#D7D2CB',borderRadius:9,paddingVertical:10,alignItems:'center'},choiceActive:{borderColor:ACCENT,backgroundColor:'#FFF2EE'},choiceText:{color:'#5C5850',fontWeight:'600',textTransform:'capitalize'},choiceTextActive:{color:ACCENT},button:{backgroundColor:ACCENT,borderRadius:10,padding:14,alignItems:'center',marginTop:18},buttonText:{color:'#fff',fontWeight:'800'},disabled:{opacity:.6},empty:{padding:18,borderRadius:12,backgroundColor:'#fff',borderWidth:1,borderColor:'#E8E4DE'},scheduleName:{fontSize:16,fontWeight:'800',color:'#1A1917'},pill:{paddingHorizontal:9,paddingVertical:6,borderRadius:12,backgroundColor:'#EDEAE5'},pill_due:{backgroundColor:'#FFF1C9'},pill_due_now:{backgroundColor:'#FFF1C9'},pill_due_soon:{backgroundColor:'#FFF1C9'},pill_needs_usage_update:{backgroundColor:'#EDEAE5'},pill_overdue:{backgroundColor:'#FDE0DB'},pill_upcoming:{backgroundColor:'#DFF1E8'},pillText:{fontSize:11,fontWeight:'800',color:'#443F38'},actions:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:14},smallButton:{backgroundColor:'#FFF2EE',borderRadius:9,paddingHorizontal:13,paddingVertical:10},smallButtonText:{color:ACCENT,fontWeight:'800'},deleteLink:{color:'#A33A2C',fontWeight:'600'},completionBox:{marginTop:8},cancelLink:{color:'#6B665E',fontWeight:'700',textAlign:'center',padding:12},historyRow:{backgroundColor:'#fff',borderRadius:12,padding:15,borderWidth:1,borderColor:'#E8E4DE',marginBottom:8,flexDirection:'row',gap:10},historyName:{fontWeight:'800',fontSize:15,color:'#1A1917'},cost:{fontWeight:'800',color:'#1A1917'},correctionToggle:{paddingVertical:13},warning:{color:'#8A5B13',fontSize:12,lineHeight:18,marginTop:6},archiveItem:{borderWidth:1,borderColor:'#C8A25C',backgroundColor:'#FFF8E9',borderRadius:10,padding:14,alignItems:'center',marginTop:30},archiveItemText:{color:'#6B4B16',fontWeight:'800'},deleteItem:{borderWidth:1,borderColor:'#D8A39B',borderRadius:10,padding:14,alignItems:'center',marginTop:10},deleteItemText:{color:'#A33A2C',fontWeight:'800'},errorText:{color:'#9A3023',marginBottom:10}})
+const s=StyleSheet.create({root:{flex:1,backgroundColor:'#FAFAF7'},center:{flex:1,justifyContent:'center',alignItems:'center',padding:30,backgroundColor:'#FAFAF7'},header:{paddingTop:0,paddingBottom:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E8E4DE'},headerSide:{width:70},back:{color:ACCENT,fontWeight:'700'},headerTitle:{flex:1,textAlign:'center',fontWeight:'800',fontSize:17,color:'#1A1917'},content:{padding:18,paddingBottom:100},card:{backgroundColor:'#fff',borderRadius:14,padding:16,borderWidth:1,borderColor:'#E8E4DE',marginBottom:10},between:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},flex:{flex:1},sectionTitle:{fontSize:17,fontWeight:'800',color:'#1A1917'},pageSection:{fontSize:18,fontWeight:'800',color:'#1A1917',marginTop:18,marginBottom:10},link:{color:ACCENT,fontWeight:'700'},itemName:{fontSize:23,fontWeight:'800',color:'#1A1917',marginTop:12},muted:{color:'#6B665E',lineHeight:20},notes:{color:'#444039',lineHeight:20,marginTop:8},archiveBadge:{alignSelf:'flex-start',marginTop:10,color:'#6B4B16',backgroundColor:'#FFF1C9',paddingHorizontal:9,paddingVertical:5,borderRadius:10,fontWeight:'700'},readingRow:{flexDirection:'row',flexWrap:'wrap',gap:10,marginTop:16},reading:{minWidth:'29%',flex:1,backgroundColor:'#F3F1EC',borderRadius:10,padding:12},eyebrow:{fontSize:11,fontWeight:'700',color:'#79736A',textTransform:'uppercase'},readingValue:{fontWeight:'700',color:'#1A1917',marginTop:4},label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:14,marginBottom:5},input:{borderWidth:1,borderColor:'#D7D2CB',borderRadius:10,padding:12,fontSize:15,color:'#1A1917',backgroundColor:'#fff'},textarea:{minHeight:90,textAlignVertical:'top'},modeRow:{flexDirection:'row',gap:7},choice:{flex:1,borderWidth:1,borderColor:'#D7D2CB',borderRadius:9,paddingVertical:10,alignItems:'center'},choiceActive:{borderColor:ACCENT,backgroundColor:'#FFF2EE'},choiceText:{color:'#5C5850',fontWeight:'600',textTransform:'capitalize'},choiceTextActive:{color:ACCENT},button:{backgroundColor:ACCENT,borderRadius:10,padding:14,alignItems:'center',marginTop:18},buttonText:{color:'#fff',fontWeight:'800'},disabled:{opacity:.6},empty:{padding:18,borderRadius:12,backgroundColor:'#fff',borderWidth:1,borderColor:'#E8E4DE'},scheduleName:{fontSize:16,fontWeight:'800',color:'#1A1917'},pill:{paddingHorizontal:9,paddingVertical:6,borderRadius:12,backgroundColor:'#EDEAE5'},pill_due:{backgroundColor:'#FFF1C9'},pill_due_now:{backgroundColor:'#FFF1C9'},pill_due_soon:{backgroundColor:'#FFF1C9'},pill_needs_usage_update:{backgroundColor:'#EDEAE5'},pill_overdue:{backgroundColor:'#FDE0DB'},pill_upcoming:{backgroundColor:'#DFF1E8'},pillText:{fontSize:11,fontWeight:'800',color:'#443F38'},actions:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:14},smallButton:{backgroundColor:'#FFF2EE',borderRadius:9,paddingHorizontal:13,paddingVertical:10},smallButtonText:{color:ACCENT,fontWeight:'800'},deleteLink:{color:'#A33A2C',fontWeight:'600'},completionBox:{marginTop:8},cancelLink:{color:'#6B665E',fontWeight:'700',textAlign:'center',padding:12},historyRow:{backgroundColor:'#fff',borderRadius:12,padding:15,borderWidth:1,borderColor:'#E8E4DE',marginBottom:8,flexDirection:'row',gap:10},historyName:{fontWeight:'800',fontSize:15,color:'#1A1917'},cost:{fontWeight:'800',color:'#1A1917'},correctionToggle:{paddingVertical:13},warning:{color:'#8A5B13',fontSize:12,lineHeight:18,marginTop:6},archiveItem:{borderWidth:1,borderColor:'#C8A25C',backgroundColor:'#FFF8E9',borderRadius:10,padding:14,alignItems:'center',marginTop:30},archiveItemText:{color:'#6B4B16',fontWeight:'800'},deleteItem:{borderWidth:1,borderColor:'#D8A39B',borderRadius:10,padding:14,alignItems:'center',marginTop:10},deleteItemText:{color:'#A33A2C',fontWeight:'800'},nextDue:{color:'#5C5850',fontSize:12,lineHeight:18,marginTop:4},celebrationOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.42)',alignItems:'center',justifyContent:'center',padding:28},celebrationCard:{width:'100%',maxWidth:360,backgroundColor:'#fff',borderRadius:20,padding:24,alignItems:'center'},celebrationIcon:{fontSize:46},celebrationTitle:{fontSize:25,fontWeight:'900',color:'#1A1917',marginTop:8},celebrationText:{fontSize:15,color:'#5C5850',lineHeight:21,textAlign:'center',marginTop:8},celebrationButton:{alignSelf:'stretch',backgroundColor:ACCENT,borderRadius:11,padding:14,alignItems:'center',marginTop:20},celebrationButtonText:{color:'#fff',fontSize:16,fontWeight:'800'},errorText:{color:'#9A3023',marginBottom:10}})

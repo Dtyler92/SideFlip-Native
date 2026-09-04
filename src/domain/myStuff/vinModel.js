@@ -14,6 +14,7 @@ export const VIN_IDENTIFIER_MAX_LENGTHS = Object.freeze({ project: 256, my_stuff
 
 export const VIN_SUGGESTION_FIELDS = Object.freeze([
   'year', 'make', 'model', 'trim', 'engine', 'transmission', 'drivetrain', 'fuelType', 'bodyClass',
+  'title', 'name', 'category', 'itemType',
 ])
 
 export function normalizeVin(input) {

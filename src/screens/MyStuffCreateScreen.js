@@ -6,12 +6,16 @@ import { buildCreateMyStuffItemV2WirePayload } from '../lib/myStuffPayloads'
 import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
 import { deriveItemCategory, getItemCategoryContract, selectItemType, validateItemDraft } from '../domain/myStuff/itemModel'
 import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptState, validateCalendarDate } from './myStuffModel'
+import { useAuth } from '../context/AuthContext'
+import VinDecodePanel from '../components/VinDecodePanel'
+import { buildMyStuffVinCreateSuggestions } from '../domain/vinCreateModel'
 
 const ACCENT = '#C8402F'
 const AXES = [{ key: 'miles', label: 'Miles' }, { key: 'hours', label: 'Hours' }, { key: 'cycles', label: 'Cycles' }]
 
 export default function MyStuffCreateScreen({ navigation }) {
-  const [draft, setDraft] = useState({ itemType: 'other', category: 'other', measurements: [], usageProfile: 'normal' })
+  const { isPro } = useAuth()
+  const [draft, setDraft] = useState({ itemType: '', category: '', measurements: [], usageProfile: 'normal' })
   const [validationErrors, setValidationErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const mutationAttempt = useRef(createMutationAttemptState())
@@ -19,6 +23,10 @@ export default function MyStuffCreateScreen({ navigation }) {
 
   function setValue(key, value) { setValidationErrors({}); setDraft(current => ({ ...current, [key]: value })) }
   function setExactType(value) { setValidationErrors({}); setDraft(current => selectItemType(current, value)) }
+  function applyVinValues(values) {
+    setValidationErrors({})
+    setDraft(current => values.itemType !== current.itemType ? selectItemType(values, values.itemType) : values)
+  }
   function toggleAxis(axis) {
     setDraft(current => ({
       ...current,
@@ -64,7 +72,17 @@ export default function MyStuffCreateScreen({ navigation }) {
     <Header title="Add Item" onBack={() => navigation.goBack()} />
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
       <Text style={s.section}>Identity</Text>
-      <Field label="Item name *" value={draft.name || ''} onChangeText={value => setValue('name', value)} placeholder="e.g. Work Truck" autoFocus maxLength={200} />
+      <VinDecodePanel
+        subjectType="my_stuff_item"
+        subjectId={null}
+        isPro={isPro}
+        values={draft}
+        onChange={applyVinValues}
+        onUpgrade={() => navigation.navigate('Pro')}
+        mapSuggestions={buildMyStuffVinCreateSuggestions}
+        autoFillBlanks
+      />
+      <Field label="Item name *" value={draft.name || ''} onChangeText={value => setValue('name', value)} placeholder="e.g. Work Truck" maxLength={200} />
       <MyStuffItemTypePicker value={draft.itemType} onChange={setExactType} error={validationErrors.itemType || validationErrors.category} />
       <View style={s.twoColumn}>
         <View style={s.flex}><Field label="Model year" value={draft.year || ''} onChangeText={value => setValue('year', value)} keyboardType="number-pad" /></View>
@@ -82,7 +100,7 @@ export default function MyStuffCreateScreen({ navigation }) {
 
       <Text style={s.section}>Usage tracking</Text>
       <Text style={s.help}>Choose every measurement that applies. You can append readings later.</Text>
-      <View style={s.choices} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis => getItemCategoryContract(draft.category).measurements.includes(axis.key)).map(axis => <Choice key={axis.key} label={axis.label} selected={draft.measurements.includes(axis.key)} onPress={() => toggleAxis(axis.key)} />)}</View>
+      <View style={s.choices} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis => getItemCategoryContract(draft.category)?.measurements.includes(axis.key)).map(axis => <Choice key={axis.key} label={axis.label} selected={draft.measurements.includes(axis.key)} onPress={() => toggleAxis(axis.key)} />)}</View>
       {AXES.filter(axis => draft.measurements.includes(axis.key)).map(axis => <Field key={axis.key} label={`Current ${axis.label.toLowerCase()} (optional)`} value={draft[axis.key] || ''} onChangeText={value => setValue(axis.key, value)} keyboardType="decimal-pad" />)}
       <Text style={s.label}>Usage profile</Text>
       <View style={s.choices} accessibilityRole="radiogroup" accessibilityLabel="Usage profile">{['normal', 'severe'].map(value => <Choice key={value} label={value === 'normal' ? 'Normal use' : 'Severe use'} selected={draft.usageProfile === value} onPress={() => setValue('usageProfile', value)} exclusive />)}</View>

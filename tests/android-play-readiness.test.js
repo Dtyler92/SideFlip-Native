@@ -9,8 +9,8 @@ test('Android Play config uses the stable package and minimal permissions', () =
   const config = JSON.parse(read('app.json')).expo
   assert.equal(config.android.package, 'com.sideflip.app')
   assert.equal(config.scheme, 'sideflip')
-  assert.equal(config.version, '1.2.0')
-  assert.equal(config.android.versionCode, 6)
+  assert.equal(config.version, '1.2.1')
+  assert.equal(config.android.versionCode, 7)
   assert.equal(config.android.softwareKeyboardLayoutMode, 'resize')
   assert.equal(config.android.intentFilters, undefined)
   assert.equal(config.android.googleServicesFile, undefined)
@@ -39,10 +39,24 @@ test('Android tabs respect the native bottom navigation safe area', () => {
   const app = read('App.js')
   assert.match(app, /useSafeAreaInsets/)
   assert.match(app, /const insets = useSafeAreaInsets\(\)/)
-  assert.match(app, /height:\s*56 \+ insets\.bottom/)
-  assert.match(app, /paddingBottom:\s*insets\.bottom/)
+  assert.match(app, /const ANDROID_NAV_COMFORT = 10/)
+  assert.match(app, /const navComfort = Platform\.OS === 'android' \? ANDROID_NAV_COMFORT : 0/)
+  assert.match(app, /height:\s*56 \+ insets\.bottom \+ navComfort/)
+  assert.match(app, /paddingBottom:\s*insets\.bottom \+ navComfort/)
   assert.doesNotMatch(app, /height:\s*84/)
   assert.doesNotMatch(app, /paddingBottom:\s*28/)
+})
+
+test('sales listing modal clears the Android status and navigation safe areas', () => {
+  const detail = read('src/screens/ProjectDetailScreen.js')
+  assert.match(detail, /useSafeAreaInsets/)
+  assert.match(detail, /const insets = useSafeAreaInsets\(\)/)
+  assert.match(detail, /modalHeaderPaddingTop = Platform\.OS === 'android' \? Math\.max\(20, insets\.top \+ 12\) : 20/)
+  assert.match(detail, /modalContentPaddingBottom = Platform\.OS === 'android' \? Math\.max\(48, insets\.bottom \+ 24\) : 48/)
+  assert.match(detail, /generatorCardPaddingBottom = Platform\.OS === 'android' \? Math\.max\(34, insets\.bottom \+ 24\) : 34/)
+  assert.ok((detail.match(/paddingTop: modalHeaderPaddingTop/g) || []).length >= 2)
+  assert.ok((detail.match(/paddingBottom: modalContentPaddingBottom/g) || []).length >= 2)
+  assert.match(detail, /contentContainerStyle=\{\[s\.generatorCardContent, \{ paddingBottom: generatorCardPaddingBottom \}\]\}/)
 })
 
 test('EAS Android submission is restricted to the Google Play internal track', () => {

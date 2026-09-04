@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator, Share, Modal, KeyboardAvoidingView, Platform } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import MultiPhotoPicker from '../components/MultiPhotoPicker'
@@ -37,6 +38,7 @@ const EMPTY_EXPENSE = { description: '', amount: '', category: 'parts', laborHou
 const EMPTY_VEHICLE_DETAILS = { vin: '', year: '', make: '', model: '', engine: '' }
 
 export default function ProjectDetailScreen({ navigation, route }) {
+  const insets = useSafeAreaInsets()
   const { user, isPro, plan, formatMoney } = useAuth()
   const { projectId, onReturn } = route.params || {}
   const [project, setProject] = useState(null)
@@ -67,6 +69,9 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const currentPlan = useRef(plan)
   listingTextRef.current = listingText
   currentPlan.current = plan
+  const modalHeaderPaddingTop = Platform.OS === 'android' ? Math.max(20, insets.top + 12) : 20
+  const modalContentPaddingBottom = Platform.OS === 'android' ? Math.max(48, insets.bottom + 24) : 48
+  const generatorCardPaddingBottom = Platform.OS === 'android' ? Math.max(34, insets.bottom + 24) : 34
 
   async function load() {
     const request = ++projectLoadGeneration.current
@@ -500,22 +505,6 @@ export default function ProjectDetailScreen({ navigation, route }) {
           )}
         </View>
 
-        <Text style={s.sectionTitle}>Vehicle details</Text>
-        <View style={s.card}>
-          <Text style={s.inputHint}>Manual entry is always available. Saved VIN display: {vehicleDetails.vin ? maskVin(vehicleDetails.vin) : 'Not set'}</Text>
-          <ProjectVehicleField label="Model year" value={vehicleDetails.year} onChangeText={year => setVehicleDetails(current => ({ ...current, year }))} keyboardType="number-pad" />
-          <ProjectVehicleField label="Make" value={vehicleDetails.make} onChangeText={make => setVehicleDetails(current => ({ ...current, make }))} />
-          <ProjectVehicleField label="Model" value={vehicleDetails.model} onChangeText={model => setVehicleDetails(current => ({ ...current, model }))} />
-          <ProjectVehicleField label="Engine" value={vehicleDetails.engine} onChangeText={engine => setVehicleDetails(current => ({ ...current, engine }))} />
-          <VinDecodePanel subjectType="project" subjectId={projectId} isPro={isPro} values={vehicleDetails} onChange={setVehicleDetails} onUpgrade={() => navigation.navigate('Pro')} suggestionFields={['year','make','model','engine']} />
-          <TouchableOpacity style={[s.btn,{marginTop:12},savingVehicleDetails&&s.btnDisabled]} onPress={saveVehicleDetails} disabled={savingVehicleDetails} accessibilityRole="button" accessibilityLabel="Save Vehicle Details" accessibilityState={{disabled:savingVehicleDetails,busy:savingVehicleDetails}}>
-            {savingVehicleDetails ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Save Vehicle Details</Text>}
-          </TouchableOpacity>
-        </View>
-
-        <Text style={s.sectionTitle}>Shareable report</Text>
-        <ReportPanel subjectType="project" subjectId={projectId} isPro={isPro} onUpgrade={() => navigation.navigate('Pro')} />
-
         {/* Notes */}
         {project.notes && (
           <>
@@ -579,6 +568,22 @@ export default function ProjectDetailScreen({ navigation, route }) {
             </View>
           </View>
         )}
+
+        <Text style={s.sectionTitle}>Vehicle details</Text>
+        <View style={s.card}>
+          <Text style={s.inputHint}>Manual entry is always available. Saved VIN display: {vehicleDetails.vin ? maskVin(vehicleDetails.vin) : 'Not set'}</Text>
+          <ProjectVehicleField label="Model year" value={vehicleDetails.year} onChangeText={year => setVehicleDetails(current => ({ ...current, year }))} keyboardType="number-pad" />
+          <ProjectVehicleField label="Make" value={vehicleDetails.make} onChangeText={make => setVehicleDetails(current => ({ ...current, make }))} />
+          <ProjectVehicleField label="Model" value={vehicleDetails.model} onChangeText={model => setVehicleDetails(current => ({ ...current, model }))} />
+          <ProjectVehicleField label="Engine" value={vehicleDetails.engine} onChangeText={engine => setVehicleDetails(current => ({ ...current, engine }))} />
+          <VinDecodePanel subjectType="project" subjectId={projectId} isPro={isPro} values={vehicleDetails} onChange={setVehicleDetails} onUpgrade={() => navigation.navigate('Pro')} suggestionFields={['year','make','model','engine']} />
+          <TouchableOpacity style={[s.btn,{marginTop:12},savingVehicleDetails&&s.btnDisabled]} onPress={saveVehicleDetails} disabled={savingVehicleDetails} accessibilityRole="button" accessibilityLabel="Save Vehicle Details" accessibilityState={{disabled:savingVehicleDetails,busy:savingVehicleDetails}}>
+            {savingVehicleDetails ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Save Vehicle Details</Text>}
+          </TouchableOpacity>
+        </View>
+
+        <Text style={s.sectionTitle}>Shareable report</Text>
+        <ReportPanel subjectType="project" subjectId={projectId} isPro={isPro} onUpgrade={() => navigation.navigate('Pro')} />
 
         {/* Actions */}
         {project.status === 'active' && (
@@ -658,14 +663,14 @@ export default function ProjectDetailScreen({ navigation, route }) {
             >
               {showDescriptionPreview ? (
               <>
-                <View style={s.modalHeader}>
+                <View style={[s.modalHeader, { paddingTop: modalHeaderPaddingTop }]}>
                   <TouchableOpacity onPress={closeDescriptionPreview} accessibilityRole="button" accessibilityLabel="Cancel description preview"><Text style={s.modalCancel}>Cancel</Text></TouchableOpacity>
                   <Text style={s.modalTitle}>Description Preview</Text>
                   <View style={s.headerSpacer} />
                 </View>
                 <ScrollView
                   style={s.modalScroll}
-                  contentContainerStyle={s.modalScrollContent}
+                  contentContainerStyle={[s.modalScrollContent, { paddingBottom: modalContentPaddingBottom }]}
                   keyboardShouldPersistTaps="handled"
                   keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                   automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
@@ -733,7 +738,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
               </>
             ) : (
               <>
-                <View style={s.modalHeader}>
+                <View style={[s.modalHeader, { paddingTop: modalHeaderPaddingTop }]}>
                   <TouchableOpacity onPress={closeListingEditor} accessibilityRole="button" accessibilityLabel="Cancel sales listing">
                     <Text style={s.modalCancel}>Cancel</Text>
                   </TouchableOpacity>
@@ -744,7 +749,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
                 </View>
                 <ScrollView
                   style={s.modalScroll}
-                  contentContainerStyle={s.modalScrollContent}
+                  contentContainerStyle={[s.modalScrollContent, { paddingBottom: modalContentPaddingBottom }]}
                   keyboardShouldPersistTaps="handled"
                   keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                   automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
@@ -795,7 +800,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
 
             {generatorStep !== null && (
               <View style={s.generatorOverlay} accessibilityViewIsModal importantForAccessibility="yes">
-                <ScrollView style={s.generatorCard} contentContainerStyle={s.generatorCardContent} keyboardShouldPersistTaps="handled" bounces={false}>
+                <ScrollView style={s.generatorCard} contentContainerStyle={[s.generatorCardContent, { paddingBottom: generatorCardPaddingBottom }]} keyboardShouldPersistTaps="handled" bounces={false}>
                   <Text style={s.generatorTitle}>{generatorStep === 'humor' ? 'How funny?' : 'Choose a style'}</Text>
                   {generatorStep === 'style' ? (
                     <>

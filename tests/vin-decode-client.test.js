@@ -76,6 +76,22 @@ test('shared client posts normalized VIN with exact backend subject contracts an
   }
 })
 
+test('pre-save decode permits only an explicit null subject and validates echoed null exactly', async () => {
+  for (const subjectType of ['project', 'my_stuff_item']) {
+    const { client, calls } = clientHarness({
+      responseValue: response({ subjectType, subjectId: null, vehicle: { make: 'HONDA' }, nhtsaWarnings: [], nhtsaErrors: [] }),
+    })
+    const result = await client.decode({ subjectType, subjectId: null, vin: VIN })
+    assert.equal(result.subjectId, null)
+    assert.deepEqual(JSON.parse(calls[0].options.body), { subjectType, subjectId: null, vin: VIN })
+  }
+
+  const { client } = clientHarness({ responseValue: response({ subjectType: 'project', subjectId: PROJECT_ID, vehicle: { make: 'HONDA' }, nhtsaWarnings: [], nhtsaErrors: [] }) })
+  await assert.rejects(client.decode({ subjectType: 'project', subjectId: null, vin: VIN }), error => error.code === 'INVALID_RESPONSE')
+  await assert.rejects(client.decode({ subjectType: 'project', vin: VIN }), error => error.code === 'SUBJECT_ID_INVALID')
+  await assert.rejects(client.decode({ subjectType: 'project', subjectId: 'not-a-uuid', vin: VIN }), error => error.code === 'SUBJECT_ID_INVALID')
+})
+
 test('client fails closed without auth and for Pro denial while preserving manual fallback', async () => {
   const signedOut = clientHarness({ token: '' })
   await assert.rejects(signedOut.client.decode({ subjectType: 'project', subjectId: PROJECT_ID, vin: VIN }), error => {
