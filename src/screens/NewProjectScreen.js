@@ -12,8 +12,9 @@ import { validateVinIdentifier } from '../domain/myStuff/vinModel'
 import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptState } from './myStuffModel'
 
 const CATEGORIES = [
-  {value:'mower',label:'🚜 Lawn Mower'},{value:'car',label:'🚗 Car'},
-  {value:'motorcycle',label:'🏍️ Motorcycle'},{value:'atv',label:'🏎️ ATV / Powersports'},
+  {value:'mower',label:'🚜 Lawn Mower'},{value:'car',label:'🚗 Car'},{value:'truck',label:'🛻 Truck'},
+  {value:'motorcycle',label:'🏍️ Motorcycle'},{value:'atv',label:'🏎️ ATV / Powersports'},{value:'side_by_side',label:'🏁 Side-by-side'},
+  {value:'trailer',label:'🚛 Trailer'},{value:'rv',label:'🚐 RV'},
   {value:'boat',label:'⛵ Boat'},{value:'bicycle',label:'🚲 Bicycle / E-Bike'},
   {value:'watch',label:'⌚ Watch'},{value:'electronics',label:'📱 Electronics'},
   {value:'gaming',label:'🎮 Gaming / Console'},{value:'tool',label:'🔧 Tool / Equipment'},
@@ -23,7 +24,7 @@ const CATEGORIES = [
 ]
 
 const roundMoney = value => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100
-const VEHICLE_PROJECT_CATEGORIES = new Set(['car', 'motorcycle', 'atv'])
+const VEHICLE_PROJECT_CATEGORIES = new Set(['car', 'truck', 'motorcycle', 'atv', 'side_by_side', 'trailer', 'rv'])
 const EMPTY_VEHICLE_DETAILS = { vin: '', year: '', make: '', model: '', engine: '' }
 
 export default function NewProjectScreen({ navigation, route }) {
@@ -34,6 +35,7 @@ export default function NewProjectScreen({ navigation, route }) {
   const [purchasePrice, setPurchasePrice] = useState('')
   const [notes, setNotes] = useState('')
   const [vehicleDetails, setVehicleDetails] = useState(EMPTY_VEHICLE_DETAILS)
+  const [identifiers, setIdentifiers] = useState({ modelNumber:'', serialNumber:'' })
   const [photos, setPhotos] = useState([])
   const [activeGoals, setActiveGoals] = useState([])
   const [selectedGoalId, setSelectedGoalId] = useState(null)
@@ -130,8 +132,8 @@ export default function NewProjectScreen({ navigation, route }) {
           p_purchase_price: price,
           p_photo: photos[0] || null,
           p_notes: notes.trim() || null,
-          p_model_number: null,
-          p_serial_number: null,
+          p_model_number: identifiers.modelNumber.trim() || null,
+          p_serial_number: identifiers.serialNumber.trim() || null,
           p_engine_model: vehiclePersistence.engine_model,
           p_engine_serial: null,
           p_vin: vehiclePersistence.vin,
@@ -159,6 +161,8 @@ export default function NewProjectScreen({ navigation, route }) {
           photo: photos[0] || null,
           photos,
           status: 'active',
+          model_number: identifiers.modelNumber.trim() || null,
+          serial_number: identifiers.serialNumber.trim() || null,
           ...vehiclePersistence,
         }
         const mutationId = mutationIdForPayload(projectMutationAttempt.current, directPayload)
@@ -259,6 +263,15 @@ export default function NewProjectScreen({ navigation, route }) {
             <TextInput style={s.input} value={vehicleDetails.engine} onChangeText={engine => setVehicleDetails(current => ({ ...current, engine }))} />
           </View>
         )}
+
+        <View style={s.vehicleCard}>
+          <Text style={s.vehicleTitle}>{VEHICLE_PROJECT_CATEGORIES.has(category)?'Additional identifiers':'Model & serial identification'}</Text>
+          {!VEHICLE_PROJECT_CATEGORIES.has(category)&&<Text style={s.goalHint}>Use the manufacturer model and serial numbers. Automatic model/serial lookup is not available yet.</Text>}
+          <Text style={s.label}>Model number</Text>
+          <TextInput style={s.input} value={identifiers.modelNumber} onChangeText={modelNumber=>setIdentifiers(current=>({...current,modelNumber}))} maxLength={200} accessibilityLabel="Model number"/>
+          <Text style={s.label}>Serial number</Text>
+          <TextInput style={s.input} value={identifiers.serialNumber} onChangeText={serialNumber=>setIdentifiers(current=>({...current,serialNumber}))} maxLength={200} autoCapitalize="characters" accessibilityLabel="Serial number"/>
+        </View>
 
         <View>
             <View style={s.goalLabelRow}>

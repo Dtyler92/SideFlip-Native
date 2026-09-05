@@ -17,6 +17,7 @@ import {
   sortExpenseHistory,
 } from '../src/domain/myStuff/v3Model.js'
 import { decodedVehicleSuggestions } from '../src/domain/myStuff/vinModel.js'
+import { selectItemType, supportsVinDecoder } from '../src/domain/myStuff/itemModel.js'
 import { createMyStuffV3Client } from '../src/lib/myStuffV3Client.js'
 import { buildUpdateMyStuffItemV2WirePayload } from '../src/lib/myStuffPayloads.js'
 
@@ -107,6 +108,7 @@ test('V3 client sends canonical payloads with exact RPC argument names', async (
   await api.transitionOccurrenceStatus('plan-1','skipped','Owner skipped','mutation-6')
   await api.confirmVehicleIdentity('item-1',{year:2021,make:'Ford',model:'F-150',engineModel:'GTDI',engineDisplacementLiters:3.5,engineCylinders:6,bodyStyle:'Pickup',vehicleType:'TRUCK'},'mutation-7')
   await api.transferProject('project-1',{serviceExpenseIds:['project-expense-1']},'mutation-8')
+  await api.transferItemToProject('item-1','mutation-9')
   assert.deepEqual(calls, [
     {name:'create_my_stuff_expense_v3',payload:{p_item_id:'item-1',p_expense:{amount:12},p_mutation_id:'mutation-1'}},
     {name:'revise_my_stuff_expense_v3',payload:{p_expense_id:'expense-1',p_patch:{amount:13},p_reason:'Owner edit',p_mutation_id:'mutation-2'}},
@@ -121,7 +123,54 @@ test('V3 client sends canonical payloads with exact RPC argument names', async (
     {name:'confirm_my_stuff_vehicle_identity_v3',payload:{p_item_id:'item-1',p_identity:{model_year:2021,make:'Ford',model:'F-150',engine_model:'GTDI',engine_displacement_liters:3.5,engine_cylinders:6,body_style:'Pickup',vehicle_type:'TRUCK'},p_mutation_id:'mutation-7'}},
 
     {name:'transfer_project_to_my_stuff_v3',payload:{p_project_id:'project-1',p_options:{service_expense_ids:['project-expense-1']},p_mutation_id:'mutation-8'}},
+    {name:'transfer_my_stuff_to_project_v1',payload:{p_item_id:'item-1',p_mutation_id:'mutation-9'}},
   ])
+})
+
+test('VIN decoder appears only for item types that use VINs', () => {
+  for (const type of ['car','truck','motorcycle','atv','side_by_side','trailer','rv']) assert.equal(supportsVinDecoder(type), true, type)
+  for (const type of ['mower','tractor','generator','equipment','tool','boat','bicycle','electronics','furniture','other']) assert.equal(supportsVinDecoder(type), false, type)
+})
+
+test('changing from a VIN type to a non-VIN type clears hidden vehicle identity', () => {
+  const changed = selectItemType({
+    itemType:'car',vin:'1HGCM82633A004352',trim:'EX',series:'Accord',manufacturer:'Honda Motor Co.',vehicleType:'PASSENGER CAR',
+    bodyStyle:'Sedan',plantName:'Marysville',plantCountry:'USA',vehicleMarket:'US',engineModel:'K24',
+    engineDisplacementLiters:'2.4',engineCylinders:'4',transmission:'Automatic',drivetrain:'FWD',
+  }, 'mower')
+  for (const field of ['vin','trim','series','manufacturer','vehicleType','bodyStyle','plantName','plantCountry','vehicleMarket','engineModel','engineDisplacementLiters','engineCylinders','transmission','drivetrain']) {
+    assert.equal(changed[field], '', field)
+  }
+})
+
+test('My Stuff opens on maintenance with expense and transfer actions while details are secondary', () => {
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  const experience = source('src/components/MyStuffV3Experience.js')
+  assert.match(detail, /useState\('Maintenance'\)/)
+  assert.match(experience, /const TABS = \['Maintenance','Expenses','History'\]/)
+  assert.doesNotMatch(experience, /activeTab==='Details'/)
+  assert.match(experience, /Add expense/)
+  assert.match(detail, /Item settings/)
+  assert.match(experience, /Move to Project to Sell/)
+  assert.match(detail, /transferMyStuffToProjectV1/)
+  assert.match(detail, /itemOperationInFlight/)
+  assert.ok((detail.match(/beginItemOperation\(\)/g)||[]).length>=9,'all parent item/maintenance mutations claim the shared lock')
+  assert.match(detail, /VinDecodePanel[^\n]+operationLock=\{itemOperationInFlight\}/)
+  assert.match(detail, /onOperationLockChange=\{setVinConfirmationBusy\}/)
+  assert.match(detail, /parentBusy=\{saving\|\|vinConfirmationBusy\}/)
+  assert.match(experience, /statusAttempt[\s\S]*beginItemOperation\(\)/)
+  assert.match(experience, /parentBusy/)
+  assert.match(experience, /operationLock/)
+  assert.doesNotMatch(experience, /Purchase price remains in Details/)
+})
+
+test('VIN panels are gated while model and serial fields remain available', () => {
+  for (const screen of ['src/screens/MyStuffCreateScreen.js','src/screens/MyStuffDetailScreen.js']) {
+    const value = source(screen)
+    assert.match(value, /supportsVinDecoder/)
+    assert.match(value, /Model number/)
+    assert.match(value, /Serial number/)
+  }
 })
 
 test('service payload links one optional expense to the same planned occurrence', () => {
@@ -200,7 +249,7 @@ test('V3 client uses exact approved RPC names and keeps legacy exports', () => {
     'create_my_stuff_expense_v3','revise_my_stuff_expense_v3','void_my_stuff_expense_v3',
     'get_my_stuff_expenses_v3','get_my_stuff_financial_summary_v3',
     'record_my_stuff_service_with_expense_v3','revise_my_stuff_service_expense_v3',
-    'confirm_my_stuff_vehicle_identity_v3','list_my_stuff_schedule_groups_v3','get_my_stuff_due_views_v3','transition_my_stuff_occurrence_status_v3','transfer_project_to_my_stuff_v3',
+    'confirm_my_stuff_vehicle_identity_v3','list_my_stuff_schedule_groups_v3','get_my_stuff_due_views_v3','transition_my_stuff_occurrence_status_v3','transfer_project_to_my_stuff_v3','transfer_my_stuff_to_project_v1',
   ]) assert.match(client, new RegExp(`(?:rpc|call)\\('${rpc}'`), rpc)
   for (const legacy of ['createMyStuffItem','completeMyStuffMaintenance','recordMyStuffServiceOccurrenceV2']) assert.match(client, new RegExp(`export async function ${legacy}`))
 })
@@ -208,7 +257,7 @@ test('V3 client uses exact approved RPC names and keeps legacy exports', () => {
 test('V3 native experience exposes tabs, forms, status controls, provenance, and truthful fallback', () => {
   const detail = source('src/components/MyStuffV3Experience.js')
   for (const copy of [
-    'Details','Expenses','Maintenance','History','Schedule','Due Items','Purchase price','Transferred project',
+    'Expenses','Maintenance','History','Schedule','Due Items','Purchase price','Transferred project',
     'Maintenance & repairs','Upgrades','Total invested','Linked service','Add expense','Edit expense',
     'Actual service date','Current mileage','Current hours','Cost','Provider / DIY','Parts',
     'Overdue','Due soon','Upcoming','Completed recently','Not applicable','Skipped','History unknown',

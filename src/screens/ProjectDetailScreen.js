@@ -38,6 +38,7 @@ const HUMOR_LEVELS = [
 
 const EMPTY_EXPENSE = { description: '', amount: '', category: 'parts', laborHours: '' }
 const EMPTY_VEHICLE_DETAILS = { vin: '', year: '', make: '', model: '', engine: '', transmission: '' }
+const VIN_PROJECT_CATEGORIES = new Set(['car','truck','motorcycle','atv','side_by_side','trailer','rv'])
 
 export default function ProjectDetailScreen({ navigation, route }) {
   const insets = useSafeAreaInsets()
@@ -60,10 +61,12 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [selectedHumorLevel, setSelectedHumorLevel] = useState('balanced')
   const [activeGoals, setActiveGoals] = useState([])
   const [vehicleDetails, setVehicleDetails] = useState(EMPTY_VEHICLE_DETAILS)
+  const [equipmentIdentifiers, setEquipmentIdentifiers] = useState({ modelNumber:'', serialNumber:'' })
   const [showVehicleDetails, setShowVehicleDetails] = useState(true)
   const [savingVehicleDetails, setSavingVehicleDetails] = useState(false)
   const [showAssignGoal, setShowAssignGoal] = useState(false)
   const vehicleDetailsInFlight = useRef(false)
+  const equipmentIdentifiersInFlight = useRef(false)
   const goalLinkMutationId = useRef(createMutationId())
   const transferMutationId = useRef(createMutationId())
   const projectLoadGeneration = useRef(0)
@@ -98,6 +101,10 @@ export default function ProjectDetailScreen({ navigation, route }) {
       model: projectResult.data.vehicle_model || '',
       engine: projectResult.data.engine_model || '',
       transmission: projectResult.data.transmission || '',
+    })
+    setEquipmentIdentifiers({
+      modelNumber: projectResult.data.model_number || '',
+      serialNumber: projectResult.data.serial_number || '',
     })
     if (goalResult.error) Alert.alert('Could not load goals', goalResult.error.message)
     else setActiveGoals(goalResult.data || [])
@@ -218,6 +225,27 @@ export default function ProjectDetailScreen({ navigation, route }) {
       Alert.alert('Vehicle details saved', 'Your manual and applied VIN details were saved.')
     } catch (error) {
       Alert.alert('Could not save vehicle details', error.message || 'Your entries are still here. Please try again.')
+    }
+  }
+
+  async function saveEquipmentIdentifiers() {
+    if (equipmentIdentifiersInFlight.current) return
+    const modelNumber = equipmentIdentifiers.modelNumber.trim()
+    const serialNumber = equipmentIdentifiers.serialNumber.trim()
+    if (modelNumber.length > 200 || serialNumber.length > 200) return Alert.alert('Check identifiers', 'Model and serial numbers must be 200 characters or fewer.')
+    equipmentIdentifiersInFlight.current = true
+    setSavingVehicleDetails(true)
+    try {
+      const values = { model_number: modelNumber || null, serial_number: serialNumber || null }
+      const { data, error } = await supabase.from('projects').update(values).eq('id',projectId).eq('user_id',user.id).select('*').single()
+      if (error) throw error
+      setProject(current => ({ ...current, ...data }))
+      Alert.alert('Identifiers saved', 'The model and serial numbers are saved with this Project.')
+    } catch (error) {
+      Alert.alert('Could not save identifiers', error.message || 'Please try again.')
+    } finally {
+      equipmentIdentifiersInFlight.current = false
+      setSavingVehicleDetails(false)
     }
   }
 
@@ -614,7 +642,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
           </View>
         )}
 
-        <Text style={s.sectionTitle}>Vehicle details</Text>
+        {VIN_PROJECT_CATEGORIES.has(project.category)&&<><Text style={s.sectionTitle}>Vehicle details</Text>
         <View style={s.card}>
           <TouchableOpacity
             style={s.vehicleDetailsHeader}
@@ -646,7 +674,17 @@ export default function ProjectDetailScreen({ navigation, route }) {
               {savingVehicleDetails ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Save Vehicle Details</Text>}
             </TouchableOpacity>
           </View>
-        </View>
+        </View></>}
+
+        {!VIN_PROJECT_CATEGORIES.has(project.category)&&<><Text style={s.sectionTitle}>Model & serial identification</Text>
+        <View style={s.card}>
+          <Text style={s.inputHint}>Use the manufacturer model and serial number to identify this equipment. VIN tools are reserved for VIN-equipped items.</Text>
+          <ProjectVehicleField label="Model number" value={equipmentIdentifiers.modelNumber} onChangeText={modelNumber=>setEquipmentIdentifiers(current=>({...current,modelNumber}))} maxLength={200}/>
+          <ProjectVehicleField label="Serial number" value={equipmentIdentifiers.serialNumber} onChangeText={serialNumber=>setEquipmentIdentifiers(current=>({...current,serialNumber}))} maxLength={200}/>
+          <TouchableOpacity style={[s.btn,{marginTop:12},savingVehicleDetails&&s.btnDisabled]} onPress={saveEquipmentIdentifiers} disabled={savingVehicleDetails} accessibilityRole="button" accessibilityLabel="Save model and serial numbers" accessibilityState={{disabled:savingVehicleDetails,busy:savingVehicleDetails}}>
+            {savingVehicleDetails?<ActivityIndicator color="#fff" size="small"/>:<Text style={s.btnText}>Save Identifiers</Text>}
+          </TouchableOpacity>
+        </View></>}
 
         <Text style={s.sectionTitle}>Shareable report</Text>
         <ReportPanel subjectType="project" subjectId={projectId} isPro={isPro} onUpgrade={() => navigation.navigate('Pro')} />
@@ -916,7 +954,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
 }
 
 function ProjectVehicleField({ label, ...props }) {
-  return <View><Text style={[s.label,{marginTop:12,marginBottom:6}]}>{label}</Text><TextInput style={s.input} placeholderTextColor="#A8A49E" {...props}/></View>
+  return <View><Text style={[s.label,{marginTop:12,marginBottom:6}]}>{label}</Text><TextInput style={s.input} placeholderTextColor="#A8A49E" accessibilityLabel={label} {...props}/></View>
 }
 
 const s = StyleSheet.create({

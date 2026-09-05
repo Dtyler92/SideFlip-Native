@@ -137,10 +137,28 @@ test('My Stuff V2 create payload persists VIN and every supported decoded value'
 
 test('New Project offers pre-save Pro VIN decoding for vehicle details', () => {
   const screen = source('src/screens/NewProjectScreen.js')
+  assert.match(screen, /const VEHICLE_PROJECT_CATEGORIES = new Set\(\['car', 'truck', 'motorcycle', 'atv', 'side_by_side', 'trailer', 'rv'\]\)/)
   assert.match(screen, /VEHICLE_PROJECT_CATEGORIES\.has\(category\)[\s\S]*<VinDecodePanel/)
   assert.match(screen, /<VinDecodePanel[\s\S]*subjectType="project"[\s\S]*subjectId=\{null\}[\s\S]*autoFillBlanks/)
   assert.match(screen, /mapSuggestions=\{buildProjectVinCreateSuggestions\}/)
   assert.match(screen, /onUpgrade=\{\(\) => navigation\.navigate\('Pro'\)\}/)
+  assert.match(screen, /Model number/)
+  assert.match(screen, /Serial number/)
+  assert.match(screen, /p_model_number: identifiers\.modelNumber/)
+  assert.match(screen, /p_serial_number: identifiers\.serialNumber/)
+})
+
+test('non-VIN Projects keep editable model and serial identification without a VIN panel', () => {
+  const create = source('src/screens/NewProjectScreen.js')
+  const detail = source('src/screens/ProjectDetailScreen.js')
+  assert.match(detail, /VIN_PROJECT_CATEGORIES\.has\(project\.category\)/)
+  assert.match(detail, /Model & serial identification/)
+  assert.match(detail, /model_number/)
+  assert.match(detail, /serial_number/)
+  assert.match(detail, /saveEquipmentIdentifiers/)
+  assert.match(create, /accessibilityLabel="Model number"/)
+  assert.match(create, /accessibilityLabel="Serial number"/)
+  assert.match(detail, /accessibilityLabel=\{label\}/)
 })
 
 test('Project Detail confirms decoded transmission into expandable vehicle details before compressing', () => {

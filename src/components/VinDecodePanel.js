@@ -19,7 +19,7 @@ import {
 const ACCENT = '#C8402F'
 const client = createVinDecodeClient({ auth: supabase.auth })
 
-export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false }) {
+export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false, operationLock, onOperationLockChange }) {
   const [decoding, setDecoding] = useState(false)
   const [preview, setPreview] = useState(null)
   const [warnings, setWarnings] = useState([])
@@ -147,6 +147,10 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
     const snapshot = { vin:vinState.normalized,...identity }
     const generation = ++confirmationGeneration.current
     const mutationId = mutationIdForPayload(confirmationAttempt.current,{ subjectId,identity:snapshot })
+    if (operationLock?.current) return setMessage('Wait for the current item update to finish before confirming vehicle identity.')
+    if (operationLock) operationLock.current = true
+    const claimedOperation = !!operationLock
+    if (claimedOperation) onOperationLockChange?.(true)
     setConfirming(true);setMessage('')
     try {
       const isCurrent = () => {
@@ -168,7 +172,13 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
     } catch (error) {
       if (generation !== confirmationGeneration.current) return
       setMessage(`${error?.message || 'Vehicle confirmation is unavailable.'} Your editable review is still here and manual entry remains available.`)
-    } finally { if (generation === confirmationGeneration.current) setConfirming(false) }
+    } finally {
+      if (claimedOperation) {
+        operationLock.current = false
+        onOperationLockChange?.(false)
+      }
+      if (generation === confirmationGeneration.current) setConfirming(false)
+    }
   }
 
   const entries = preview ? Object.entries(preview.fields).filter(([, detail]) => detail.suggestion != null) : []

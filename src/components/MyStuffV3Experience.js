@@ -26,13 +26,13 @@ import {
 import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptState, todayDateInput } from '../screens/myStuffModel'
 
 const ACCENT = '#C8402F'
-const TABS = ['Details','Expenses','Maintenance','History']
+const TABS = ['Maintenance','Expenses','History']
 const STATUS_CHOICES = [['not_completed','Not completed'],['completed','Completed'],['not_applicable','Not applicable'],['skipped','Skipped'],['history_unknown','History unknown']]
 const EMPTY_EXPENSE = { description:'',category:'maintenance',customCategory:'',amount:'',currency:'',incurredOn:todayDateInput(),vendor:'',mileage:'',hours:'',notes:'' }
 const EXPENSE_ACCESSORY = 'my-stuff-v3-expense-keyboard'
 const SERVICE_ACCESSORY = 'my-stuff-v3-service-keyboard'
 
-export default function MyStuffV3Experience({ item, definitions = [], plannedOccurrences = [], formatMoney, currency, activeTab = 'Details', onTabChange, onRefresh }) {
+export default function MyStuffV3Experience({ item, definitions = [], plannedOccurrences = [], formatMoney, currency, activeTab = 'Maintenance', onTabChange, onRefresh, onStartSelling, transferring = false, operationLock, parentBusy = false }) {
   const [maintenanceView,setMaintenanceView] = useState('Schedule')
   const [expenses,setExpenses] = useState([])
   const [serverSummary,setServerSummary] = useState(null)
@@ -92,6 +92,12 @@ export default function MyStuffV3Experience({ item, definitions = [], plannedOcc
     return groups
   }, [definitionById,plannedOccurrences])
 
+  function beginItemOperation() {
+    if (operationLock?.current) return false
+    if (operationLock) operationLock.current = true
+    return true
+  }
+  function endItemOperation() { if (operationLock) operationLock.current = false }
   function changeExpense(key,value) { setExpenseForm(current => ({ ...current,[key]:value })) }
   function startExpense(row = null) {
     resetMutationAttemptState(expenseAttempt.current)
@@ -112,11 +118,13 @@ export default function MyStuffV3Experience({ item, definitions = [], plannedOcc
     const requestedItemId = item.id
     const expenseId = editingExpense?.id || null
     const mutationId = mutationIdForPayload(expenseAttempt.current,{ expenseId,payload })
+    if (!beginItemOperation()) return Alert.alert('Finish the current change','Wait for the current item update to finish.')
     setSaving(true)
     try {
       if (expenseId) await reviseExpenseByLinkage({ row:editingExpense,patch:payload,reason:'Edited by owner',mutationId,reviseExpense:reviseMyStuffExpenseV3,reviseServiceExpense:reviseMyStuffServiceExpenseV3 })
       else await createMyStuffExpenseV3(requestedItemId,payload,mutationId)
     } catch (error) {
+      endItemOperation()
       setSaving(false)
       return Alert.alert('Could not save expense',`${error.message || 'Please try again.'}\n\nYour entered fields are still here.`)
     }
@@ -124,6 +132,7 @@ export default function MyStuffV3Experience({ item, definitions = [], plannedOcc
     if (requestedItemId === itemIdRef.current) { setExpenseForm(null);setEditingExpense(null) }
     const refreshed = await loadExpenses({ afterMutation:true })
     if (!refreshed && requestedItemId === itemIdRef.current) Alert.alert('Expense saved, but refresh failed','The expense was saved. Pull to refresh or retry loading expenses.')
+    endItemOperation()
     setSaving(false)
   }
 
@@ -132,12 +141,14 @@ export default function MyStuffV3Experience({ item, definitions = [], plannedOcc
       { text:'Cancel',style:'cancel' },
       { text:'Void',style:'destructive',onPress:async() => {
         const requestedItemId = item.id
+        if (!beginItemOperation()) return Alert.alert('Finish the current change','Wait for the current item update to finish.')
         try {
           await voidMyStuffExpenseV3(row.id,'Voided by owner',mutationIdForPayload(expenseAttempt.current,{ expenseId:row.id,void:true }))
           resetMutationAttemptState(expenseAttempt.current)
           const refreshed = await loadExpenses({ afterMutation:true })
           if (!refreshed && requestedItemId === itemIdRef.current) Alert.alert('Expense voided, but refresh failed','The expense was voided. Pull to refresh or retry loading expenses.')
         } catch (error) { Alert.alert('Could not void expense',error.message || 'Please try again.') }
+        finally { endItemOperation() }
       } },
     ])
   }
@@ -153,18 +164,21 @@ export default function MyStuffV3Experience({ item, definitions = [], plannedOcc
     const occurrenceId = row.planned_occurrence_id
     if (!occurrenceId) return Alert.alert('Status unavailable','This row has no V3 planned occurrence identifier.')
     const mutationId = mutationIdForPayload(statusAttempt.current,{ occurrenceId,status })
+    if (!beginItemOperation()) return Alert.alert('Finish the current change','Wait for the current item update to finish.')
     statusInFlight.current = true
     setSaving(true)
     try {
       await setMyStuffOccurrenceStatusV3(occurrenceId,status,`Set to ${status.replaceAll('_',' ')} by owner`,mutationId)
     } catch (error) {
       statusInFlight.current = false
+      endItemOperation()
       setSaving(false)
       return Alert.alert('Could not update status',`${error.message || 'Please try again.'} No status change was assumed.`)
     }
     resetMutationAttemptState(statusAttempt.current)
     try { await onRefresh?.() } catch (error) { Alert.alert('Status saved, but refresh failed',`The status was updated. Pull to refresh.${error?.message ? `\n\n${error.message}` : ''}`) }
     statusInFlight.current = false
+    endItemOperation()
     setSaving(false)
   }
 
@@ -184,9 +198,11 @@ export default function MyStuffV3Experience({ item, definitions = [], plannedOcc
     }
     const requestedItemId = item.id
     const mutationId = mutationIdForPayload(serviceAttempt.current,request)
+    if (!beginItemOperation()) return Alert.alert('Finish the current change','Wait for the current item update to finish.')
     setSaving(true)
     try { await recordMyStuffServiceWithExpenseV3({ ...request,mutationId }) }
     catch (error) {
+      endItemOperation()
       setSaving(false)
       return Alert.alert('Could not log service',`${error.message || 'Please try again.'}\n\nYour entered service and expense fields are still here.`)
     }
@@ -196,6 +212,7 @@ export default function MyStuffV3Experience({ item, definitions = [], plannedOcc
     let detailRefresh = true
     try { await onRefresh?.() } catch { detailRefresh = false }
     if ((!expenseRefresh || !detailRefresh) && requestedItemId === itemIdRef.current) Alert.alert('Service saved, but refresh failed','The service and linked expense were saved. Pull to refresh for the latest data.')
+    endItemOperation()
     setSaving(false)
   }
 
@@ -203,19 +220,25 @@ export default function MyStuffV3Experience({ item, definitions = [], plannedOcc
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabs} accessibilityRole="tablist" accessibilityLabel="My Stuff detail sections">
       {TABS.map(value => <TouchableOpacity key={value} style={[s.tab,activeTab===value&&s.tabActive]} onPress={() => onTabChange?.(value)} accessibilityRole="tab" accessibilityState={{ selected:activeTab===value }}><Text style={[s.tabText,activeTab===value&&s.tabTextActive]}>{value}</Text></TouchableOpacity>)}
     </ScrollView>
-    {activeTab==='Details'&&<View style={s.notice}><Text style={s.noticeTitle}>Details</Text><Text style={s.muted}>Identity, usage, legacy controls, and manual entry remain below.</Text></View>}
+
     {activeTab==='Expenses'&&<View>
       <View style={s.summary}><Summary label="Purchase price" value={summary.purchase_price??summary.purchasePrice} formatMoney={formatMoney}/><Summary label="Transferred project" value={summary.transferred_project_subtotal??summary.transferredProjectSubtotal} formatMoney={formatMoney}/><Summary label="Maintenance & repairs" value={summary.maintenance_repair_subtotal??summary.maintenanceRepairSubtotal} formatMoney={formatMoney}/><Summary label="Upgrades" value={summary.upgrades_subtotal??summary.upgradesSubtotal} formatMoney={formatMoney}/><Summary label="Total invested" value={summary.total_invested??summary.totalInvested} formatMoney={formatMoney} strong/>{Object.entries(summary.category_totals||summary.categoryTotals||{}).map(([category,total])=><Summary key={category} label={`${category[0].toUpperCase()+category.slice(1)} total`} value={total} formatMoney={formatMoney}/>)}</View>
       {!!expenseNotice&&<Text style={s.warning}>{expenseNotice}</Text>}
       {availability==='loading'&&<Text style={s.muted}>Loading expenses…</Text>}
-      {availability==='unavailable'&&<View style={s.notice}><Text style={s.noticeTitle}>Expenses unavailable</Text><Text style={s.muted}>The V3 expense service is unavailable. Purchase price remains in Details. Try again later or keep manual records.</Text><TouchableOpacity onPress={() => loadExpenses()} accessibilityRole="button"><Text style={s.link}>Retry</Text></TouchableOpacity></View>}
+      {availability==='unavailable'&&<View style={s.notice}><Text style={s.noticeTitle}>Expenses unavailable</Text><Text style={s.muted}>The V3 expense service is unavailable. Your purchase price remains stored separately. Try again later or keep manual records.</Text><TouchableOpacity onPress={() => loadExpenses()} accessibilityRole="button"><Text style={s.link}>Retry</Text></TouchableOpacity></View>}
       {availability==='available'&&<><TouchableOpacity style={s.primary} onPress={() => startExpense()} accessibilityRole="button"><Text style={s.primaryText}>Add expense</Text></TouchableOpacity>{sortExpenseHistory(expenses).map(row => { const value=expenseRevision(row);return <View key={row.id} style={s.row}><View style={s.flex}><Text style={s.rowTitle}>{value.description}</Text><Text style={s.muted}>{value.incurred_on} · {value.category}{linkedOccurrenceId(row)?' · Linked service':''}{row.source_type==='project_transfer'?' · Transferred project':''}{row.voided_at?' · Voided':''}</Text></View><Text style={s.amount}>{formatMoney(value.amount)}</Text>{!row.voided_at&&<View><TouchableOpacity onPress={() => startExpense(row)} accessibilityRole="button"><Text style={s.link}>Edit expense</Text></TouchableOpacity>{!linkedOccurrenceId(row)&&<TouchableOpacity onPress={() => confirmVoid(row)} accessibilityRole="button"><Text style={s.danger}>Void</Text></TouchableOpacity>}</View>}</View>})}</>}
       {expenseForm&&<ExpenseForm value={expenseForm} onChange={changeExpense} onSave={saveExpense} onCancel={() => setExpenseForm(null)} saving={saving} editing={!!editingExpense}/>}
     </View>}
     {activeTab==='Maintenance'&&<View>
+      <View style={s.maintenanceActions}>
+        <TouchableOpacity style={s.primary} onPress={() => startExpense()} accessibilityRole="button" accessibilityLabel="Add expense to this item"><Text style={s.primaryText}>Add expense</Text></TouchableOpacity>
+        <View style={s.invested}><Text style={s.muted}>Total invested</Text><Text style={s.investedValue}>{formatMoney(summary.total_invested??summary.totalInvested)}</Text></View>
+      </View>
+      {expenseForm&&<ExpenseForm value={expenseForm} onChange={changeExpense} onSave={saveExpense} onCancel={() => setExpenseForm(null)} saving={saving} editing={!!editingExpense}/>}
       <View style={s.subtabs} accessibilityRole="tablist">{['Schedule','Due Items'].map(value=><TouchableOpacity key={value} style={[s.subtab,maintenanceView===value&&s.subtabActive]} onPress={()=>setMaintenanceView(value)} accessibilityRole="tab" accessibilityState={{selected:maintenanceView===value}}><Text style={s.tabText}>{value}</Text></TouchableOpacity>)}</View>
       {maintenanceView==='Schedule' ? Object.entries(scheduleGroups).map(([group,rows]) => <View key={group} style={s.group}><TouchableOpacity style={s.groupHeader} onPress={() => setExpandedGroups(current=>({...current,[group]:!current[group]}))} accessibilityRole="button" accessibilityState={{expanded:!!expandedGroups[group]}} accessibilityLabel={`${group} maintenance group`}><Text style={s.noticeTitle}>{group}{group==='Manufacturer'?' intervals':''}</Text><Text>{expandedGroups[group]?'−':'+'}</Text></TouchableOpacity>{expandedGroups[group]&&<View>{rows.map(row=><Text key={row.planned_occurrence_id} style={s.muted}>{row.name || 'Maintenance item'} · {group==='Manufacturer'?'Manufacturer interval (citation preserved)':'Manual schedule'} · {row.due_at?String(row.due_at).slice(0,10):'No date'}</Text>)}{rows.length===0&&<Text style={s.muted}>No {group.toLowerCase()} planned occurrences. Manual schedule entry remains available below.</Text>}</View>}</View>) : <>{Object.entries({Overdue:dueGroups.overdue,'Due soon':dueGroups.dueSoon,Upcoming:dueGroups.upcoming,'Completed recently':dueGroups.completedRecently}).map(([label,rows])=><View key={label}><Text style={s.heading}>{label}</Text>{rows.length===0?<Text style={s.muted}>None</Text>:rows.map(row=><Occurrence key={row.planned_occurrence_id} row={row} onStatus={chooseStatus}/>)}</View>)}</>}
       {serviceOccurrence&&<ServiceForm value={serviceForm} onChange={(key,value)=>setServiceForm(current=>({...current,[key]:value}))} onReading={(key,value)=>setServiceForm(current=>({...current,readings:{...current.readings,[key]:value}}))} onSave={saveService} onCancel={()=>setServiceOccurrence(null)} saving={saving}/>}
+      <View style={s.sellCard}><Text style={s.noticeTitle}>Ready to sell or flip it?</Text><Text style={s.muted}>Create a Project with the original purchase price and every current expense kept separate for accurate cost analysis.</Text><TouchableOpacity style={[s.secondary,(transferring||saving||parentBusy||operationLock?.current)&&s.disabled]} onPress={onStartSelling} disabled={transferring||saving||parentBusy||operationLock?.current} accessibilityRole="button" accessibilityLabel="Move to Project to Sell" accessibilityState={{disabled:transferring||saving||parentBusy||operationLock?.current,busy:transferring}}><Text style={s.secondaryText}>{transferring?'Creating Project…':'Move to Project to Sell'}</Text></TouchableOpacity></View>
     </View>}
     {activeTab==='History'&&<View><View style={s.notice}><Text style={s.noticeTitle}>History</Text><Text style={s.muted}>Service and read-only legacy history appear below.</Text></View>{sortExpenseHistory(expenses).filter(row=>linkedOccurrenceId(row)).map(row=>{const value=expenseRevision(row);return <View key={`history-${row.id}`} style={s.row}><View style={s.flex}><Text style={s.rowTitle}>{value.description||'Service expense'}</Text><Text style={s.muted}>Linked expense {row.id} · occurrence {linkedOccurrenceId(row)}</Text></View><Text style={s.amount}>{formatMoney(value.amount)}</Text></View>})}</View>}
   </View>
@@ -233,7 +256,7 @@ const s=StyleSheet.create({
   subtabs:{flexDirection:'row',gap:8,marginVertical:10},subtab:{flex:1,minHeight:44,alignItems:'center',justifyContent:'center',borderBottomWidth:2,borderBottomColor:'#D7D2CB'},subtabActive:{borderBottomColor:ACCENT},
   notice:{backgroundColor:'#FFF8EE',borderWidth:1,borderColor:'#E8D5B5',borderRadius:12,padding:14,marginBottom:10},noticeTitle:{fontWeight:'800',color:'#1A1917'},muted:{color:'#6B665E',lineHeight:19},warning:{color:'#8B3328',lineHeight:19,marginBottom:8},link:{color:ACCENT,fontWeight:'700',paddingVertical:8},danger:{color:'#9E2F22',fontWeight:'700',paddingVertical:5},
   summary:{backgroundColor:'#fff',borderRadius:12,padding:14,marginBottom:10},summaryRow:{flexDirection:'row',justifyContent:'space-between',paddingVertical:6},amount:{fontWeight:'700',color:'#1A1917'},strong:{fontWeight:'900',color:ACCENT},
-  primary:{backgroundColor:ACCENT,minHeight:46,borderRadius:10,alignItems:'center',justifyContent:'center',paddingHorizontal:14,marginVertical:10},primaryText:{color:'#fff',fontWeight:'800'},disabled:{opacity:.6},
+  primary:{backgroundColor:ACCENT,minHeight:46,borderRadius:10,alignItems:'center',justifyContent:'center',paddingHorizontal:14,marginVertical:10},primaryText:{color:'#fff',fontWeight:'800'},disabled:{opacity:.6},maintenanceActions:{marginBottom:8},invested:{backgroundColor:'#fff',borderRadius:10,padding:12,flexDirection:'row',justifyContent:'space-between',alignItems:'center'},investedValue:{fontWeight:'900',color:ACCENT,fontSize:17},sellCard:{backgroundColor:'#FFF8EE',borderWidth:1,borderColor:'#E8D5B5',borderRadius:12,padding:14,marginTop:16},secondary:{minHeight:46,borderRadius:10,borderWidth:1,borderColor:ACCENT,alignItems:'center',justifyContent:'center',paddingHorizontal:14,marginTop:10},secondaryText:{color:ACCENT,fontWeight:'800'},
   row:{backgroundColor:'#fff',borderWidth:1,borderColor:'#E8E4DE',borderRadius:12,padding:13,marginBottom:8,flexDirection:'row',alignItems:'center',gap:10},rowTitle:{fontWeight:'800',color:'#1A1917'},flex:{flex:1},
   form:{backgroundColor:'#fff',borderWidth:1,borderColor:ACCENT,borderRadius:12,padding:14,marginVertical:10},heading:{fontSize:17,fontWeight:'800',color:'#1A1917',marginVertical:10},label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:11,marginBottom:5},input:{borderWidth:1,borderColor:'#D7D2CB',borderRadius:9,padding:11,color:'#1A1917',backgroundColor:'#fff'},textarea:{minHeight:78,textAlignVertical:'top'},
   group:{backgroundColor:'#fff',borderWidth:1,borderColor:'#E8E4DE',borderRadius:10,padding:12,marginBottom:8},groupHeader:{minHeight:44,flexDirection:'row',justifyContent:'space-between',alignItems:'center'},statuses:{flexDirection:'row',gap:7,flexWrap:'wrap'},status:{minHeight:40,borderWidth:1,borderColor:'#D7D2CB',borderRadius:20,paddingHorizontal:12,justifyContent:'center'},statusText:{fontSize:12,fontWeight:'700',color:'#5C5850'},

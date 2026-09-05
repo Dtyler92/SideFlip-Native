@@ -49,6 +49,8 @@ const ITEM_TYPE_BY_VALUE = Object.freeze(Object.fromEntries(ITEM_TYPE_OPTIONS.ma
 
 export const ITEM_CATEGORIES = Object.freeze(Object.keys(CONTRACTS))
 export const ITEM_CATEGORY_CONTRACTS = CONTRACTS
+export const VIN_ITEM_TYPES = Object.freeze(['car', 'truck', 'motorcycle', 'atv', 'side_by_side', 'trailer', 'rv'])
+const VIN_ITEM_TYPE_SET = new Set(VIN_ITEM_TYPES)
 export const ITEM_CATEGORY_ALIASES = Object.freeze({
   car: 'vehicle', truck: 'vehicle', atv: 'recreation', 'side by side': 'recreation',
   'lawn mower': 'equipment', lawnmower: 'equipment', tractor: 'equipment', trailer: 'vehicle',
@@ -70,6 +72,10 @@ export function deriveItemCategory(value) {
   return getItemTypeOption(value)?.category || 'other'
 }
 
+export function supportsVinDecoder(itemType) {
+  return VIN_ITEM_TYPE_SET.has(getItemTypeOption(itemType)?.value || '')
+}
+
 export function getItemCategoryContract(category) {
   const key = normalizedKey(category)
   return CONTRACTS[key] || CONTRACTS[ITEM_CATEGORY_ALIASES[key]] || null
@@ -85,6 +91,9 @@ export function selectItemType(draft = {}, value) {
     if (draft.currentUsage && Object.prototype.hasOwnProperty.call(draft.currentUsage, mode)) currentUsage[mode] = draft.currentUsage[mode]
   }
   const next = { ...draft, itemType: option.value, category: option.category, measurements, currentUsage }
+  if (!VIN_ITEM_TYPE_SET.has(option.value)) {
+    for (const field of ['vin','trim','series','manufacturer','vehicleType','bodyStyle','plantName','plantCountry','vehicleMarket','engineModel','engineDisplacementLiters','engineCylinders','transmission','drivetrain']) next[field] = ''
+  }
   for (const mode of MEASUREMENT_TYPES) if (!allowed.has(mode)) delete next[mode]
   return next
 }

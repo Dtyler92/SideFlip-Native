@@ -189,3 +189,4 @@ export const setMyStuffOccurrenceStatusV3 = (...args) => v3Api.transitionOccurre
 export const confirmMyStuffVehicleIdentityV3 = (...args) => v3Api.confirmVehicleIdentity(...args)
 
 export const transferProjectToMyStuffV3 = (...args) => v3Api.transferProject(...args)
+export const transferMyStuffToProjectV1 = (...args) => v3Api.transferItemToProject(...args)

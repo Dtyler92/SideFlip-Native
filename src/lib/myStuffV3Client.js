@@ -67,5 +67,6 @@ export function createMyStuffV3Client(database) {
     confirmVehicleIdentity: (itemId, identity, mutationId) => call('confirm_my_stuff_vehicle_identity_v3', { p_item_id:itemId, p_identity:vehicleIdentityPayload(identity), p_mutation_id:mutationId }),
 
     transferProject: (projectId, options, mutationId) => call('transfer_project_to_my_stuff_v3', { p_project_id:projectId, p_options:transferOptionsPayload(options), p_mutation_id:mutationId }),
+    transferItemToProject: (itemId, mutationId) => call('transfer_my_stuff_to_project_v1', { p_item_id:itemId, p_mutation_id:mutationId }),
   }
 }

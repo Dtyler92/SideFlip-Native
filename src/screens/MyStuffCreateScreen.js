@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { createMyStuffItemV2 } from '../lib/myStuffClient'
 import { buildCreateMyStuffItemV2WirePayload } from '../lib/myStuffPayloads'
 import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
-import { deriveItemCategory, getItemCategoryContract, selectItemType, validateItemDraft } from '../domain/myStuff/itemModel'
+import { deriveItemCategory, getItemCategoryContract, selectItemType, supportsVinDecoder, validateItemDraft } from '../domain/myStuff/itemModel'
 import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptState, validateCalendarDate } from './myStuffModel'
 import { useAuth } from '../context/AuthContext'
 import VinDecodePanel from '../components/VinDecodePanel'
@@ -72,7 +72,7 @@ export default function MyStuffCreateScreen({ navigation }) {
     <Header title="Add Item" onBack={() => navigation.goBack()} />
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
       <Text style={s.section}>Identity</Text>
-      <VinDecodePanel
+      {supportsVinDecoder(draft.itemType) && <VinDecodePanel
         subjectType="my_stuff_item"
         subjectId={null}
         isPro={isPro}
@@ -81,7 +81,7 @@ export default function MyStuffCreateScreen({ navigation }) {
         onUpgrade={() => navigation.navigate('Pro')}
         mapSuggestions={buildMyStuffVinCreateSuggestions}
         autoFillBlanks
-      />
+      />}
       <Field label="Item name *" value={draft.name || ''} onChangeText={value => setValue('name', value)} placeholder="e.g. Work Truck" maxLength={200} />
       <MyStuffItemTypePicker value={draft.itemType} onChange={setExactType} error={validationErrors.itemType || validationErrors.category} />
       <View style={s.twoColumn}>
@@ -92,6 +92,7 @@ export default function MyStuffCreateScreen({ navigation }) {
       <Field label="Trim / version" value={draft.trim || ''} onChangeText={value => setValue('trim', value)} />
       <Field label="Model number" value={draft.modelNumber || ''} onChangeText={value => setValue('modelNumber', value)} />
       <Field label="Serial number" value={draft.serialNumber || ''} onChangeText={value => setValue('serialNumber', value)} autoCapitalize="characters" />
+      {!supportsVinDecoder(draft.itemType) && <Text style={s.help}>Use the manufacturer model and serial numbers for equipment identity. Automatic model/serial lookup is not available yet.</Text>}
       <Field label="Engine / power system" value={draft.engine || ''} onChangeText={value => setValue('engine', value)} />
       <Field label="Transmission" value={draft.transmission || ''} onChangeText={value => setValue('transmission', value)} />
       <Field label="Drivetrain" value={draft.drivetrain || ''} onChangeText={value => setValue('drivetrain', value)} />
