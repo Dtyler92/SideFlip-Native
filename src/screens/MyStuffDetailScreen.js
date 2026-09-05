@@ -6,7 +6,9 @@ import { useAuth } from '../context/AuthContext'
 import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
 import VinDecodePanel from '../components/VinDecodePanel'
 import ReportPanel from '../components/ReportPanel'
+import MyStuffV3Experience from '../components/MyStuffV3Experience'
 import { maskVin } from '../domain/myStuff/vinModel'
+import { normalizePlannedOccurrences } from '../domain/myStuff/v3Model'
 import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, selectItemType, validateItemDraft } from '../domain/myStuff/itemModel'
 import {
   completeMyStuffMaintenance,
@@ -15,6 +17,8 @@ import {
   deleteMyStuffSchedule,
   getMyStuffItem,
   getMyStuffItemV2,
+  getMyStuffDueViewsV3,
+  listMyStuffScheduleGroupsV3,
   recordMyStuffReadingV2,
   recordMyStuffServiceOccurrenceV2,
   setMyStuffItemArchivedV2,
@@ -56,7 +60,7 @@ const EMPTY_USAGE = { type:'miles', value:'', recordedOn:todayDateInput(), corre
 const AXES = [{key:'miles',label:'Miles'},{key:'hours',label:'Hours'},{key:'cycles',label:'Cycles'}]
 
 export default function MyStuffDetailScreen({ navigation, route }) {
-  const { user, isPro: hasPro, formatMoney } = useAuth()
+  const { user, isPro: hasPro, formatMoney, currency:profileCurrency } = useAuth()
   const itemId = route.params?.itemId
   const [item,setItem]=useState(null)
   const [schedules,setSchedules]=useState([])
@@ -65,6 +69,8 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [readings,setReadings]=useState([])
   const [definitions,setDefinitions]=useState([])
   const [dueStates,setDueStates]=useState([])
+  const [plannedOccurrences,setPlannedOccurrences]=useState([])
+  const [v3MaintenanceActive,setV3MaintenanceActive]=useState(false)
   const [usage,setUsage]=useState(EMPTY_USAGE)
   const [showUsage,setShowUsage]=useState(false)
   const [loading,setLoading]=useState(true)
@@ -74,6 +80,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [editing,setEditing]=useState(false)
   const [edit,setEdit]=useState({})
   const [validationErrors,setValidationErrors]=useState({})
+  const [detailTab,setDetailTab]=useState('Details')
   const [showDefinition,setShowDefinition]=useState(false)
   const [editingDefinitionId,setEditingDefinitionId]=useState(null)
   const [definition,setDefinition]=useState(EMPTY_DEFINITION)
@@ -90,6 +97,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const definitionMutationAttempt=useRef(createMutationAttemptState())
   const definitionInFlight=useRef(false)
   const itemMutationAttempt=useRef(createMutationAttemptState())
+  const identityPersistenceAttempt=useRef(createMutationAttemptState())
   const itemInFlight=useRef(false)
   const usageMutationAttempt=useRef(createMutationAttemptState())
   const usageInFlight=useRef(false)
@@ -102,10 +110,16 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     if(!quiet)setLoading(true)
     setError('')
     try{
-      const [legacy,result]=await Promise.all([getMyStuffItem(itemId,user.id),getMyStuffItemV2(itemId,user.id)])
+      const [legacy,result,v3]=await Promise.all([
+        getMyStuffItem(itemId,user.id),
+        getMyStuffItemV2(itemId,user.id),
+        Promise.all([listMyStuffScheduleGroupsV3(itemId),getMyStuffDueViewsV3(itemId,new Date().toISOString())]).then(([schedule,due])=>({available:true,schedule,due}),()=>({available:false,schedule:[],due:[]})),
+      ])
       if(generation!==requestGeneration.current)return
       setItem(result.item);setSchedules(legacy.schedules);setLogs(legacy.logs)
       setReadings(result.readings);setDefinitions(result.definitions);setOccurrences(result.occurrences);setDueStates(filterActiveDueStates(result.dueStates,result.item))
+      setV3MaintenanceActive(v3.available)
+      setPlannedOccurrences(normalizePlannedOccurrences(v3.schedule,v3.due,result.definitions))
     }catch(nextError){
       if(generation===requestGeneration.current)setError(nextError.message||'Could not load this item.')
       if(throwOnError)throw nextError
@@ -119,7 +133,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
 
   useEffect(()=>{
     if(!item)return
-    setEdit({name:item.name||'',category:item.category||'other',itemType:item.itemType,year:item.model_year==null?'':String(item.model_year),make:item.make||'',model:item.model||'',trim:item.trim||'',modelNumber:item.model_number||'',serialNumber:item.serial_number||'',vin:item.vin||'',engine:item.engine||'',transmission:item.transmission||'',drivetrain:item.drivetrain||'',fuelType:item.fuel_power_type||'',acquiredOn:item.acquired_on||'',notes:item.notes||'',usageProfile:item.usage_profile||'normal',measurements:item.measurements||[]})
+    setEdit({name:item.name||'',category:item.category||'other',itemType:item.itemType,year:item.model_year==null?'':String(item.model_year),make:item.make||'',model:item.model||'',trim:item.trim||'',series:item.series||'',manufacturer:item.manufacturer||'',vehicleType:item.vehicle_type||'',bodyStyle:item.body_style||'',plantName:item.plant_name||'',plantCountry:item.plant_country||'',vehicleMarket:item.vehicle_market||'',modelNumber:item.model_number||'',serialNumber:item.serial_number||'',vin:item.vin||'',engine:item.engine||'',engineModel:item.engine_model||'',engineDisplacementLiters:item.engine_displacement_liters==null?'':String(item.engine_displacement_liters),engineCylinders:item.engine_cylinders==null?'':String(item.engine_cylinders),transmission:item.transmission||'',drivetrain:item.drivetrain||'',fuelType:item.fuel_power_type||'',acquiredOn:item.acquired_on||'',notes:item.notes||'',usageProfile:item.usage_profile||'normal',measurements:item.measurements||[]})
   },[item?.id,item?.updated_at])
 
   function setEditValue(key,value){setValidationErrors({});setEdit(current=>({...current,[key]:value}))}
@@ -163,6 +177,27 @@ export default function MyStuffDetailScreen({ navigation, route }) {
 
   function definitionUsageAxes(value) {
     return getMaintenanceDefinitionAxes(value).filter(axis=>axis!=='calendar')
+  }
+
+  async function persistIdentityForConfirmation(identity){
+    if(itemInFlight.current)throw new Error('Another item update is already in progress.')
+    const nextEdit={...edit,...identity}
+    const validatedEdit={...nextEdit,name:String(nextEdit.name||'').trim(),category:deriveItemCategory(nextEdit.itemType),measurements:nextEdit.measurements||[]}
+    const validation=validateItemDraft(validatedEdit)
+    setValidationErrors(validation.errors)
+    if(!validation.ok)throw new Error(Object.values(validation.errors)[0]||'Check the item details before confirming.')
+    const {itemType,...editable}=validatedEdit
+    const payload={...editable,itemId:item.id,acquiredOn:String(nextEdit.acquiredOn||'').trim()||null,notes:String(nextEdit.notes||'').trim()||null}
+    if(itemType!==item.itemType)payload.itemType=itemType
+    const wirePayload=buildUpdateMyStuffItemV2WirePayload(payload)
+    const mutationId=mutationIdForPayload(identityPersistenceAttempt.current,wirePayload)
+    itemInFlight.current=true;setSaving(true)
+    try{
+      await updateMyStuffItemV2(wirePayload,mutationId)
+      resetMutationAttemptState(identityPersistenceAttempt.current)
+    }finally{
+      itemInFlight.current=false;setSaving(false)
+    }
   }
 
   function openDefinitionEditor(value=null) {
@@ -376,6 +411,8 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     <Header title={item.name} onBack={()=>navigation.goBack()}/>
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS==='ios'?'interactive':'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load({quiet:true})}} tintColor={ACCENT}/>}>
       {!!error&&<Text style={s.errorText}>{error}</Text>}
+      <MyStuffV3Experience item={item} definitions={definitions} plannedOccurrences={plannedOccurrences} formatMoney={formatMoney} currency={item.purchase_currency||profileCurrency} activeTab={detailTab} onTabChange={setDetailTab} onRefresh={()=>load({quiet:true,throwOnError:true})}/>
+      {detailTab==='Details'&&<>
       <View style={s.card}>
         <View style={s.between}><Text style={s.sectionTitle}>Item details</Text><TouchableOpacity onPress={()=>setEditing(value=>!value)} accessibilityRole="button" accessibilityLabel={editing?'Cancel editing item':'Edit item'}><Text style={s.link}>{editing?'Cancel':'Edit'}</Text></TouchableOpacity></View>
         {editing?<>
@@ -391,7 +428,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
           <Field label="Transmission" value={edit.transmission} onChangeText={value=>setEditValue('transmission',value)}/>
           <Field label="Drivetrain" value={edit.drivetrain} onChangeText={value=>setEditValue('drivetrain',value)}/>
           <Field label="Fuel / power type" value={edit.fuelType} onChangeText={value=>setEditValue('fuelType',value)}/>
-          <VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} isPro={hasPro} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} onUpgrade={()=>navigation.navigate('Pro')} suggestionFields={['year','make','model','trim','engine','transmission','drivetrain','fuelType']}/>
+          <VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} isPro={hasPro} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} onUpgrade={()=>navigation.navigate('Pro')} persistIdentity={persistIdentityForConfirmation} onIdentityConfirmed={async()=>{setEditing(false);try{await load({quiet:true,throwOnError:true})}catch(nextError){reportSavedRefreshFailure('Vehicle confirmed, but refresh failed',nextError)}}} suggestionFields={['year','make','model','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','engine','transmission','drivetrain']}/>
           <Field label="Acquired on" value={edit.acquiredOn} onChangeText={value=>setEditValue('acquiredOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
           <Text style={s.label}>Usage measurements</Text><View style={s.modeRow} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis=>getItemCategoryContract(edit.category).measurements.includes(axis.key)).map(axis=><Choice key={axis.key} label={axis.label} selected={edit.measurements.includes(axis.key)} onPress={()=>toggleEditMeasurement(axis.key)} multiple={true}/>)}</View>
           <Text style={s.label}>Usage profile</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Usage profile">{['normal','severe'].map(value=><Choice key={value} label={value==='normal'?'Normal use':'Severe use'} selected={edit.usageProfile===value} onPress={()=>setEditValue('usageProfile',value)}/>)}</View>
@@ -406,7 +443,10 @@ export default function MyStuffDetailScreen({ navigation, route }) {
           {!!item.notes&&<Text style={s.notes}>{item.notes}</Text>}
         </>}
       </View>
+      </>}
 
+      {detailTab==='Maintenance'&&<>
+      {v3MaintenanceActive&&<Text style={s.muted}>Complete maintenance through V3 Due Items above. Older schedules remain visible here without a second completion action.</Text>}
       <View style={s.between}><Text style={s.pageSection}>Maintenance schedules</Text><TouchableOpacity onPress={()=>showDefinition?cancelDefinitionEditor():openDefinitionEditor()} accessibilityRole="button" accessibilityLabel={showDefinition?'Cancel maintenance task':'Add maintenance task'}><Text style={s.link}>{showDefinition?'Cancel':'+ Add'}</Text></TouchableOpacity></View>
 
       <View style={s.card}>
@@ -443,11 +483,11 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       </View>}
       {definitions.length===0?<View style={s.empty}><Text style={s.muted}>No maintenance schedules yet.</Text></View>:definitions.map(value=>{
         const due=dueStates.find(state=>state.definition_id===value.id)
-        const canComplete=value.enabled&&canCompleteMaintenanceDefinition(value,item)
+        const canComplete=!v3MaintenanceActive&&value.enabled&&canCompleteMaintenanceDefinition(value,item)
         return <View key={value.id} style={s.card}>
           <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>{value.name}</Text><Text style={s.muted}>{definitionDescription(value)}</Text>{due&&<Text style={s.nextDue}>{dueStateDescription(due)}</Text>}</View><View style={[s.pill,s[`pill_${due?.due_status}`]]}><Text style={s.pillText}>{value.enabled?dueStateSummaryLabel(due?.due_status):'Archived'}</Text></View></View>
           {!!value.description&&<Text style={s.notes}>{value.description}</Text>}
-          {!canComplete&&value.enabled&&<Text style={s.warning}>Read-only until all schedule measurements are enabled on this item.</Text>}
+          {!v3MaintenanceActive&&!canComplete&&value.enabled&&<Text style={s.warning}>Read-only until all schedule measurements are enabled on this item.</Text>}
           {completingId===value.id&&canComplete?<View style={s.completionBox}>
             <Field label="Completed on *" value={completion.completedAt} onChangeText={next=>setCompletionValue('completedAt',next)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
             {definitionUsageAxes(value).map(axis=><Field key={axis} label={`${axis==='miles'?'Mileage':axis[0].toUpperCase()+axis.slice(1)} at completion *`} value={completion.readings[axis]} onChangeText={next=>setCompletionReading(axis,next)} keyboardType="decimal-pad"/>)}
@@ -462,20 +502,24 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       })}
 
       <ReportPanel subjectType="my_stuff_item" subjectId={item.id} isPro={hasPro} onUpgrade={()=>navigation.navigate('Pro')} />
+      </>}
 
+      {detailTab==='History'&&<>
       <Text style={s.pageSection}>Service history</Text>
       {occurrences.length===0?<View style={s.empty}><Text style={s.muted}>Recorded V2 service will appear here.</Text></View>:occurrences.map(occurrence=>{
         const readingsText=serviceReadingDescription(occurrence)
         return <View key={occurrence.id} style={s.historyRow}><View style={s.flex}><Text style={s.historyName}>{occurrence.service_name}</Text><Text style={s.muted}>{String(occurrence.completed_at||'').slice(0,10)}{readingsText?` · ${readingsText}`:''}</Text>{!!occurrence.latest_revision?.notes&&<Text style={s.notes}>{occurrence.latest_revision.notes}</Text>}<Text style={s.eyebrow}>{occurrence.scheduled?'Scheduled task':'Unscheduled service'} · immutable record</Text></View></View>
       })}
+      </>}
 
+      {detailTab==='Maintenance'&&<>
       <Text style={s.pageSection}>Legacy schedules</Text>
       {schedules.length===0?<View style={s.empty}><Text style={s.muted}>No legacy maintenance schedules.</Text></View>:schedules.map(value=>{
         const state=getScheduleDueState(value,item)
-        const canComplete=canCompleteMaintenanceSchedule(value,item)
+        const canComplete=!v3MaintenanceActive&&canCompleteMaintenanceSchedule(value,item)
         return <View key={value.id} style={s.card}>
           <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>{value.name}</Text><Text style={s.muted}>{scheduleDescription(value)}</Text></View><View style={[s.pill,s[`pill_${state}`]]}><Text style={s.pillText}>{dueStateLabel(state)}</Text></View></View>
-          {!canComplete&&value.tracking_type!=='calendar'&&<Text style={s.warning}>Legacy schedule retained as read-only because its measurement is no longer active.</Text>}
+          {!v3MaintenanceActive&&!canComplete&&value.tracking_type!=='calendar'&&<Text style={s.warning}>Legacy schedule retained as read-only because its measurement is no longer active.</Text>}
           {legacyCompletingId===value.id&&canComplete?<View style={s.completionBox}>
             <Field label="Completed on *" value={legacyCompletion.completedAt} onChangeText={next=>setLegacyCompletionValue('completedAt',next)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
             {value.tracking_type!=='calendar'&&<Field label={`${value.tracking_type} reading *`} value={legacyCompletion.reading} onChangeText={next=>setLegacyCompletionValue('reading',next)} keyboardType="decimal-pad"/>}
@@ -486,7 +530,9 @@ export default function MyStuffDetailScreen({ navigation, route }) {
           <Text style={s.eyebrow}>Legacy schedule</Text>
         </View>
       })}
+      </>}
 
+      {detailTab==='History'&&<>
       <Text style={s.pageSection}>Legacy service history (read-only)</Text>
       {logs.length===0?<View style={s.empty}><Text style={s.muted}>No legacy service history.</Text></View>:logs.map(log=>{
         const linked=schedules.find(value=>value.id===log.schedule_id)
@@ -494,8 +540,11 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         const readingSuffix=log.mileage!=null?' mi':log.hours!=null?' hr':''
         return <View key={log.id} style={s.historyRow}><View style={s.flex}><Text style={s.historyName}>{log.name||linked?.name||'Maintenance'}</Text><Text style={s.muted}>{String(log.completed_at||'').slice(0,10)}{logReading!=null?` · ${Number(logReading).toLocaleString()}${readingSuffix}`:''}</Text>{!!log.notes&&<Text style={s.notes}>{log.notes}</Text>}<Text style={s.eyebrow}>Legacy · read-only</Text></View>{log.cost!=null&&<Text style={s.cost}>{formatMoney(log.cost)}</Text>}</View>
       })}
+      </>}
+      {detailTab==='Details'&&<>
       <TouchableOpacity style={s.archiveItem} onPress={confirmArchive} disabled={saving} accessibilityRole="button" accessibilityLabel={item.archived_at?'Restore My Stuff item':'Archive My Stuff item'} accessibilityState={{disabled:saving}}><Text style={s.archiveItemText}>{item.archived_at?'Restore Item':'Archive Item'}</Text></TouchableOpacity>
       <TouchableOpacity style={s.deleteItem} onPress={confirmDeleteItem} disabled={saving} accessibilityRole="button" accessibilityLabel="Delete My Stuff item" accessibilityState={{disabled:saving}}><Text style={s.deleteItemText}>Delete Item Permanently</Text></TouchableOpacity>
+      </>}
     </ScrollView>
     <Modal visible={!!completionCelebration} transparent animationType="fade" onRequestClose={()=>setCompletionCelebration(null)}>
       <View style={s.celebrationOverlay}>

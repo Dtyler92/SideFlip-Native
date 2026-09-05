@@ -13,8 +13,11 @@ const WEIGHTS = Object.freeze([8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 
 export const VIN_IDENTIFIER_MAX_LENGTHS = Object.freeze({ project: 256, my_stuff_item: 64 })
 
 export const VIN_SUGGESTION_FIELDS = Object.freeze([
-  'year', 'make', 'model', 'trim', 'engine', 'transmission', 'drivetrain', 'fuelType', 'bodyClass',
-  'title', 'name', 'category', 'itemType',
+  'year', 'make', 'model', 'trim', 'series', 'bodyStyle', 'vehicleType', 'manufacturer',
+  'plantName', 'plantCountry', 'vehicleMarket', 'fuelType', 'engineCylinders',
+  'engineDisplacementLiters', 'engineModel', 'transmission', 'drivetrain',
+  // Legacy fields stay accepted for existing Project and V2 callers.
+  'engine', 'bodyClass', 'title', 'name', 'category', 'itemType',
 ])
 
 export function normalizeVin(input) {
@@ -170,21 +173,35 @@ export function mergeDecodedSuggestions(existing = {}, decoded = {}) {
 }
 
 export function decodedVehicleSuggestions(vehicle = {}) {
-  const cylinders = vehicle.engineCylinders
-  const displacement = vehicle.displacementLiters
-  const engineParts = []
-  if (Number.isFinite(displacement)) engineParts.push(`${displacement}L`)
-  if (Number.isFinite(cylinders)) engineParts.push(`${cylinders} cylinder${cylinders === 1 ? '' : 's'}`)
+  const typedYear = Number(vehicle.modelYear)
+  const typedCylinders = Number(vehicle.engineCylinders)
+  const typedDisplacement = Number(vehicle.displacementLiters)
+  const engineParts = [
+    Number.isFinite(typedDisplacement) ? `${typedDisplacement}L` : null,
+    Number.isFinite(typedCylinders) ? `${typedCylinders} cylinders` : null,
+  ].filter(Boolean)
   const mapped = {
-    year: vehicle.modelYear,
+    year: Number.isInteger(typedYear) ? typedYear : vehicle.modelYear,
     make: vehicle.make,
     model: vehicle.model,
     trim: vehicle.trim,
-    engine: engineParts.join(' · '),
+    series: vehicle.series,
+    bodyStyle: vehicle.bodyClass,
+    bodyClass: vehicle.bodyClass,
+    vehicleType: vehicle.vehicleType,
+    manufacturer: vehicle.manufacturer,
+    plantName: vehicle.plantName,
+    plantCountry: vehicle.plantCountry,
+    vehicleMarket: vehicle.vehicleMarket,
+    fuelType: vehicle.fuelTypePrimary,
+    engineCylinders: Number.isFinite(typedCylinders) ? typedCylinders : vehicle.engineCylinders,
+    engineDisplacementLiters: Number.isFinite(typedDisplacement) ? typedDisplacement : vehicle.displacementLiters,
+    engineModel: vehicle.engineModel,
+    // Keep the released Project/V2 compatibility projection while retaining
+    // each typed field independently for V3 confirmation and research.
+    engine: engineParts.length ? engineParts.join(' · ') : vehicle.engineModel,
     transmission: vehicle.transmissionStyle,
     drivetrain: vehicle.driveType,
-    fuelType: vehicle.fuelTypePrimary,
-    bodyClass: vehicle.bodyClass,
   }
   return Object.fromEntries(Object.entries(mapped).filter(([, value]) => !isBlank(value)))
 }

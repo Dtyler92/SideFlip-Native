@@ -12,6 +12,7 @@ import { captureEvent } from '../lib/analytics'
 import { accessibleActiveGoalsAfterProLoss, createMutationId } from './tradeUpGoalModel'
 import { openGoalCreation } from './goalCreationNavigation'
 import { createDescriptionRequest, needsDescriptionPreview, normalizeListingSelection } from './listingGeneratorModel'
+import { transferProjectToMyStuffV3 } from '../lib/myStuffClient'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -61,6 +62,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [savingVehicleDetails, setSavingVehicleDetails] = useState(false)
   const [showAssignGoal, setShowAssignGoal] = useState(false)
   const goalLinkMutationId = useRef(createMutationId())
+  const transferMutationId = useRef(createMutationId())
   const projectLoadGeneration = useRef(0)
   const generationRequestRef = useRef(0)
   const generationInFlightRef = useRef(false)
@@ -301,6 +303,24 @@ export default function ProjectDetailScreen({ navigation, route }) {
         onReturn?.()
         navigation.goBack()
       }}
+    ])
+  }
+
+  function confirmTransferToMyStuff() {
+    if (saving) return
+    Alert.alert('Transfer project to My Stuff?', 'This creates one My Stuff item and imports the current project expenses without changing project accounting. No attachments are transferred.', [
+      { text:'Cancel', style:'cancel' },
+      { text:'Transfer to My Stuff', onPress:async()=>{
+        setSaving(true)
+        try {
+          const result=await transferProjectToMyStuffV3(projectId,{serviceExpenseIds:[]},transferMutationId.current)
+          transferMutationId.current=createMutationId()
+          const itemId=result?.item_id||result?.itemId||(typeof result==='string'?result:null)
+          Alert.alert('Transferred to My Stuff', 'The item and current expense snapshot were imported once. Project accounting is unchanged.', itemId ? [{text:'Open item',onPress:()=>navigation.navigate('MyStuffDetail',{itemId})}] : undefined)
+        } catch (error) {
+          Alert.alert('Could not transfer project', `${error.message||'The V3 transfer service is unavailable.'}\n\nThe project was not assumed transferred. Try again when the service is available.`)
+        } finally { setSaving(false) }
+      }},
     ])
   }
 
@@ -584,6 +604,10 @@ export default function ProjectDetailScreen({ navigation, route }) {
 
         <Text style={s.sectionTitle}>Shareable report</Text>
         <ReportPanel subjectType="project" subjectId={projectId} isPro={isPro} onUpgrade={() => navigation.navigate('Pro')} />
+
+        <TouchableOpacity style={[s.btn,{backgroundColor:'#F0EDE8',marginBottom:10},saving&&s.btnDisabled]} onPress={confirmTransferToMyStuff} disabled={saving} accessibilityRole="button" accessibilityLabel="Transfer to My Stuff">
+          <Text style={[s.btnText,{color:'#1A1917'}]}>Transfer to My Stuff</Text>
+        </TouchableOpacity>
 
         {/* Actions */}
         {project.status === 'active' && (

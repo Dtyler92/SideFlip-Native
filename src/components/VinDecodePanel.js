@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { supabase } from '../lib/supabase'
+import { confirmMyStuffVehicleIdentityV3 } from '../lib/myStuffClient'
+import { hasVehicleIdentityChanged, persistThenConfirmVehicleIdentity } from '../domain/myStuff/v3Model'
+import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptState } from '../screens/myStuffModel'
 import { createVinDecodeClient } from '../lib/vinDecodeClient'
 import {
   applyVinSuggestions,
@@ -15,11 +18,15 @@ import {
 const ACCENT = '#C8402F'
 const client = createVinDecodeClient({ auth: supabase.auth })
 
-export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false }) {
+export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false }) {
   const [decoding, setDecoding] = useState(false)
   const [preview, setPreview] = useState(null)
   const [warnings, setWarnings] = useState([])
   const [message, setMessage] = useState('')
+  const [confirming, setConfirming] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+  const confirmationGeneration = useRef(0)
+  const confirmationAttempt = useRef(createMutationAttemptState())
   const requestGate = useRef(null)
   if (!requestGate.current) requestGate.current = createVinDecodeRequestGate()
   const valuesRef = useRef(values)
@@ -27,10 +34,19 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
   const vinState = useMemo(() => validateVin(values?.vin), [values?.vin])
   const identifierMaxLength = VIN_IDENTIFIER_MAX_LENGTHS[subjectType] || 64
 
-  useEffect(() => () => requestGate.current.invalidate(), [subjectType, subjectId])
+  useEffect(() => {
+    requestGate.current.invalidate()
+    confirmationGeneration.current += 1
+    resetMutationAttemptState(confirmationAttempt.current)
+    setConfirming(false)
+    setConfirmed(false)
+    return () => { requestGate.current.invalidate();confirmationGeneration.current += 1 }
+  }, [subjectType, subjectId])
 
   function update(next) {
     valuesRef.current = next
+    confirmationGeneration.current += 1
+    setConfirmed(false)
     onChange(next)
   }
 
@@ -44,7 +60,6 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
   }
 
   async function decode() {
-    if (!isPro) return onUpgrade()
     if (!vinState.canDecode) {
       setMessage(vinState.reason || 'Enter a standard 17-character VIN, or continue with manual entry.')
       return
@@ -71,8 +86,8 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
       setWarnings(result.nhtsaWarnings)
     } catch (error) {
       if (!requestGate.current.isCurrent(request, valuesRef.current?.vin)) return
-      if (error?.proRequired) onUpgrade()
-      setMessage(error?.message || 'VIN decoding failed. Manual entry is still available.')
+      if (error?.proRequired) setMessage('Basic decode is unavailable because the server returned PRO_REQUIRED. Manual entry is still available.')
+      else setMessage(error?.message || 'VIN decoding failed. Manual entry is still available.')
     } finally {
       if (requestGate.current.finish(request)) setDecoding(false)
     }
@@ -92,12 +107,48 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
     setPreview(current => current ? { ...mergeDecodedSuggestions(next, decodedVehicleSuggestionsFromFields(current.fields)), requestVin: current.requestVin } : null)
   }
 
+  async function confirmVehicle() {
+    if (subjectType !== 'my_stuff_item' || !subjectId) return
+    if (typeof persistIdentity !== 'function') return setMessage('Vehicle confirmation is unavailable because item saving is not connected. Save item details manually instead.')
+    if (!vinState.canDecode) return setMessage('Decode or manually enter a valid standard VIN before confirming vehicle identity.')
+    const identity = {}
+    for (const field of ['year','make','model','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','transmission','drivetrain']) {
+      const value = valuesRef.current?.[field]
+      if (value !== '' && value != null) identity[field] = value
+    }
+    const snapshot = { vin:vinState.normalized,...identity }
+    const generation = ++confirmationGeneration.current
+    const mutationId = mutationIdForPayload(confirmationAttempt.current,{ subjectId,identity:snapshot })
+    setConfirming(true);setMessage('')
+    try {
+      const isCurrent = () => {
+        const currentIdentity = { vin:validateVin(valuesRef.current?.vin).normalized }
+        for (const field of ['year','make','model','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','transmission','drivetrain']) currentIdentity[field] = valuesRef.current?.[field]
+        return generation === confirmationGeneration.current && !hasVehicleIdentityChanged(snapshot,currentIdentity)
+      }
+      const result = await persistThenConfirmVehicleIdentity({
+        snapshot,
+        persist:persistIdentity,
+        confirm:value=>confirmMyStuffVehicleIdentityV3(subjectId,value,mutationId),
+        isCurrent,
+      })
+      if (!result.confirmed) return
+      resetMutationAttemptState(confirmationAttempt.current)
+      setConfirmed(true)
+      setMessage('Vehicle identity confirmed. Research is not available yet; no research job was queued. Manual schedules remain available.')
+      await onIdentityConfirmed?.()
+    } catch (error) {
+      if (generation !== confirmationGeneration.current) return
+      setMessage(`${error?.message || 'Vehicle confirmation is unavailable.'} Your editable review is still here and manual entry remains available.`)
+    } finally { if (generation === confirmationGeneration.current) setConfirming(false) }
+  }
+
   const entries = preview ? Object.entries(preview.fields).filter(([, detail]) => detail.suggestion != null) : []
   const hasBlankSuggestions = entries.some(([, detail]) => detail.status === 'suggested')
 
   return <View style={s.panel}>
-    <Text style={s.title}>VIN Decoder <Text style={s.pro}>PRO</Text></Text>
-    <Text style={s.hint}>{autoFillBlanks ? 'Blank fields fill after decoding. Existing values stay unchanged until you accept each conflicting suggestion.' : 'Enter or edit identifiers manually at any time. Decoding only suggests values and never saves or replaces details automatically.'}</Text>
+    <Text style={s.title}>VIN Decoder <Text style={s.basic}>BASIC</Text></Text>
+    <Text style={s.hint}>Basic NHTSA decode is available to signed-in Free and Pro accounts. {autoFillBlanks ? 'Blank fields fill after decoding; review and edit every value before confirmation.' : 'Decoded values are an unconfirmed editable review and never save automatically.'}</Text>
     <Text style={s.label}>VIN / identifier</Text>
     <TextInput
       style={s.input}
@@ -111,23 +162,26 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
       accessibilityLabel="VIN or identifier"
     />
     {!!values?.vin && !vinState.canDecode && <Text style={s.manual}>{vinState.reason}</Text>}
-    <TouchableOpacity style={[s.decodeButton, decoding && s.disabled]} onPress={decode} disabled={decoding} accessibilityRole="button" accessibilityLabel={isPro ? 'Decode VIN' : 'Unlock Pro VIN Decoder'} accessibilityState={{ disabled: decoding, busy: decoding }}>
-      {decoding ? <ActivityIndicator color="#fff"/> : <Text style={s.decodeText}>{isPro ? 'Decode VIN' : 'Unlock Pro VIN Decoder'}</Text>}
+    <TouchableOpacity style={[s.decodeButton, decoding && s.disabled]} onPress={decode} disabled={decoding} accessibilityRole="button" accessibilityLabel="Decode VIN with NHTSA" accessibilityState={{ disabled: decoding, busy: decoding }}>
+      {decoding ? <ActivityIndicator color="#fff"/> : <Text style={s.decodeText}>Decode VIN</Text>}
     </TouchableOpacity>
     {!!message && <Text style={s.message}>{message} You can keep editing and save manually.</Text>}
     {warnings.map(warning => <Text key={warning.code} style={s.warning}>NHTSA warning: {warning.message}</Text>)}
     {preview && <View style={s.preview}>
-      <Text style={s.previewTitle}>Suggestions for {maskVin(preview.requestVin)}</Text>
+      <Text style={s.previewTitle}>Unconfirmed editable review for {maskVin(preview.requestVin)}</Text>
       {entries.length === 0 ? <Text style={s.hint}>No additional vehicle details were returned.</Text> : entries.map(([field, detail]) => <View key={field} style={s.suggestion}>
         <View style={s.suggestionCopy}>
           <Text style={s.suggestionLabel}>{fieldLabels[field] || defaultLabel(field)}</Text>
-          <Text style={s.suggestionValue}>{String(detail.suggestion)}</Text>
-          {detail.status === 'conflicting' && <Text style={s.conflict}>Current: {String(detail.existing)}</Text>}
-          {detail.status === 'verified' && <Text style={s.verified}>Matches current value</Text>}
+          <TextInput style={s.reviewInput} value={String(values?.[field] ?? detail.suggestion ?? '')} onChangeText={value=>update({...valuesRef.current,[field]:value})} accessibilityLabel={`Editable ${fieldLabels[field] || defaultLabel(field)}`}/>
+          {detail.status === 'conflicting' && <Text style={s.conflict}>Decoder: {String(detail.suggestion)} · Unconfirmed</Text>}
+          {detail.status === 'suggested' && <Text style={s.unconfirmed}>NHTSA suggestion · Unconfirmed</Text>}
+          {detail.status === 'verified' && <Text style={s.verified}>Verified match with current value</Text>}
         </View>
         {detail.status === 'conflicting' && <TouchableOpacity onPress={() => useSuggestion(field)} accessibilityRole="button" accessibilityLabel={`Use suggested ${fieldLabels[field] || defaultLabel(field)}`}><Text style={s.use}>Use suggestion</Text></TouchableOpacity>}
       </View>)}
       {hasBlankSuggestions && <TouchableOpacity style={s.fillButton} onPress={fillBlanks} accessibilityRole="button" accessibilityLabel="Fill Blank Fields"><Text style={s.fillText}>Fill Blank Fields</Text></TouchableOpacity>}
+      {subjectType==='my_stuff_item'&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{confirmed?'Vehicle Confirmed':'Confirm Vehicle'}</Text></TouchableOpacity>}
+      {subjectType==='my_stuff_item'&&<Text style={s.hint}>Confirmation saves identity only. Research is not available yet, so this queues zero research jobs.</Text>}
     </View>}
   </View>
 }
@@ -142,7 +196,7 @@ function defaultLabel(field) {
 
 const s = StyleSheet.create({
   panel:{marginTop:14,paddingTop:14,borderTopWidth:1,borderTopColor:'#E8E4DE'},
-  title:{fontSize:16,fontWeight:'800',color:'#1A1917'},pro:{fontSize:11,color:ACCENT},
+  title:{fontSize:16,fontWeight:'800',color:'#1A1917'},basic:{fontSize:11,color:'#2D7A4F'},
   hint:{fontSize:12,color:'#6B665E',lineHeight:17,marginTop:5},
   label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:12,marginBottom:5},
   input:{borderWidth:1,borderColor:'#D7D2CB',borderRadius:10,padding:12,fontSize:15,color:'#1A1917',backgroundColor:'#fff'},
@@ -154,6 +208,8 @@ const s = StyleSheet.create({
   previewTitle:{fontSize:14,fontWeight:'800',color:'#1A1917',marginBottom:5},
   suggestion:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10,paddingVertical:8,borderBottomWidth:1,borderBottomColor:'#E8E4DE'},
   suggestionCopy:{flex:1},suggestionLabel:{fontSize:11,fontWeight:'700',color:'#79736A',textTransform:'uppercase'},suggestionValue:{fontSize:14,fontWeight:'700',color:'#1A1917',marginTop:2},
-  conflict:{fontSize:12,color:'#8B3328',marginTop:2},verified:{fontSize:12,color:'#2D7A4F',marginTop:2},use:{fontSize:12,fontWeight:'700',color:ACCENT},
+  reviewInput:{borderWidth:1,borderColor:'#D7D2CB',borderRadius:8,padding:9,color:'#1A1917',marginTop:4},
+  conflict:{fontSize:12,color:'#8B3328',marginTop:2},unconfirmed:{fontSize:12,color:'#6B4B16',marginTop:2},verified:{fontSize:12,color:'#2D7A4F',marginTop:2},use:{fontSize:12,fontWeight:'700',color:ACCENT},
   fillButton:{borderWidth:1.5,borderColor:ACCENT,borderRadius:9,padding:11,alignItems:'center',marginTop:12},fillText:{color:ACCENT,fontWeight:'700'},
+  confirmButton:{backgroundColor:ACCENT,borderRadius:9,padding:13,alignItems:'center',marginTop:10},confirmText:{color:'#fff',fontWeight:'800'},
 })

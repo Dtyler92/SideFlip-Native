@@ -202,14 +202,15 @@ test('decoded vehicle mapping previews blank suggestions and conflicts until exp
   })
   assert.deepEqual(suggestions, {
     year: 2003, make: 'HONDA', model: 'Accord', trim: 'EX', engine: '3L · 6 cylinders',
-    transmission: 'Automatic', drivetrain: '4x2', fuelType: 'Gasoline', bodyClass: 'Sedan',
+    engineCylinders: 6, engineDisplacementLiters: 3,
+    transmission: 'Automatic', drivetrain: '4x2', fuelType: 'Gasoline', bodyClass: 'Sedan', bodyStyle: 'Sedan',
   })
   const existing = { year: '2003', make: 'Honda', model: '', trim: 'LX', notes: 'keep' }
   const preview = mergeDecodedSuggestions(existing, suggestions)
   assert.equal(preview.values.model, 'Accord')
   assert.equal(preview.values.trim, 'LX')
   assert.equal(preview.fields.trim.status, 'conflicting')
-  assert.deepEqual(applyVinSuggestions(existing, preview.fields, { mode: 'fill_blanks' }), { ...existing, model: 'Accord', engine: '3L · 6 cylinders', transmission: 'Automatic', drivetrain: '4x2', fuelType: 'Gasoline', bodyClass: 'Sedan' })
+  assert.deepEqual(applyVinSuggestions(existing, preview.fields, { mode: 'fill_blanks' }), { ...existing, model: 'Accord', engine: '3L · 6 cylinders', engineCylinders: 6, engineDisplacementLiters: 3, transmission: 'Automatic', drivetrain: '4x2', fuelType: 'Gasoline', bodyClass: 'Sedan', bodyStyle: 'Sedan' })
   assert.deepEqual(applyVinSuggestions(existing, preview.fields, { fields: ['trim'] }), { ...existing, trim: 'EX' })
 })
 

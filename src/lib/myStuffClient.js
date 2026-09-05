@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { adaptSqlItem } from './myStuffAdapters'
 import { createMyStuffMaintenanceApi } from './myStuffMaintenanceApi'
+import { createMyStuffV3Client } from './myStuffV3Client'
 
 const maintenanceApi = createMyStuffMaintenanceApi(supabase)
 
@@ -172,3 +173,19 @@ export async function updateMyStuffMaintenanceDefinitionV2(wirePayload, mutation
 export async function recordMyStuffServiceOccurrenceV2(wirePayload, mutationId) {
   return maintenanceApi.recordServiceOccurrence(wirePayload, mutationId)
 }
+
+const v3Api = createMyStuffV3Client(supabase)
+
+export const createMyStuffExpenseV3 = (...args) => v3Api.createExpense(...args)
+export const reviseMyStuffExpenseV3 = (...args) => v3Api.reviseExpense(...args)
+export const voidMyStuffExpenseV3 = (...args) => v3Api.voidExpense(...args)
+export const getMyStuffExpensesV3 = (...args) => v3Api.getExpenses(...args)
+export const getMyStuffFinancialSummaryV3 = (...args) => v3Api.getFinancialSummary(...args)
+export const listMyStuffScheduleGroupsV3 = (...args) => v3Api.listScheduleGroups(...args)
+export const getMyStuffDueViewsV3 = (...args) => v3Api.getDueViews(...args)
+export const recordMyStuffServiceWithExpenseV3 = (...args) => v3Api.recordServiceWithExpense(...args)
+export const reviseMyStuffServiceExpenseV3 = (...args) => v3Api.reviseServiceExpense(...args)
+export const setMyStuffOccurrenceStatusV3 = (...args) => v3Api.transitionOccurrenceStatus(...args)
+export const confirmMyStuffVehicleIdentityV3 = (...args) => v3Api.confirmVehicleIdentity(...args)
+
+export const transferProjectToMyStuffV3 = (...args) => v3Api.transferProject(...args)

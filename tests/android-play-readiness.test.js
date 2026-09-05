@@ -9,8 +9,8 @@ test('Android Play config uses the stable package and minimal permissions', () =
   const config = JSON.parse(read('app.json')).expo
   assert.equal(config.android.package, 'com.sideflip.app')
   assert.equal(config.scheme, 'sideflip')
-  assert.equal(config.version, '1.2.1')
-  assert.equal(config.android.versionCode, 7)
+  assert.equal(config.version, '1.3.0')
+  assert.equal(config.android.versionCode, 8)
   assert.equal(config.android.softwareKeyboardLayoutMode, 'resize')
   assert.equal(config.android.intentFilters, undefined)
   assert.equal(config.android.googleServicesFile, undefined)

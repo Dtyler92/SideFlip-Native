@@ -11,7 +11,9 @@ const TYPE_ALIASES = Object.freeze({
 const FIELD_MAP = Object.freeze({
   customName: 'custom_name', year: 'model_year', modelYear: 'model_year', manufacturer: 'manufacturer',
   make: 'make', model: 'model', trim: 'trim', modelNumber: 'model_number', engine: 'engine',
-  engineModel: 'engine_model', transmission: 'transmission', drivetrain: 'drivetrain',
+  engineModel: 'engine_model', engineDisplacementLiters: 'engine_displacement_liters', engineCylinders: 'engine_cylinders',
+  vehicleType: 'vehicle_type', bodyStyle: 'body_style', plantName: 'plant_name', plantCountry: 'plant_country', vehicleMarket: 'vehicle_market',
+  transmission: 'transmission', drivetrain: 'drivetrain',
   fuelType: 'fuel_power_type', powerType: 'fuel_power_type', serialNumber: 'serial_number',
   engineSerial: 'engine_serial', hullNumber: 'hull_number', registrationNumber: 'registration_number',
   purchasePrice: 'purchase_price', purchaseCurrency: 'purchase_currency', purchaseVendor: 'purchase_vendor',
@@ -65,6 +67,8 @@ function adaptIdentity(values, { patch = false } = {}) {
     if (Object.prototype.hasOwnProperty.call(values, uiKey)) assignPresent(result, sqlKey, values[uiKey])
   }
   if (result.model_year != null) result.model_year = Number(result.model_year)
+  if (result.engine_displacement_liters != null) result.engine_displacement_liters = Number(result.engine_displacement_liters)
+  if (result.engine_cylinders != null) result.engine_cylinders = Number(result.engine_cylinders)
   if (result.purchase_price != null) result.purchase_price = Number(result.purchase_price)
   if (result.purchase_currency) result.purchase_currency = result.purchase_currency.toUpperCase()
   if (Object.prototype.hasOwnProperty.call(values, 'category')) {

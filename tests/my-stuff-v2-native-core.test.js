@@ -316,7 +316,8 @@ test('create and edit render the shared exact item-type picker and block invalid
   const create = source('src/screens/MyStuffCreateScreen.js')
   const detail = source('src/screens/MyStuffDetailScreen.js')
   assert.match(picker, /ITEM_TYPE_OPTIONS\.map/)
-  assert.match(picker, /accessibilityRole="radiogroup"/)
+  assert.match(picker, /accessibilityRole="menu"/)
+  assert.match(picker, /nestedScrollEnabled/)
   assert.match(picker, /accessibilityState=\{\{ selected/)
   for (const screen of [create, detail]) {
     assert.match(screen, /MyStuffItemTypePicker/)
