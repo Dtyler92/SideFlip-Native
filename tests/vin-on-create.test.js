@@ -142,6 +142,17 @@ test('New Project offers pre-save Pro VIN decoding for vehicle details', () => {
   assert.match(screen, /onUpgrade=\{\(\) => navigation\.navigate\('Pro'\)\}/)
 })
 
+test('Project Detail keeps vehicle details collapsed until the user expands them', () => {
+  const detail = source('src/screens/ProjectDetailScreen.js')
+  assert.match(detail, /const \[showVehicleDetails, setShowVehicleDetails\] = useState\(false\)/)
+  assert.match(detail, /accessibilityState=\{\{ expanded: showVehicleDetails \}\}/)
+  assert.match(detail, /onPress=\{\(\) => setShowVehicleDetails\(current => !current\)\}/)
+  assert.match(detail, /style=\{\[s\.vehicleDetailsBody, !showVehicleDetails && s\.vehicleDetailsBodyHidden\]\}/)
+  assert.match(detail, /importantForAccessibility=\{showVehicleDetails \? 'auto' : 'no-hide-descendants'\}/)
+  assert.match(detail, /accessibilityLabel=\{`Vehicle details, \$\{vehicleSummary\}, VIN \$\{vehicleVinSummary\}`\}/)
+  assert.match(detail, /showVehicleDetails \? 'Hide' : 'Show'/)
+})
+
 test('Project Detail puts VIN decoder and PDF creator after expenses/form and directly before actions', () => {
   const detail = source('src/screens/ProjectDetailScreen.js')
   const expenses = detail.indexOf('Expenses ({project.expenses?.length || 0})')

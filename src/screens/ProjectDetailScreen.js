@@ -59,6 +59,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [selectedHumorLevel, setSelectedHumorLevel] = useState('balanced')
   const [activeGoals, setActiveGoals] = useState([])
   const [vehicleDetails, setVehicleDetails] = useState(EMPTY_VEHICLE_DETAILS)
+  const [showVehicleDetails, setShowVehicleDetails] = useState(false)
   const [savingVehicleDetails, setSavingVehicleDetails] = useState(false)
   const [showAssignGoal, setShowAssignGoal] = useState(false)
   const goalLinkMutationId = useRef(createMutationId())
@@ -112,6 +113,10 @@ export default function ProjectDetailScreen({ navigation, route }) {
   }, [])
 
   const selectableGoals = accessibleActiveGoalsAfterProLoss(activeGoals, plan)
+  const vehicleSummary = vehicleDetails.year || vehicleDetails.make || vehicleDetails.model
+    ? [vehicleDetails.year, vehicleDetails.make, vehicleDetails.model].filter(Boolean).join(' ')
+    : 'Add vehicle information'
+  const vehicleVinSummary = vehicleDetails.vin ? maskVin(vehicleDetails.vin) : 'not set'
 
   async function assignGoal(goalId, candidateGoals = activeGoals) {
     if (saving) return
@@ -591,15 +596,35 @@ export default function ProjectDetailScreen({ navigation, route }) {
 
         <Text style={s.sectionTitle}>Vehicle details</Text>
         <View style={s.card}>
-          <Text style={s.inputHint}>Manual entry is always available. Saved VIN display: {vehicleDetails.vin ? maskVin(vehicleDetails.vin) : 'Not set'}</Text>
-          <ProjectVehicleField label="Model year" value={vehicleDetails.year} onChangeText={year => setVehicleDetails(current => ({ ...current, year }))} keyboardType="number-pad" />
-          <ProjectVehicleField label="Make" value={vehicleDetails.make} onChangeText={make => setVehicleDetails(current => ({ ...current, make }))} />
-          <ProjectVehicleField label="Model" value={vehicleDetails.model} onChangeText={model => setVehicleDetails(current => ({ ...current, model }))} />
-          <ProjectVehicleField label="Engine" value={vehicleDetails.engine} onChangeText={engine => setVehicleDetails(current => ({ ...current, engine }))} />
-          <VinDecodePanel subjectType="project" subjectId={projectId} isPro={isPro} values={vehicleDetails} onChange={setVehicleDetails} onUpgrade={() => navigation.navigate('Pro')} suggestionFields={['year','make','model','engine']} />
-          <TouchableOpacity style={[s.btn,{marginTop:12},savingVehicleDetails&&s.btnDisabled]} onPress={saveVehicleDetails} disabled={savingVehicleDetails} accessibilityRole="button" accessibilityLabel="Save Vehicle Details" accessibilityState={{disabled:savingVehicleDetails,busy:savingVehicleDetails}}>
-            {savingVehicleDetails ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Save Vehicle Details</Text>}
+          <TouchableOpacity
+            style={s.vehicleDetailsHeader}
+            onPress={() => setShowVehicleDetails(current => !current)}
+            accessibilityRole="button"
+            accessibilityLabel={`Vehicle details, ${vehicleSummary}, VIN ${vehicleVinSummary}`}
+            accessibilityHint={showVehicleDetails ? 'Collapses the vehicle details form' : 'Expands the vehicle details form'}
+            accessibilityState={{ expanded: showVehicleDetails }}
+          >
+            <View style={s.vehicleDetailsSummary}>
+              <Text style={s.vehicleDetailsTitle}>{vehicleSummary}</Text>
+              <Text style={s.vehicleDetailsVin}>VIN: {vehicleVinSummary}</Text>
+            </View>
+            <Text style={s.vehicleDetailsToggle}>{showVehicleDetails ? 'Hide' : 'Show'} {showVehicleDetails ? '▲' : '▼'}</Text>
           </TouchableOpacity>
+          <View
+            style={[s.vehicleDetailsBody, !showVehicleDetails && s.vehicleDetailsBodyHidden]}
+            accessibilityElementsHidden={!showVehicleDetails}
+            importantForAccessibility={showVehicleDetails ? 'auto' : 'no-hide-descendants'}
+          >
+            <Text style={s.inputHint}>Manual entry is always available. Saved VIN display: {vehicleDetails.vin ? maskVin(vehicleDetails.vin) : 'Not set'}</Text>
+            <ProjectVehicleField label="Model year" value={vehicleDetails.year} onChangeText={year => setVehicleDetails(current => ({ ...current, year }))} keyboardType="number-pad" />
+            <ProjectVehicleField label="Make" value={vehicleDetails.make} onChangeText={make => setVehicleDetails(current => ({ ...current, make }))} />
+            <ProjectVehicleField label="Model" value={vehicleDetails.model} onChangeText={model => setVehicleDetails(current => ({ ...current, model }))} />
+            <ProjectVehicleField label="Engine" value={vehicleDetails.engine} onChangeText={engine => setVehicleDetails(current => ({ ...current, engine }))} />
+            <VinDecodePanel subjectType="project" subjectId={projectId} isPro={isPro} values={vehicleDetails} onChange={setVehicleDetails} onUpgrade={() => navigation.navigate('Pro')} suggestionFields={['year','make','model','engine']} />
+            <TouchableOpacity style={[s.btn,{marginTop:12},savingVehicleDetails&&s.btnDisabled]} onPress={saveVehicleDetails} disabled={savingVehicleDetails} accessibilityRole="button" accessibilityLabel="Save Vehicle Details" accessibilityState={{disabled:savingVehicleDetails,busy:savingVehicleDetails}}>
+              {savingVehicleDetails ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Save Vehicle Details</Text>}
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Text style={s.sectionTitle}>Shareable report</Text>
@@ -888,6 +913,13 @@ const s = StyleSheet.create({
   profitAmount:{fontSize:24,fontWeight:'800',color:'#2D7A4F'},
   sectionTitle:{fontSize:13,fontWeight:'700',color:'#8C8880',textTransform:'uppercase',letterSpacing:0.5,marginBottom:8,marginTop:8},
   card:{backgroundColor:'#fff',borderRadius:12,padding:16,marginBottom:12,shadowColor:'#000',shadowOpacity:0.04,shadowRadius:8,shadowOffset:{width:0,height:2},elevation:2},
+  vehicleDetailsHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',minHeight:44,gap:12},
+  vehicleDetailsSummary:{flex:1},
+  vehicleDetailsTitle:{fontSize:15,fontWeight:'700',color:'#1A1917'},
+  vehicleDetailsVin:{fontSize:11,color:'#8C8880',marginTop:3},
+  vehicleDetailsToggle:{fontSize:12,fontWeight:'700',color:ACCENT},
+  vehicleDetailsBody:{borderTopWidth:1,borderTopColor:'#F0EDE8',marginTop:12,paddingTop:7},
+  vehicleDetailsBodyHidden:{display:'none'},
   notesText:{fontSize:14,color:'#1A1917',lineHeight:22},
   emptyText:{fontSize:13,color:'#A8A49E',textAlign:'center',paddingVertical:8},
   expenseRow:{flexDirection:'row',alignItems:'center',paddingVertical:10,borderBottomWidth:1,borderBottomColor:'#F0EDE8'},
