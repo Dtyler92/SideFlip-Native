@@ -155,7 +155,7 @@ test('VIN identifier bounds match each persistence subject and reject over-limit
   const project = source('src/screens/ProjectDetailScreen.js')
   const item = source('src/screens/MyStuffDetailScreen.js')
   const panel = source('src/components/VinDecodePanel.js')
-  assert.match(project, /validateVinIdentifier\(vehicleDetails\.vin,'project'\)/)
+  assert.match(project, /validateVinIdentifier\((?:vehicleDetails|details)\.vin,'project'\)/)
   assert.match(item, /validateItemDraft\(validatedEdit\)/)
   assert.match(panel, /maxLength=\{identifierMaxLength\}/)
 })

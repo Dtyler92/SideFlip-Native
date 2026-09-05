@@ -1,6 +1,7 @@
 import { decodedVehicleSuggestions } from './myStuff/vinModel.js'
 
 const EMPTY_PROJECT_VEHICLE_DETAILS = { vin:'', year:'', make:'', model:'', engine:'' }
+const PROJECT_VEHICLE_DETAIL_FIELDS = ['vin','year','make','model','engine','transmission']
 
 function compact(value) {
   const text = String(value ?? '').trim()
@@ -60,4 +61,8 @@ export function buildProjectCreatePersistence(values = {}) {
 
 export function vehicleDetailsAfterCategoryChange(values = {}, isVehicleCategory = false) {
   return isVehicleCategory ? { ...values } : { ...EMPTY_PROJECT_VEHICLE_DETAILS }
+}
+
+export function hasProjectVehicleDetailsChanged(submitted = {}, current = {}) {
+  return PROJECT_VEHICLE_DETAIL_FIELDS.some(field => String(submitted[field] ?? '') !== String(current[field] ?? ''))
 }

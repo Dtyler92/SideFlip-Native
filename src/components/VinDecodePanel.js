@@ -5,6 +5,7 @@ import { confirmMyStuffVehicleIdentityV3 } from '../lib/myStuffClient'
 import { hasVehicleIdentityChanged, persistThenConfirmVehicleIdentity } from '../domain/myStuff/v3Model'
 import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptState } from '../screens/myStuffModel'
 import { createVinDecodeClient } from '../lib/vinDecodeClient'
+import { hasProjectVehicleDetailsChanged } from '../domain/vinCreateModel'
 import {
   applyVinSuggestions,
   createVinDecodeRequestGate,
@@ -18,7 +19,7 @@ import {
 const ACCENT = '#C8402F'
 const client = createVinDecodeClient({ auth: supabase.auth })
 
-export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, onDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false }) {
+export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false }) {
   const [decoding, setDecoding] = useState(false)
   const [preview, setPreview] = useState(null)
   const [warnings, setWarnings] = useState([])
@@ -27,6 +28,7 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
   const [confirmed, setConfirmed] = useState(false)
   const confirmationGeneration = useRef(0)
   const confirmationAttempt = useRef(createMutationAttemptState())
+  const projectConfirmationInFlight = useRef(false)
   const requestGate = useRef(null)
   if (!requestGate.current) requestGate.current = createVinDecodeRequestGate()
   const valuesRef = useRef(values)
@@ -38,6 +40,7 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
     requestGate.current.invalidate()
     confirmationGeneration.current += 1
     resetMutationAttemptState(confirmationAttempt.current)
+    projectConfirmationInFlight.current = false
     setConfirming(false)
     setConfirmed(false)
     return () => { requestGate.current.invalidate();confirmationGeneration.current += 1 }
@@ -109,6 +112,30 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
   }
 
   async function confirmVehicle() {
+    if (subjectType === 'project' && typeof onConfirmDecoded === 'function') {
+      if (projectConfirmationInFlight.current) return
+      if (!preview || preview.requestVin !== vinState.normalized) return setMessage('Decode the current VIN before confirming vehicle details.')
+      const confirmedValues = { ...applyVinSuggestions(valuesRef.current, preview.fields, { mode: 'fill_blanks' }), vin: vinState.normalized }
+      update(confirmedValues)
+      const generation = ++confirmationGeneration.current
+      const snapshot = { ...confirmedValues }
+      projectConfirmationInFlight.current = true
+      setConfirming(true);setMessage('')
+      try {
+        await onConfirmDecoded(snapshot)
+        if (generation !== confirmationGeneration.current || hasProjectVehicleDetailsChanged(snapshot, valuesRef.current)) return
+        setConfirmed(true)
+        setMessage('Vehicle details confirmed and saved.')
+        await onIdentityConfirmed?.()
+      } catch (error) {
+        if (generation !== confirmationGeneration.current) return
+        setMessage(`${error?.message || 'Vehicle confirmation is unavailable.'} Your editable review is still here and manual entry remains available.`)
+      } finally {
+        projectConfirmationInFlight.current = false
+        if (generation === confirmationGeneration.current) setConfirming(false)
+      }
+      return
+    }
     if (subjectType !== 'my_stuff_item' || !subjectId) return
     if (typeof persistIdentity !== 'function') return setMessage('Vehicle confirmation is unavailable because item saving is not connected. Save item details manually instead.')
     if (!vinState.canDecode) return setMessage('Decode or manually enter a valid standard VIN before confirming vehicle identity.')
@@ -181,7 +208,7 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
         {detail.status === 'conflicting' && <TouchableOpacity onPress={() => useSuggestion(field)} accessibilityRole="button" accessibilityLabel={`Use suggested ${fieldLabels[field] || defaultLabel(field)}`}><Text style={s.use}>Use suggestion</Text></TouchableOpacity>}
       </View>)}
       {hasBlankSuggestions && <TouchableOpacity style={s.fillButton} onPress={fillBlanks} accessibilityRole="button" accessibilityLabel="Fill Blank Fields"><Text style={s.fillText}>Fill Blank Fields</Text></TouchableOpacity>}
-      {subjectType==='my_stuff_item'&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{confirmed?'Vehicle Confirmed':'Confirm Vehicle'}</Text></TouchableOpacity>}
+      {(subjectType==='my_stuff_item'||(subjectType==='project'&&typeof onConfirmDecoded==='function'))&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{confirmed?'Vehicle Confirmed':'Confirm Vehicle'}</Text></TouchableOpacity>}
       {subjectType==='my_stuff_item'&&<Text style={s.hint}>Confirmation saves identity only. Research is not available yet, so this queues zero research jobs.</Text>}
     </View>}
   </View>

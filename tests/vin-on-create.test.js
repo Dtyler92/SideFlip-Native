@@ -5,6 +5,7 @@ import {
   buildMyStuffVinCreateSuggestions,
   buildProjectCreatePersistence,
   buildProjectVinCreateSuggestions,
+  hasProjectVehicleDetailsChanged,
   vehicleDetailsAfterCategoryChange,
 } from '../src/domain/vinCreateModel.js'
 import { buildCreateMyStuffItemV2WirePayload } from '../src/lib/myStuffPayloads.js'
@@ -142,18 +143,38 @@ test('New Project offers pre-save Pro VIN decoding for vehicle details', () => {
   assert.match(screen, /onUpgrade=\{\(\) => navigation\.navigate\('Pro'\)\}/)
 })
 
-test('Project Detail starts vehicle details expanded and compresses them after a successful VIN decode', () => {
+test('Project Detail confirms decoded transmission into expandable vehicle details before compressing', () => {
   const detail = source('src/screens/ProjectDetailScreen.js')
   const panel = source('src/components/VinDecodePanel.js')
   assert.match(detail, /const \[showVehicleDetails, setShowVehicleDetails\] = useState\(true\)/)
   assert.match(detail, /accessibilityState=\{\{ expanded: showVehicleDetails \}\}/)
   assert.match(detail, /onPress=\{\(\) => setShowVehicleDetails\(current => !current\)\}/)
-  assert.match(detail, /<VinDecodePanel[\s\S]*onDecoded=\{\(\) => setShowVehicleDetails\(false\)\}/)
-  assert.match(panel, /setPreview\([^\n]+\)\n\s+setWarnings\(result\.nhtsaWarnings\)\n\s+onDecoded\?\.\(/)
+  assert.match(detail, /<ProjectVehicleField label="Transmission type" value=\{vehicleDetails\.transmission\}[^\n]+maxLength=\{200\}/)
+  assert.match(detail, /suggestionFields=\{\['year','make','model','engine','transmission'\]\}/)
+  assert.match(detail, /confirmDecodedVehicle/)
+  assert.match(detail, /onConfirmDecoded=\{confirmDecodedVehicle\}/)
+  assert.doesNotMatch(detail, /onDecoded=\{\(\) => setShowVehicleDetails\(false\)\}/)
+  assert.match(panel, /subjectType==='project'&&typeof onConfirmDecoded==='function'/)
+  assert.match(panel, /if \(projectConfirmationInFlight\.current\) return/)
+  assert.match(panel, /applyVinSuggestions\(valuesRef\.current, preview\.fields, \{ mode: 'fill_blanks' \}\)[^\n]+vin: vinState\.normalized/)
+  assert.ok(panel.indexOf('await onConfirmDecoded(snapshot)') < panel.indexOf('await onIdentityConfirmed?.()'))
   assert.match(detail, /style=\{\[s\.vehicleDetailsBody, !showVehicleDetails && s\.vehicleDetailsBodyHidden\]\}/)
   assert.match(detail, /importantForAccessibility=\{showVehicleDetails \? 'auto' : 'no-hide-descendants'\}/)
   assert.match(detail, /accessibilityLabel=\{`Vehicle details, \$\{vehicleSummary\}, VIN \$\{vehicleVinSummary\}`\}/)
   assert.match(detail, /showVehicleDetails \? 'Hide' : 'Show'/)
+})
+
+test('Project confirmation detects every editable vehicle field change while persistence is pending', () => {
+  const submitted = { vin:'1FTFW1E50MFA00001', year:'2021', make:'Ford', model:'F-150', engine:'3.5L', transmission:'Automatic' }
+  assert.equal(hasProjectVehicleDetailsChanged(submitted, { ...submitted }), false)
+  for (const field of ['vin','year','make','model','engine','transmission']) {
+    assert.equal(hasProjectVehicleDetailsChanged(submitted, { ...submitted, [field]:`${submitted[field]} edited` }), true, field)
+  }
+
+  const detail = source('src/screens/ProjectDetailScreen.js')
+  const panel = source('src/components/VinDecodePanel.js')
+  assert.match(detail, /hasProjectVehicleDetailsChanged\(details, current\) \? current/)
+  assert.match(panel, /hasProjectVehicleDetailsChanged\(snapshot, valuesRef\.current\)/)
 })
 
 test('Project Detail puts VIN decoder and PDF creator after expenses/form and directly before actions', () => {

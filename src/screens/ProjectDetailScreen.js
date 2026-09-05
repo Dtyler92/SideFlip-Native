@@ -13,6 +13,7 @@ import { accessibleActiveGoalsAfterProLoss, createMutationId } from './tradeUpGo
 import { openGoalCreation } from './goalCreationNavigation'
 import { createDescriptionRequest, needsDescriptionPreview, normalizeListingSelection } from './listingGeneratorModel'
 import { transferProjectToMyStuffV3 } from '../lib/myStuffClient'
+import { hasProjectVehicleDetailsChanged } from '../domain/vinCreateModel'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -36,7 +37,7 @@ const HUMOR_LEVELS = [
 ]
 
 const EMPTY_EXPENSE = { description: '', amount: '', category: 'parts', laborHours: '' }
-const EMPTY_VEHICLE_DETAILS = { vin: '', year: '', make: '', model: '', engine: '' }
+const EMPTY_VEHICLE_DETAILS = { vin: '', year: '', make: '', model: '', engine: '', transmission: '' }
 
 export default function ProjectDetailScreen({ navigation, route }) {
   const insets = useSafeAreaInsets()
@@ -62,6 +63,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [showVehicleDetails, setShowVehicleDetails] = useState(true)
   const [savingVehicleDetails, setSavingVehicleDetails] = useState(false)
   const [showAssignGoal, setShowAssignGoal] = useState(false)
+  const vehicleDetailsInFlight = useRef(false)
   const goalLinkMutationId = useRef(createMutationId())
   const transferMutationId = useRef(createMutationId())
   const projectLoadGeneration = useRef(0)
@@ -95,6 +97,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
       make: projectResult.data.vehicle_make || '',
       model: projectResult.data.vehicle_model || '',
       engine: projectResult.data.engine_model || '',
+      transmission: projectResult.data.transmission || '',
     })
     if (goalResult.error) Alert.alert('Could not load goals', goalResult.error.message)
     else setActiveGoals(goalResult.data || [])
@@ -176,33 +179,50 @@ export default function ProjectDetailScreen({ navigation, route }) {
     setProject(p => ({ ...p, photo, photos }))
   }
 
-  async function saveVehicleDetails() {
-    if (savingVehicleDetails) return
-    const yearText = String(vehicleDetails.year || '').trim()
+  async function persistVehicleDetails(details) {
+    if (vehicleDetailsInFlight.current) throw new Error('Another vehicle-details update is already in progress.')
+    const yearText = String(details.year || '').trim()
     const year = yearText === '' ? null : Number(yearText)
     if (yearText && (!Number.isInteger(year) || year < 1800 || year > 2200)) {
-      return Alert.alert('Check model year', 'Enter a whole year from 1800 to 2200, or leave it blank.')
+      throw new Error('Enter a whole model year from 1800 to 2200, or leave it blank.')
     }
-    const vinValidation = validateVinIdentifier(vehicleDetails.vin,'project')
-    if (!vinValidation.ok) return Alert.alert('Check VIN / identifier', vinValidation.reason)
+    const vinValidation = validateVinIdentifier(details.vin,'project')
+    if (!vinValidation.ok) throw new Error(vinValidation.reason)
+    const transmission = String(details.transmission || '').trim()
+    if (transmission.length > 200) throw new Error('Transmission type must be 200 characters or fewer.')
     const values = {
-      vin: String(vehicleDetails.vin || '').trim() || null,
+      vin: String(details.vin || '').trim() || null,
       vehicle_year: year,
-      vehicle_make: String(vehicleDetails.make || '').trim() || null,
-      vehicle_model: String(vehicleDetails.model || '').trim() || null,
-      engine_model: String(vehicleDetails.engine || '').trim() || null,
+      vehicle_make: String(details.make || '').trim() || null,
+      vehicle_model: String(details.model || '').trim() || null,
+      engine_model: String(details.engine || '').trim() || null,
+      transmission: transmission || null,
     }
+    vehicleDetailsInFlight.current = true
     setSavingVehicleDetails(true)
     try {
       const { data, error } = await supabase.from('projects').update(values).eq('id', projectId).eq('user_id', user.id).select('*').single()
       if (error) throw error
       setProject(current => ({ ...current, ...data }))
+      setVehicleDetails(current => hasProjectVehicleDetailsChanged(details, current) ? current : ({ ...current, ...details, transmission }))
+      return data
+    } finally {
+      vehicleDetailsInFlight.current = false
+      setSavingVehicleDetails(false)
+    }
+  }
+
+  async function saveVehicleDetails() {
+    try {
+      await persistVehicleDetails(vehicleDetails)
       Alert.alert('Vehicle details saved', 'Your manual and applied VIN details were saved.')
     } catch (error) {
       Alert.alert('Could not save vehicle details', error.message || 'Your entries are still here. Please try again.')
-    } finally {
-      setSavingVehicleDetails(false)
     }
+  }
+
+  async function confirmDecodedVehicle(details) {
+    await persistVehicleDetails(details)
   }
 
   function beginAddExpense() {
@@ -620,7 +640,8 @@ export default function ProjectDetailScreen({ navigation, route }) {
             <ProjectVehicleField label="Make" value={vehicleDetails.make} onChangeText={make => setVehicleDetails(current => ({ ...current, make }))} />
             <ProjectVehicleField label="Model" value={vehicleDetails.model} onChangeText={model => setVehicleDetails(current => ({ ...current, model }))} />
             <ProjectVehicleField label="Engine" value={vehicleDetails.engine} onChangeText={engine => setVehicleDetails(current => ({ ...current, engine }))} />
-            <VinDecodePanel subjectType="project" subjectId={projectId} isPro={isPro} values={vehicleDetails} onChange={setVehicleDetails} onUpgrade={() => navigation.navigate('Pro')} suggestionFields={['year','make','model','engine']} onDecoded={() => setShowVehicleDetails(false)} />
+            <ProjectVehicleField label="Transmission type" value={vehicleDetails.transmission} onChangeText={transmission => setVehicleDetails(current => ({ ...current, transmission }))} maxLength={200} />
+            <VinDecodePanel subjectType="project" subjectId={projectId} isPro={isPro} values={vehicleDetails} onChange={setVehicleDetails} onUpgrade={() => navigation.navigate('Pro')} suggestionFields={['year','make','model','engine','transmission']} onConfirmDecoded={confirmDecodedVehicle} onIdentityConfirmed={() => setShowVehicleDetails(false)} />
             <TouchableOpacity style={[s.btn,{marginTop:12},savingVehicleDetails&&s.btnDisabled]} onPress={saveVehicleDetails} disabled={savingVehicleDetails} accessibilityRole="button" accessibilityLabel="Save Vehicle Details" accessibilityState={{disabled:savingVehicleDetails,busy:savingVehicleDetails}}>
               {savingVehicleDetails ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Save Vehicle Details</Text>}
             </TouchableOpacity>
