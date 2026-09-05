@@ -142,11 +142,14 @@ test('New Project offers pre-save Pro VIN decoding for vehicle details', () => {
   assert.match(screen, /onUpgrade=\{\(\) => navigation\.navigate\('Pro'\)\}/)
 })
 
-test('Project Detail keeps vehicle details collapsed until the user expands them', () => {
+test('Project Detail starts vehicle details expanded and compresses them after a successful VIN decode', () => {
   const detail = source('src/screens/ProjectDetailScreen.js')
-  assert.match(detail, /const \[showVehicleDetails, setShowVehicleDetails\] = useState\(false\)/)
+  const panel = source('src/components/VinDecodePanel.js')
+  assert.match(detail, /const \[showVehicleDetails, setShowVehicleDetails\] = useState\(true\)/)
   assert.match(detail, /accessibilityState=\{\{ expanded: showVehicleDetails \}\}/)
   assert.match(detail, /onPress=\{\(\) => setShowVehicleDetails\(current => !current\)\}/)
+  assert.match(detail, /<VinDecodePanel[\s\S]*onDecoded=\{\(\) => setShowVehicleDetails\(false\)\}/)
+  assert.match(panel, /setPreview\([^\n]+\)\n\s+setWarnings\(result\.nhtsaWarnings\)\n\s+onDecoded\?\.\(/)
   assert.match(detail, /style=\{\[s\.vehicleDetailsBody, !showVehicleDetails && s\.vehicleDetailsBodyHidden\]\}/)
   assert.match(detail, /importantForAccessibility=\{showVehicleDetails \? 'auto' : 'no-hide-descendants'\}/)
   assert.match(detail, /accessibilityLabel=\{`Vehicle details, \$\{vehicleSummary\}, VIN \$\{vehicleVinSummary\}`\}/)

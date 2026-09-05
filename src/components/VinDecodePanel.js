@@ -18,7 +18,7 @@ import {
 const ACCENT = '#C8402F'
 const client = createVinDecodeClient({ auth: supabase.auth })
 
-export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false }) {
+export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, onDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false }) {
   const [decoding, setDecoding] = useState(false)
   const [preview, setPreview] = useState(null)
   const [warnings, setWarnings] = useState([])
@@ -84,6 +84,7 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
       if (autoFillBlanks) update(next)
       setPreview({ ...mergeDecodedSuggestions(next, supported), requestVin: request.normalizedVin })
       setWarnings(result.nhtsaWarnings)
+      onDecoded?.({ vin: request.normalizedVin, vehicle: result.vehicle })
     } catch (error) {
       if (!requestGate.current.isCurrent(request, valuesRef.current?.vin)) return
       if (error?.proRequired) setMessage('Basic decode is unavailable because the server returned PRO_REQUIRED. Manual entry is still available.')
