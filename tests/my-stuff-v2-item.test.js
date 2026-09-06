@@ -4,20 +4,22 @@ import {
   ITEM_CATEGORIES,
   ITEM_TYPE_OPTIONS,
   MEASUREMENT_TYPES,
+  requiresUsageAndPurchase,
   deriveItemCategory,
   getItemCategoryContract,
   selectItemType,
+  toggleItemMeasurementDraft,
   validateItemDraft,
 } from '../src/domain/myStuff/itemModel.js'
 import { adaptItemDraftToSql, adaptSqlItem } from '../src/lib/myStuffAdapters.js'
 
 const EXACT_ITEM_TYPES = [
-  'car', 'truck', 'motorcycle', 'boat', 'atv', 'side_by_side', 'mower', 'tractor',
+  'car', 'truck', 'motorcycle', 'boat', 'airplane', 'atv', 'side_by_side', 'mower', 'tractor',
   'trailer', 'generator', 'rv', 'equipment', 'bicycle', 'watch', 'electronics',
   'gaming', 'tool', 'exercise', 'instrument', 'furniture', 'house', 'other',
 ]
 
-test('all 22 backend item types are selectable and persist with a derived broad category', () => {
+test('all supported backend item types are selectable and persist with a derived broad category', () => {
   assert.deepEqual(ITEM_TYPE_OPTIONS.map(option => option.value), EXACT_ITEM_TYPES)
   for (const itemType of EXACT_ITEM_TYPES) {
     const selected = selectItemType({ name: 'Manual item', measurements: [] }, itemType)
@@ -29,6 +31,29 @@ test('all 22 backend item types are selectable and persist with a derived broad 
     assert.equal(persisted.itemType, itemType)
     assert.equal(persisted.category, selected.category, `${itemType} must restore its derived broad category`)
   }
+})
+
+test('vehicle-like My Stuff creation requires tracking, current readings, and purchase price', () => {
+  for (const itemType of ['car','truck','motorcycle','boat','airplane','atv','side_by_side','mower','tractor','trailer','generator','rv','equipment','bicycle','exercise']) {
+    assert.equal(requiresUsageAndPurchase(itemType), true, itemType)
+    const base = selectItemType({ name:'Tracked item', measurements:[], usageProfile:'normal' }, itemType)
+    const missing = validateItemDraft(base, { requireOwnershipFields:true })
+    assert.match(missing.errors.measurements, /usage tracking/i, itemType)
+    assert.match(missing.errors.purchasePrice, /purchase price/i, itemType)
+    const mode = getItemCategoryContract(base.category).measurements[0]
+    const noReading = validateItemDraft({ ...base, measurements:[mode], purchasePrice:'0', currentUsage:{} }, { requireOwnershipFields:true })
+    assert.match(noReading.errors.currentUsage, /current/i, itemType)
+    const whitespaceReading = validateItemDraft({ ...base, measurements:[mode], purchasePrice:'0', currentUsage:{ [mode]:'   ' } }, { requireOwnershipFields:true })
+    assert.match(whitespaceReading.errors.currentUsage, /current/i, itemType)
+    assert.equal(validateItemDraft({ ...base, measurements:[mode], purchasePrice:'0', currentUsage:{ [mode]:0 } }, { requireOwnershipFields:true }).ok, true, itemType)
+  }
+  assert.equal(requiresUsageAndPurchase('furniture'), false)
+})
+
+test('deselecting a usage axis clears its hidden reading before it can be reselected', () => {
+  const deselected = toggleItemMeasurementDraft({ measurements:['miles'], currentUsage:{miles:'1200'} }, 'miles')
+  assert.deepEqual(deselected, { measurements:[], currentUsage:{} })
+  assert.deepEqual(toggleItemMeasurementDraft(deselected, 'miles'), { measurements:['miles'], currentUsage:{} })
 })
 
 test('changing exact type drops unsupported measurement axes and their draft readings', () => {

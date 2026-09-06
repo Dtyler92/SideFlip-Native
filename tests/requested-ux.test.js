@@ -42,10 +42,12 @@ test('My Stuff hides items after they are transferred to Projects', () => {
   assert.match(client, /excludeTransferredItems\(data \|\| \[\], transferResult\.data \|\| \[\]\)/)
 })
 
-test('VIN decoder and Project vehicle details start closed', () => {
+test('VIN decoder defaults closed and Project vehicle details start closed', () => {
   const decoder = source('src/components/VinDecodePanel.js')
   const detail = source('src/screens/ProjectDetailScreen.js')
-  assert.match(decoder, /const \[expanded, setExpanded\] = useState\(false\)/)
+  assert.match(decoder, /initiallyExpanded = false/)
+  assert.match(decoder, /const \[expanded, setExpanded\] = useState\(initiallyExpanded\)/)
+  assert.doesNotMatch(detail, /initiallyExpanded/)
   assert.match(decoder, /accessibilityLabel=\{expanded \? 'Close VIN decoder' : 'Open VIN decoder'\}/)
   assert.match(decoder, /accessibilityState=\{\{ expanded \}\}/)
   assert.match(detail, /const \[showVehicleDetails, setShowVehicleDetails\] = useState\(false\)/)

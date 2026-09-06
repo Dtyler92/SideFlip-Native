@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { createMyStuffItemV2 } from '../lib/myStuffClient'
 import { buildCreateMyStuffItemV2WirePayload } from '../lib/myStuffPayloads'
 import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
-import { deriveItemCategory, getItemCategoryContract, selectItemType, supportsVinDecoder, validateItemDraft } from '../domain/myStuff/itemModel'
+import { deriveItemCategory, getItemCategoryContract, requiresUsageAndPurchase, selectItemType, supportsVinDecoder, toggleItemMeasurementDraft, validateItemDraft } from '../domain/myStuff/itemModel'
 import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptState, validateCalendarDate } from './myStuffModel'
 import { useAuth } from '../context/AuthContext'
 import VinDecodePanel from '../components/VinDecodePanel'
@@ -28,12 +28,7 @@ export default function MyStuffCreateScreen({ navigation }) {
     setDraft(current => values.itemType !== current.itemType ? selectItemType(values, values.itemType) : values)
   }
   function toggleAxis(axis) {
-    setDraft(current => ({
-      ...current,
-      measurements: current.measurements.includes(axis)
-        ? current.measurements.filter(value => value !== axis)
-        : [...current.measurements, axis],
-    }))
+    setDraft(current => toggleItemMeasurementDraft(current, axis))
   }
 
   async function save() {
@@ -41,7 +36,7 @@ export default function MyStuffCreateScreen({ navigation }) {
     if (draft.acquiredOn?.trim() && !validateCalendarDate(draft.acquiredOn)) return Alert.alert('Check acquisition date', 'Use a valid date in YYYY-MM-DD format.')
     const rawUsage = Object.fromEntries(draft.measurements.filter(axis => draft[axis] !== '' && draft[axis] != null).map(axis => [axis, draft[axis]]))
     const validatedDraft = { ...draft, name: String(draft.name || '').trim(), category: deriveItemCategory(draft.itemType), currentUsage: rawUsage }
-    const validation = validateItemDraft(validatedDraft)
+    const validation = validateItemDraft(validatedDraft, { requireOwnershipFields:true })
     setValidationErrors(validation.errors)
     if (!validation.ok) return
     const currentUsage = Object.fromEntries(Object.entries(rawUsage).map(([axis, value]) => [axis, Number(value)]))
@@ -81,6 +76,7 @@ export default function MyStuffCreateScreen({ navigation }) {
         onUpgrade={() => navigation.navigate('Pro')}
         mapSuggestions={buildMyStuffVinCreateSuggestions}
         autoFillBlanks
+        initiallyExpanded
       />}
       <Field label="Item name *" value={draft.name || ''} onChangeText={value => setValue('name', value)} placeholder="e.g. Work Truck" maxLength={200} />
       <MyStuffItemTypePicker value={draft.itemType} onChange={setExactType} error={validationErrors.itemType || validationErrors.category} />
@@ -100,9 +96,10 @@ export default function MyStuffCreateScreen({ navigation }) {
       <Field label="Acquired on" value={draft.acquiredOn || ''} onChangeText={value => setValue('acquiredOn', value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" autoCapitalize="none" />
 
       <Text style={s.section}>Usage tracking</Text>
-      <Text style={s.help}>Choose every measurement that applies. You can append readings later.</Text>
+      <Text style={s.help}>{requiresUsageAndPurchase(draft.itemType)?'Choose every measurement that applies and enter its current reading.':'Choose every measurement that applies. You can append readings later.'}</Text>
       <View style={s.choices} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis => getItemCategoryContract(draft.category)?.measurements.includes(axis.key)).map(axis => <Choice key={axis.key} label={axis.label} selected={draft.measurements.includes(axis.key)} onPress={() => toggleAxis(axis.key)} />)}</View>
-      {AXES.filter(axis => draft.measurements.includes(axis.key)).map(axis => <Field key={axis.key} label={`Current ${axis.label.toLowerCase()} (optional)`} value={draft[axis.key] || ''} onChangeText={value => setValue(axis.key, value)} keyboardType="decimal-pad" />)}
+      {AXES.filter(axis => draft.measurements.includes(axis.key)).map(axis => <Field key={axis.key} label={`Current ${axis.label.toLowerCase()} ${requiresUsageAndPurchase(draft.itemType)?'*':'(optional)'}`} value={draft[axis.key] || ''} onChangeText={value => setValue(axis.key, value)} keyboardType="decimal-pad" />)}
+      <Field label={requiresUsageAndPurchase(draft.itemType)?'Purchase price *':'Purchase price (optional)'} value={draft.purchasePrice || ''} onChangeText={value => setValue('purchasePrice', value)} keyboardType="decimal-pad" placeholder="0.00" />
       <Text style={s.label}>Usage profile</Text>
       <View style={s.choices} accessibilityRole="radiogroup" accessibilityLabel="Usage profile">{['normal', 'severe'].map(value => <Choice key={value} label={value === 'normal' ? 'Normal use' : 'Severe use'} selected={draft.usageProfile === value} onPress={() => setValue('usageProfile', value)} exclusive />)}</View>
       <Field label="Notes (optional)" value={draft.notes || ''} onChangeText={value => setValue('notes', value)} multiline maxLength={1000} />

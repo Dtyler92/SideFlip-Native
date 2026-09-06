@@ -18,11 +18,12 @@ test('listing selections support Professional, Normal, and Funny with Balanced a
   assert.throws(() => normalizeListingSelection('auction'), /style/i)
 })
 
-test('generation requests send project identity, controlled style choices, and only bounded current description text', () => {
-  assert.deepEqual(createDescriptionRequest(PROJECT_ID, 'funny', 'unhinged'), {
+test('generation requests send project identity, controlled style choices, and bounded seller context', () => {
+  assert.deepEqual(createDescriptionRequest(PROJECT_ID, 'funny', 'unhinged', '', '  Runs well; scratch on left side.  '), {
     projectId: PROJECT_ID,
     style: 'funny',
     humorLevel: 'unhinged',
+    sellerBrief: 'Runs well; scratch on left side.',
   })
   assert.deepEqual(createDescriptionRequest(PROJECT_ID, 'professional'), {
     projectId: PROJECT_ID,
@@ -34,6 +35,7 @@ test('generation requests send project identity, controlled style choices, and o
     existingDescription: 'Seller draft',
   })
   assert.equal(createDescriptionRequest(PROJECT_ID, 'normal', null, 'x'.repeat(5000)).existingDescription.length, 4000)
+  assert.equal(createDescriptionRequest(PROJECT_ID, 'normal', null, '', 'x'.repeat(3000)).sellerBrief.length, 2000)
 })
 
 test('existing editable text always requires preview while blank text can accept directly', () => {
@@ -47,6 +49,9 @@ test('project listing editor exposes the requested quick style and preview flow'
   for (const label of ['Generate Description', 'Choose a style', 'Professional', 'Normal', 'Funny', 'How funny?', 'Subtle', 'Balanced', 'Unhinged', 'Writing your description...', 'Use Description', 'Regenerate', 'Cancel']) {
     assert.match(detail, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
+  for (const label of ['What should buyers know?', 'Briefly describe the condition', 'Continue']) assert.match(detail, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.match(detail, /setGeneratorStep\('brief'\)/)
+  assert.match(detail, /createDescriptionRequest\(projectId, selection\.style, selection\.humorLevel, listingTextRef\.current, sellerBrief\)/)
   assert.match(detail, /createDescriptionRequest\(projectId/)
   assert.match(detail, /needsDescriptionPreview\(listingTextRef\.current\)/)
   assert.match(detail, /disabled=\{generatingListing\}/)

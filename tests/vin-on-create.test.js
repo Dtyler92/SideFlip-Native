@@ -135,6 +135,18 @@ test('My Stuff V2 create payload persists VIN and every supported decoded value'
   assert.match(screen, /onUpgrade=\{\(\) => navigation\.navigate\('Pro'\)\}/)
 })
 
+test('VIN decoder starts expanded only on applicable My Stuff creation', () => {
+  const create = source('src/screens/MyStuffCreateScreen.js')
+  const newProject = source('src/screens/NewProjectScreen.js')
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  const panel = source('src/components/VinDecodePanel.js')
+  assert.match(panel, /initiallyExpanded = false/)
+  assert.match(panel, /useState\(initiallyExpanded\)/)
+  assert.match(create, /<VinDecodePanel[\s\S]*initiallyExpanded/)
+  assert.doesNotMatch(newProject, /<VinDecodePanel[\s\S]{0,500}initiallyExpanded/)
+  assert.doesNotMatch(detail, /<VinDecodePanel[^\n]*initiallyExpanded/)
+})
+
 test('New Project offers pre-save Pro VIN decoding for vehicle details', () => {
   const screen = source('src/screens/NewProjectScreen.js')
   assert.match(screen, /const VEHICLE_PROJECT_CATEGORIES = new Set\(\['car', 'truck', 'motorcycle', 'atv', 'side_by_side', 'trailer', 'rv'\]\)/)

@@ -6,6 +6,7 @@ const CONTRACTS = Object.freeze({
   vehicle: Object.freeze({ category: 'vehicle', label: 'Vehicle', measurements: Object.freeze(['miles', 'hours', 'cycles']), identityFields: Object.freeze(['year', 'make', 'model', 'trim', 'engine', 'transmission', 'drivetrain', 'fuelType']) }),
   motorcycle: Object.freeze({ category: 'motorcycle', label: 'Motorcycle', measurements: Object.freeze(['miles', 'hours', 'cycles']), identityFields: Object.freeze(['year', 'make', 'model', 'trim', 'engine']) }),
   boat: Object.freeze({ category: 'boat', label: 'Boat', measurements: Object.freeze(['miles', 'hours', 'cycles']), identityFields: Object.freeze(['year', 'make', 'model', 'engine']) }),
+  aircraft: Object.freeze({ category: 'aircraft', label: 'Aircraft', measurements: Object.freeze(['hours', 'cycles']), identityFields: Object.freeze(['year', 'make', 'model', 'engine']) }),
   equipment: Object.freeze({ category: 'equipment', label: 'Equipment', measurements: Object.freeze(['hours', 'cycles']), identityFields: Object.freeze(['year', 'make', 'model', 'engine', 'powerType']) }),
   tool: Object.freeze({ category: 'tool', label: 'Tool', measurements: Object.freeze(['hours', 'cycles']), identityFields: Object.freeze(['make', 'model', 'powerType']) }),
   home: Object.freeze({ category: 'home', label: 'Home', measurements: Object.freeze(['hours', 'cycles']), identityFields: Object.freeze(['year', 'make', 'model']) }),
@@ -25,6 +26,7 @@ export const ITEM_TYPE_OPTIONS = Object.freeze([
   itemType('truck', 'Truck', 'vehicle'),
   itemType('motorcycle', 'Motorcycle', 'motorcycle'),
   itemType('boat', 'Boat', 'boat'),
+  itemType('airplane', 'Airplane', 'aircraft'),
   itemType('atv', 'ATV', 'recreation'),
   itemType('side_by_side', 'Side-by-side', 'recreation'),
   itemType('mower', 'Lawn mower', 'equipment'),
@@ -51,6 +53,7 @@ export const ITEM_CATEGORIES = Object.freeze(Object.keys(CONTRACTS))
 export const ITEM_CATEGORY_CONTRACTS = CONTRACTS
 export const VIN_ITEM_TYPES = Object.freeze(['car', 'truck', 'motorcycle', 'atv', 'side_by_side', 'trailer', 'rv'])
 const VIN_ITEM_TYPE_SET = new Set(VIN_ITEM_TYPES)
+const USAGE_AND_PURCHASE_REQUIRED_TYPES = new Set(['car','truck','motorcycle','boat','airplane','atv','side_by_side','mower','tractor','trailer','generator','rv','equipment','bicycle','exercise'])
 export const ITEM_CATEGORY_ALIASES = Object.freeze({
   car: 'vehicle', truck: 'vehicle', atv: 'recreation', 'side by side': 'recreation',
   'lawn mower': 'equipment', lawnmower: 'equipment', tractor: 'equipment', trailer: 'vehicle',
@@ -76,6 +79,10 @@ export function supportsVinDecoder(itemType) {
   return VIN_ITEM_TYPE_SET.has(getItemTypeOption(itemType)?.value || '')
 }
 
+export function requiresUsageAndPurchase(itemType) {
+  return USAGE_AND_PURCHASE_REQUIRED_TYPES.has(getItemTypeOption(itemType)?.value || '')
+}
+
 export function getItemCategoryContract(category) {
   const key = normalizedKey(category)
   return CONTRACTS[key] || CONTRACTS[ITEM_CATEGORY_ALIASES[key]] || null
@@ -98,15 +105,31 @@ export function selectItemType(draft = {}, value) {
   return next
 }
 
+export function toggleItemMeasurementDraft(draft = {}, mode) {
+  const measurements = Array.isArray(draft.measurements) ? draft.measurements : []
+  const selected = measurements.includes(mode)
+  const currentUsage = { ...(draft.currentUsage || {}) }
+  const next = {
+    ...draft,
+    measurements: selected ? measurements.filter(value => value !== mode) : [...measurements, mode],
+    currentUsage,
+  }
+  if (selected) {
+    delete next[mode]
+    delete currentUsage[mode]
+  }
+  return next
+}
+
 function validateReading(mode, raw) {
-  if (raw == null || raw === '') return null
+  if (raw == null || String(raw).trim() === '') return null
   const value = Number(raw)
   if (!Number.isFinite(value) || value < 0 || value > MAX_USAGE_READING) return `${mode} must be a bounded non-negative number.`
   if (mode === 'cycles' && !Number.isInteger(value)) return 'cycles must be a whole number.'
   return null
 }
 
-export function validateItemDraft(item = {}) {
+export function validateItemDraft(item = {}, { requireOwnershipFields = false } = {}) {
   const errors = {}
   const name = String(item.name ?? '').trim()
   if (!name) errors.name = 'Item name is required.'
@@ -130,6 +153,15 @@ export function validateItemDraft(item = {}) {
     if (unsupported) errors.measurements = `${unsupported} is not supported for ${contract.label}.`
   }
 
+  const requiresOwnership = requireOwnershipFields && requiresUsageAndPurchase(selectedType?.value)
+  if (requiresOwnership && measurements.length === 0) errors.measurements = 'Choose at least one usage tracking type.'
+  if (requiresOwnership) {
+    const rawPrice = item.purchasePrice
+    const price = Number(rawPrice)
+    if (rawPrice == null || String(rawPrice).trim() === '') errors.purchasePrice = 'Purchase price is required.'
+    else if (!Number.isFinite(price) || price < 0 || price > 999999999999.99 || Math.abs(price * 100 - Math.round(price * 100)) > 1e-8) errors.purchasePrice = 'Purchase price must be a non-negative amount with no more than two decimal places.'
+  }
+
   if (item.year != null && item.year !== '') {
     const year = Number(item.year)
     if (!Number.isInteger(year) || year < 1800 || year > 2200) errors.year = 'Year must be a whole number between 1800 and 2200.'
@@ -144,11 +176,15 @@ export function validateItemDraft(item = {}) {
   const usage = item.currentUsage || {}
   for (const mode of MEASUREMENT_TYPES) {
     const raw = usage[mode]
-    if (raw != null && raw !== '' && !measurements.includes(mode)) {
+    if (raw != null && String(raw).trim() !== '' && !measurements.includes(mode)) {
       readingErrors.push(`Select ${mode === 'miles' ? 'Miles' : mode[0].toUpperCase() + mode.slice(1)} before entering its current reading.`)
       continue
     }
     if (measurements.includes(mode)) {
+      if (requiresOwnership && (raw == null || String(raw).trim() === '')) {
+        readingErrors.push(`Current ${mode} is required.`)
+        continue
+      }
       const error = validateReading(mode, raw)
       if (error) readingErrors.push(error)
     }

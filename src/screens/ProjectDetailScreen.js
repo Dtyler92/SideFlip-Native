@@ -14,6 +14,7 @@ import { openGoalCreation } from './goalCreationNavigation'
 import { createDescriptionRequest, needsDescriptionPreview, normalizeListingSelection } from './listingGeneratorModel'
 import { transferProjectToMyStuffV3 } from '../lib/myStuffClient'
 import { hasProjectVehicleDetailsChanged } from '../domain/vinCreateModel'
+import { resolveProjectNotesSaveResponse } from './projectNotesModel'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -59,14 +60,22 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [showDescriptionPreview, setShowDescriptionPreview] = useState(false)
   const [selectedListingStyle, setSelectedListingStyle] = useState('normal')
   const [selectedHumorLevel, setSelectedHumorLevel] = useState('balanced')
+  const [sellerBrief, setSellerBrief] = useState('')
   const [activeGoals, setActiveGoals] = useState([])
   const [vehicleDetails, setVehicleDetails] = useState(EMPTY_VEHICLE_DETAILS)
   const [equipmentIdentifiers, setEquipmentIdentifiers] = useState({ modelNumber:'', serialNumber:'' })
   const [showVehicleDetails, setShowVehicleDetails] = useState(false)
   const [savingVehicleDetails, setSavingVehicleDetails] = useState(false)
+  const [projectNotes, setProjectNotes] = useState('')
+  const [savingNotes, setSavingNotes] = useState(false)
   const [showAssignGoal, setShowAssignGoal] = useState(false)
   const vehicleDetailsInFlight = useRef(false)
   const equipmentIdentifiersInFlight = useRef(false)
+  const notesInFlight = useRef(false)
+  const notesDirty = useRef(false)
+  const notesEditVersion = useRef(0)
+  const notesSaveGeneration = useRef(0)
+  const activeProjectId = useRef(projectId)
   const goalLinkMutationId = useRef(createMutationId())
   const transferMutationId = useRef(createMutationId())
   const projectLoadGeneration = useRef(0)
@@ -94,6 +103,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
       return
     }
     setProject(projectResult.data)
+    if (!notesDirty.current) setProjectNotes(projectResult.data.notes || '')
     setVehicleDetails({
       vin: projectResult.data.vin || '',
       year: projectResult.data.vehicle_year == null ? '' : String(projectResult.data.vehicle_year),
@@ -110,6 +120,35 @@ export default function ProjectDetailScreen({ navigation, route }) {
     else setActiveGoals(goalResult.data || [])
     setLoading(false)
   }
+
+  useEffect(() => {
+    activeProjectId.current = projectId
+    notesDirty.current = false
+    notesInFlight.current = false
+    notesEditVersion.current += 1
+    notesSaveGeneration.current += 1
+    generationRequestRef.current += 1
+    generationInFlightRef.current = false
+    generationAbortRef.current?.abort()
+    generationAbortRef.current = null
+    goalLinkMutationId.current = createMutationId()
+    transferMutationId.current = createMutationId()
+    setProject(null)
+    setLoading(true)
+    setProjectNotes('')
+    setSavingNotes(false)
+    setSellerBrief('')
+    setListingText('')
+    setGeneratedPreview('')
+    setGeneratedPreviewSelection(null)
+    setShowListingModal(false)
+    setShowDescriptionPreview(false)
+    setGeneratorStep(null)
+    setGeneratingListing(false)
+    setVehicleDetails(EMPTY_VEHICLE_DETAILS)
+    setEquipmentIdentifiers({ modelNumber:'', serialNumber:'' })
+    setShowVehicleDetails(false)
+  }, [projectId])
 
   useEffect(() => {
     load()
@@ -246,6 +285,48 @@ export default function ProjectDetailScreen({ navigation, route }) {
     } finally {
       equipmentIdentifiersInFlight.current = false
       setSavingVehicleDetails(false)
+    }
+  }
+
+  async function saveProjectNotes() {
+    if (notesInFlight.current) return
+    const notes = projectNotes.trim()
+    if (notes.length > 4000) return Alert.alert('Notes are too long', 'Keep Project notes to 4,000 characters or fewer.')
+    const targetProjectId = projectId
+    const savedEditVersion = notesEditVersion.current
+    const saveRequest = ++notesSaveGeneration.current
+    notesInFlight.current = true
+    setSavingNotes(true)
+    try {
+      const { data, error } = await supabase.from('projects').update({ notes: notes || null }).eq('id',targetProjectId).eq('user_id',user.id).select('notes').single()
+      if (error) throw error
+      const resolution = resolveProjectNotesSaveResponse({
+        targetProjectId,
+        currentProjectId:activeProjectId.current,
+        saveRequest,
+        currentSaveRequest:notesSaveGeneration.current,
+        savedEditVersion,
+        currentEditVersion:notesEditVersion.current,
+      })
+      if (!resolution.applyProject) return
+      const persistedNotes = data?.notes || ''
+      setProject(current=>current?{...current,notes:persistedNotes || null}:current)
+      if (resolution.replaceDraft) {
+        notesDirty.current = false
+        setProjectNotes(persistedNotes)
+        Alert.alert('Notes saved', 'Your Project notes were updated.')
+      } else {
+        Alert.alert('Earlier notes saved', 'Your newer edits are still here. Tap Save Notes again when you are ready.')
+      }
+    } catch (error) {
+      if (targetProjectId === activeProjectId.current && saveRequest === notesSaveGeneration.current) {
+        Alert.alert('Could not save notes', error.message || 'Your notes are still here. Please try again.')
+      }
+    } finally {
+      if (targetProjectId === activeProjectId.current && saveRequest === notesSaveGeneration.current) {
+        notesInFlight.current = false
+        setSavingNotes(false)
+      }
     }
   }
 
@@ -420,6 +501,13 @@ export default function ProjectDetailScreen({ navigation, route }) {
 
   function beginDescriptionGenerator() {
     if (generatingListing || generationInFlightRef.current) return
+    setGeneratorStep('brief')
+  }
+
+  function continueDescriptionGenerator() {
+    const brief = sellerBrief.trim()
+    if (!brief) return Alert.alert('Add buyer details', 'Briefly describe the condition and anything else a buyer should know.')
+    setSellerBrief(brief)
     setGeneratorStep('style')
   }
 
@@ -469,7 +557,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
 
     const selection = normalizeListingSelection(style, style === 'funny' ? humorLevel : null)
     const hadExistingDescription = needsDescriptionPreview(listingTextRef.current)
-    const requestBody = createDescriptionRequest(projectId, selection.style, selection.humorLevel, listingTextRef.current)
+    const requestBody = createDescriptionRequest(projectId, selection.style, selection.humorLevel, listingTextRef.current, sellerBrief)
     const request = ++generationRequestRef.current
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 25_000)
@@ -528,7 +616,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
     captureEvent('ai_listing_accepted', analyticsForSelection(producingSelection.style, producingSelection.humorLevel, { had_existing_description: generatedPreviewSelection?.hadExistingDescription ?? true }))
   }
 
-  if (loading) return <View style={{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#FAFAF7'}}><ActivityIndicator color={ACCENT} /></View>
+  if (loading || (project && project.id !== projectId)) return <View style={{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#FAFAF7'}}><ActivityIndicator color={ACCENT} /></View>
   if (!project) return <View style={{flex:1,padding:24}}><Text>Project not found.</Text></View>
 
   const totalInvested = getTotalInvested(project)
@@ -581,14 +669,6 @@ export default function ProjectDetailScreen({ navigation, route }) {
             </View>
           )}
         </View>
-
-        {/* Notes */}
-        {project.notes && (
-          <>
-            <Text style={s.sectionTitle}>Notes</Text>
-            <View style={s.card}><Text style={s.notesText}>{project.notes}</Text></View>
-          </>
-        )}
 
         {/* Expenses */}
         <View style={s.expenseSectionHeader}>
@@ -650,6 +730,24 @@ export default function ProjectDetailScreen({ navigation, route }) {
             </View>
           </View>
         )}
+
+        <Text style={s.sectionTitle}>Notes</Text>
+        <View style={s.card}>
+          <TextInput
+            style={[s.input,s.notesInput]}
+            value={projectNotes}
+            onChangeText={value=>{notesEditVersion.current+=1;notesDirty.current=true;setProjectNotes(value)}}
+            placeholder="Condition, work still needed, or anything else to remember..."
+            placeholderTextColor="#A8A49E"
+            multiline
+            maxLength={4000}
+            textAlignVertical="top"
+            accessibilityLabel="Project notes"
+          />
+          <TouchableOpacity style={[s.btn,{marginTop:12},savingNotes&&s.btnDisabled]} onPress={saveProjectNotes} disabled={savingNotes} accessibilityRole="button" accessibilityLabel="Save Notes" accessibilityState={{disabled:savingNotes,busy:savingNotes}}>
+            {savingNotes?<ActivityIndicator color="#fff" size="small"/>:<Text style={s.btnText}>Save Notes</Text>}
+          </TouchableOpacity>
+        </View>
 
         {VIN_PROJECT_CATEGORIES.has(project.category)&&<><Text style={s.sectionTitle}>Vehicle details</Text>
         <View style={s.card}>
@@ -912,8 +1010,27 @@ export default function ProjectDetailScreen({ navigation, route }) {
             {generatorStep !== null && (
               <View style={s.generatorOverlay} accessibilityViewIsModal importantForAccessibility="yes">
                 <ScrollView style={s.generatorCard} contentContainerStyle={[s.generatorCardContent, { paddingBottom: generatorCardPaddingBottom }]} keyboardShouldPersistTaps="handled" bounces={false}>
-                  <Text style={s.generatorTitle}>{generatorStep === 'humor' ? 'How funny?' : 'Choose a style'}</Text>
-                  {generatorStep === 'style' ? (
+                  <Text style={s.generatorTitle}>{generatorStep === 'brief' ? 'What should buyers know?' : generatorStep === 'humor' ? 'How funny?' : 'Choose a style'}</Text>
+                  {generatorStep === 'brief' ? (
+                    <>
+                      <Text style={s.generatorBriefHint}>Briefly describe the condition and anything else you want the buyer to know. The generator will use only the facts you provide.</Text>
+                      <TextInput
+                        style={[s.listingInput,s.generatorBriefInput]}
+                        value={sellerBrief}
+                        onChangeText={setSellerBrief}
+                        placeholder="Example: Runs well, small scratch on the left side, clean title, and the tires are one year old."
+                        placeholderTextColor="#A8A49E"
+                        multiline
+                        maxLength={2000}
+                        textAlignVertical="top"
+                        accessibilityLabel="Buyer details and condition"
+                        autoFocus
+                      />
+                      <TouchableOpacity style={[s.modalShareBtn,!sellerBrief.trim()&&s.btnDisabled]} disabled={!sellerBrief.trim()} onPress={continueDescriptionGenerator} accessibilityRole="button" accessibilityLabel="Continue to listing style">
+                        <Text style={s.modalShareBtnText}>Continue</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : generatorStep === 'style' ? (
                     <>
                       {LISTING_STYLES.map(({ value, label }) => (
                         <TouchableOpacity
@@ -985,7 +1102,7 @@ const s = StyleSheet.create({
   vehicleDetailsToggle:{fontSize:12,fontWeight:'700',color:ACCENT},
   vehicleDetailsBody:{borderTopWidth:1,borderTopColor:'#F0EDE8',marginTop:12,paddingTop:7},
   vehicleDetailsBodyHidden:{display:'none'},
-  notesText:{fontSize:14,color:'#1A1917',lineHeight:22},
+  notesInput:{minHeight:110,textAlignVertical:'top'},
   emptyText:{fontSize:13,color:'#A8A49E',textAlign:'center',paddingVertical:8},
   expenseRow:{flexDirection:'row',alignItems:'center',paddingVertical:10,borderBottomWidth:1,borderBottomColor:'#F0EDE8'},
   expenseEditArea:{flex:1,flexDirection:'row',alignItems:'center'},
@@ -1042,6 +1159,8 @@ const s = StyleSheet.create({
   generatorCard:{maxHeight:'85%',backgroundColor:'#fff',borderTopLeftRadius:22,borderTopRightRadius:22},
   generatorCardContent:{padding:20,paddingBottom:34},
   generatorTitle:{fontSize:20,fontWeight:'800',color:'#1A1917',textAlign:'center',marginBottom:16},
+  generatorBriefHint:{fontSize:13,color:'#6B665E',lineHeight:19,marginBottom:12},
+  generatorBriefInput:{minHeight:130},
   generatorChoice:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderWidth:1,borderColor:'#E8E4DE',borderRadius:12,padding:16,marginBottom:10,backgroundColor:'#FAFAF7'},
   generatorChoiceRecommended:{borderColor:ACCENT,backgroundColor:'#FFF2EE'},
   generatorChoiceText:{fontSize:16,fontWeight:'700',color:'#1A1917'},

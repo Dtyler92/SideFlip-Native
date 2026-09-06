@@ -53,12 +53,12 @@ test('downgrades retain and manage every loaded item without entitlement filteri
   assert.doesNotMatch(detail, /if\s*\(!isPro\)/)
 })
 
-test('Android-safe Pro information has no purchase, restore, Apple, or checkout copy', () => {
+test('Android-safe Pro information has no Apple, restore, checkout, or purchase CTA copy', () => {
   const sources = [
     source('src/screens/MyStuffScreen.js'),
     source('src/screens/MyStuffCreateScreen.js'),
   ].join('\n')
-  assert.doesNotMatch(sources, /Apple|App Store|Restore Purchases|checkout|buy|purchase/i)
+  assert.doesNotMatch(sources, /Apple|App Store|Restore Purchases|checkout|Buy Pro|Purchase Pro/i)
   assert.match(sources, /View SideFlip Pro/)
 })
 

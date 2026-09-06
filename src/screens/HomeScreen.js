@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase'
 const ACCENT = '#C8402F'
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
 const getProfit = p => p.sale_price ? Number(p.sale_price) - getTotalInvested(p) : null
-const ICONS = {mower:'🚜',car:'🚗',motorcycle:'🏍️',atv:'🏎️',boat:'⛵',bicycle:'🚲',watch:'⌚',electronics:'📱',gaming:'🎮',tool:'🔧',exercise:'💪',instrument:'🎸',furniture:'🪑',house:'🏠',other:'📦'}
+const ICONS = {mower:'🚜',car:'🚗',motorcycle:'🏍️',atv:'🏎️',boat:'⛵',airplane:'✈️',bicycle:'🚲',watch:'⌚',electronics:'📱',gaming:'🎮',tool:'🔧',exercise:'💪',instrument:'🎸',furniture:'🪑',house:'🏠',other:'📦'}
 
 export default function HomeScreen({ navigation }) {
   const { user, signOut, isPro, formatMoney } = useAuth()

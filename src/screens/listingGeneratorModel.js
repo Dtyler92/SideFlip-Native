@@ -12,15 +12,17 @@ export function normalizeListingSelection(style, humorLevel) {
   return { style: normalizedStyle, humorLevel: normalizedHumor }
 }
 
-export function createDescriptionRequest(projectId, style, humorLevel, existingDescription = '') {
+export function createDescriptionRequest(projectId, style, humorLevel, existingDescription = '', sellerBrief = '') {
   if (typeof projectId !== 'string' || !projectId.trim()) throw new Error('Project information is missing.')
   const selection = normalizeListingSelection(style, humorLevel)
   const boundedDescription = typeof existingDescription === 'string' ? existingDescription.trim().slice(0, 4000) : ''
+  const boundedBrief = typeof sellerBrief === 'string' ? sellerBrief.trim().slice(0, 2000) : ''
   return {
     projectId: projectId.trim(),
     style: selection.style,
     ...(selection.humorLevel ? { humorLevel: selection.humorLevel } : {}),
     ...(boundedDescription ? { existingDescription: boundedDescription } : {}),
+    ...(boundedBrief ? { sellerBrief: boundedBrief } : {}),
   }
 }
 

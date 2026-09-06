@@ -34,6 +34,18 @@ test('My Stuff analytics dimensions keep current production values', () => {
   })
 })
 
+test('My Stuff analytics dimensions keep current production values including aircraft', () => {
+  assert.deepEqual(sanitizeAnalyticsProperties({
+    item_category: 'aircraft',
+    tracking_mode: 'hours',
+    source_class: 'official',
+  }), {
+    item_category: 'aircraft',
+    tracking_mode: 'hours',
+    source_class: 'official',
+  })
+})
+
 test('native analytics records the actual runtime platform', () => {
   const analytics = source('src/lib/analytics.js')
   assert.match(analytics, /import\s*\{\s*Platform\s*\}\s*from\s*['"]react-native['"]/)

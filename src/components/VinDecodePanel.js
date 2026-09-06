@@ -19,8 +19,8 @@ import {
 const ACCENT = '#C8402F'
 const client = createVinDecodeClient({ auth: supabase.auth })
 
-export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false, operationLock, onOperationLockChange }) {
-  const [expanded, setExpanded] = useState(false)
+export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false, initiallyExpanded = false, operationLock, onOperationLockChange }) {
+  const [expanded, setExpanded] = useState(initiallyExpanded)
   const [decoding, setDecoding] = useState(false)
   const [preview, setPreview] = useState(null)
   const [warnings, setWarnings] = useState([])
@@ -44,9 +44,9 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
     projectConfirmationInFlight.current = false
     setConfirming(false)
     setConfirmed(false)
-    setExpanded(false)
+    setExpanded(initiallyExpanded)
     return () => { requestGate.current.invalidate();confirmationGeneration.current += 1 }
-  }, [subjectType, subjectId])
+  }, [subjectType, subjectId, initiallyExpanded])
 
   function update(next) {
     valuesRef.current = next

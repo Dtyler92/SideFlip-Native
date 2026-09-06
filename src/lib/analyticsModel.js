@@ -37,7 +37,7 @@ const ATTRIBUTION_KEYS = new Map([
 const ATTRIBUTION_PROPERTIES = new Set([...ATTRIBUTION_KEYS.values()])
 const ENUM_PROPERTIES = new Map([
   ['item_category', new Set([
-    'vehicle', 'car', 'truck', 'motorcycle', 'atv', 'side_by_side', 'boat',
+    'vehicle', 'car', 'truck', 'motorcycle', 'atv', 'side_by_side', 'boat', 'airplane', 'aircraft',
     'mower', 'tractor', 'trailer', 'generator', 'rv', 'equipment', 'home',
     'appliance', 'tool', 'electronics', 'recreation', 'other',
   ])],

@@ -15,7 +15,7 @@ const CATEGORIES = [
   {value:'mower',label:'🚜 Lawn Mower'},{value:'car',label:'🚗 Car'},{value:'truck',label:'🛻 Truck'},
   {value:'motorcycle',label:'🏍️ Motorcycle'},{value:'atv',label:'🏎️ ATV / Powersports'},{value:'side_by_side',label:'🏁 Side-by-side'},
   {value:'trailer',label:'🚛 Trailer'},{value:'rv',label:'🚐 RV'},
-  {value:'boat',label:'⛵ Boat'},{value:'bicycle',label:'🚲 Bicycle / E-Bike'},
+  {value:'boat',label:'⛵ Boat'},{value:'airplane',label:'✈️ Airplane'},{value:'bicycle',label:'🚲 Bicycle / E-Bike'},
   {value:'watch',label:'⌚ Watch'},{value:'electronics',label:'📱 Electronics'},
   {value:'gaming',label:'🎮 Gaming / Console'},{value:'tool',label:'🔧 Tool / Equipment'},
   {value:'exercise',label:'💪 Exercise Equipment'},{value:'instrument',label:'🎸 Musical Instrument'},
