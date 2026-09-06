@@ -159,7 +159,7 @@ export function validateItemDraft(item = {}, { requireOwnershipFields = false } 
     const rawPrice = item.purchasePrice
     const price = Number(rawPrice)
     if (rawPrice == null || String(rawPrice).trim() === '') errors.purchasePrice = 'Purchase price is required.'
-    else if (!Number.isFinite(price) || price < 0 || price > 999999999999.99 || Math.abs(price * 100 - Math.round(price * 100)) > 1e-8) errors.purchasePrice = 'Purchase price must be a non-negative amount with no more than two decimal places.'
+    else if (!Number.isFinite(price) || price < 0 || price > 1000000000 || Math.abs(price * 100 - Math.round(price * 100)) > 1e-8) errors.purchasePrice = 'Purchase price must be a non-negative amount with no more than two decimal places.'
   }
 
   if (item.year != null && item.year !== '') {

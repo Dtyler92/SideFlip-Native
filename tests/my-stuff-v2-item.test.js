@@ -46,6 +46,8 @@ test('vehicle-like My Stuff creation requires tracking, current readings, and pu
     const whitespaceReading = validateItemDraft({ ...base, measurements:[mode], purchasePrice:'0', currentUsage:{ [mode]:'   ' } }, { requireOwnershipFields:true })
     assert.match(whitespaceReading.errors.currentUsage, /current/i, itemType)
     assert.equal(validateItemDraft({ ...base, measurements:[mode], purchasePrice:'0', currentUsage:{ [mode]:0 } }, { requireOwnershipFields:true }).ok, true, itemType)
+    assert.equal(validateItemDraft({ ...base, measurements:[mode], purchasePrice:'1000000000', currentUsage:{ [mode]:0 } }, { requireOwnershipFields:true }).ok, true, itemType)
+    assert.match(validateItemDraft({ ...base, measurements:[mode], purchasePrice:'1000000000.01', currentUsage:{ [mode]:0 } }, { requireOwnershipFields:true }).errors.purchasePrice, /non-negative amount/i, itemType)
   }
   assert.equal(requiresUsageAndPurchase('furniture'), false)
 })
