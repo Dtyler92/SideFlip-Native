@@ -164,6 +164,15 @@ test('My Stuff opens on maintenance with expense and transfer actions while deta
   assert.doesNotMatch(experience, /Purchase price remains in Details/)
 })
 
+test('maintenance places current mileage before schedule tabs and omits total invested', () => {
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  const experience = source('src/components/MyStuffV3Experience.js')
+  const maintenance = experience.slice(experience.indexOf("{activeTab==='Maintenance'"), experience.indexOf("{activeTab==='History'"))
+  assert.match(detail, /maintenanceUsageSection=\{<View style=\{s\.card\}>/)
+  assert.ok(maintenance.indexOf('{maintenanceUsageSection}') < maintenance.indexOf('style={s.subtabs}'))
+  assert.doesNotMatch(maintenance, /Total invested/)
+})
+
 test('VIN panels are gated while model and serial fields remain available', () => {
   for (const screen of ['src/screens/MyStuffCreateScreen.js','src/screens/MyStuffDetailScreen.js']) {
     const value = source(screen)

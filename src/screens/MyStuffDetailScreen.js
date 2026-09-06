@@ -480,25 +480,37 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         <TouchableOpacity style={s.archiveItem} onPress={confirmArchive} disabled={saving} accessibilityRole="button" accessibilityLabel={item.archived_at?'Restore My Stuff item':'Archive My Stuff item'} accessibilityState={{disabled:saving}}><Text style={s.archiveItemText}>{item.archived_at?'Restore Item':'Archive Item'}</Text></TouchableOpacity>
         <TouchableOpacity style={s.deleteItem} onPress={confirmDeleteItem} disabled={saving} accessibilityRole="button" accessibilityLabel="Delete My Stuff item" accessibilityState={{disabled:saving}}><Text style={s.deleteItemText}>Delete Item Permanently</Text></TouchableOpacity>
       </View>}
-      <MyStuffV3Experience item={item} definitions={definitions} plannedOccurrences={plannedOccurrences} formatMoney={formatMoney} currency={item.purchase_currency||profileCurrency} activeTab={detailTab} onTabChange={setDetailTab} onRefresh={()=>load({quiet:true,throwOnError:true})} onStartSelling={confirmTransferToProject} transferring={transferInFlight.current} operationLock={itemOperationInFlight} parentBusy={saving||vinConfirmationBusy}/>
+      <MyStuffV3Experience
+        item={item}
+        definitions={definitions}
+        plannedOccurrences={plannedOccurrences}
+        formatMoney={formatMoney}
+        currency={item.purchase_currency||profileCurrency}
+        activeTab={detailTab}
+        onTabChange={setDetailTab}
+        onRefresh={()=>load({quiet:true,throwOnError:true})}
+        onStartSelling={confirmTransferToProject}
+        transferring={transferInFlight.current}
+        operationLock={itemOperationInFlight}
+        parentBusy={saving||vinConfirmationBusy}
+        maintenanceUsageSection={<View style={s.card}>
+          <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>Current usage</Text><Text style={s.muted}>Updating miles or hours immediately refreshes every schedule’s due status.</Text></View>{item.measurements.length>0&&<TouchableOpacity onPress={()=>{resetMutationAttemptState(usageMutationAttempt.current);const type=item.measurements.includes(usage.type)?usage.type:item.measurements[0];setUsage({...EMPTY_USAGE,type,value:item.currentUsage[type]==null?'':String(item.currentUsage[type]),recordedOn:todayDateInput()});setShowUsage(value=>!value)}} accessibilityRole="button" accessibilityLabel={showUsage?'Cancel current usage update':'Update current usage'}><Text style={s.link}>{showUsage?'Cancel':'Update current usage'}</Text></TouchableOpacity>}</View>
+          {item.measurements.length>0&&<View style={s.readingRow}>{item.measurements.map(axis=>{const config=AXES.find(value=>value.key===axis);return <Reading key={axis} label={config?.label||axis} value={item.currentUsage[axis]} suffix={axis==='miles'?'mi':axis==='hours'?'hr':'cycles'}/>})}</View>}
+          {showUsage&&<View>
+            <Text style={s.label}>Measurement</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Current usage measurement">{item.measurements.map(type=><Choice key={type} label={type} selected={usage.type===type} onPress={()=>setUsage(current=>({...current,type,value:item.currentUsage[type]==null?'':String(item.currentUsage[type])}))}/>)}</View>
+            <Field label="Current reading *" value={usage.value} onChangeText={value=>setUsageValue('value',value)} keyboardType="decimal-pad"/>
+            <Field label="Recorded on *" value={usage.recordedOn} onChangeText={value=>setUsageValue('recordedOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
+            <TouchableOpacity style={s.correctionToggle} onPress={()=>setUsageValue('correcting',!usage.correcting)} accessibilityRole="checkbox" accessibilityState={{checked:usage.correcting}}><Text style={s.link}>{usage.correcting?'✓ Correction mode':'Correct the latest reading'}</Text></TouchableOpacity>
+            {usage.correcting&&<><Text style={s.warning}>Corrections append an audit record. They never lower the retained meter column.</Text><Field label="Correction reason *" value={usage.correctionReason} onChangeText={value=>setUsageValue('correctionReason',value)} multiline/></>}
+            <Button label={saving?'Saving…':usage.correcting?'Save Usage Correction':'Save Current Usage'} onPress={saveUsage} disabled={saving}/>
+          </View>}
+          {item.measurements.length===0&&<Text style={s.muted}>Edit Item details to enable miles, hours, or cycles.</Text>}
+        </View>}
+      />
 
       {detailTab==='Maintenance'&&<>
       {v3MaintenanceActive&&<Text style={s.muted}>Complete maintenance through V3 Due Items above. Older schedules remain visible here without a second completion action.</Text>}
       <View style={s.between}><Text style={s.pageSection}>Maintenance schedules</Text><TouchableOpacity onPress={()=>showDefinition?cancelDefinitionEditor():openDefinitionEditor()} accessibilityRole="button" accessibilityLabel={showDefinition?'Cancel maintenance task':'Add maintenance task'}><Text style={s.link}>{showDefinition?'Cancel':'+ Add'}</Text></TouchableOpacity></View>
-
-      <View style={s.card}>
-        <View style={s.between}><View style={s.flex}><Text style={s.scheduleName}>Current usage</Text><Text style={s.muted}>Updating miles or hours immediately refreshes every schedule’s due status.</Text></View>{item.measurements.length>0&&<TouchableOpacity onPress={()=>{resetMutationAttemptState(usageMutationAttempt.current);const type=item.measurements.includes(usage.type)?usage.type:item.measurements[0];setUsage({...EMPTY_USAGE,type,value:item.currentUsage[type]==null?'':String(item.currentUsage[type]),recordedOn:todayDateInput()});setShowUsage(value=>!value)}} accessibilityRole="button" accessibilityLabel={showUsage?'Cancel current usage update':'Update current usage'}><Text style={s.link}>{showUsage?'Cancel':'Update current usage'}</Text></TouchableOpacity>}</View>
-        {item.measurements.length>0&&<View style={s.readingRow}>{item.measurements.map(axis=>{const config=AXES.find(value=>value.key===axis);return <Reading key={axis} label={config?.label||axis} value={item.currentUsage[axis]} suffix={axis==='miles'?'mi':axis==='hours'?'hr':'cycles'}/>})}</View>}
-        {showUsage&&<View>
-          <Text style={s.label}>Measurement</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Current usage measurement">{item.measurements.map(type=><Choice key={type} label={type} selected={usage.type===type} onPress={()=>setUsage(current=>({...current,type,value:item.currentUsage[type]==null?'':String(item.currentUsage[type])}))}/>)}</View>
-          <Field label="Current reading *" value={usage.value} onChangeText={value=>setUsageValue('value',value)} keyboardType="decimal-pad"/>
-          <Field label="Recorded on *" value={usage.recordedOn} onChangeText={value=>setUsageValue('recordedOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
-          <TouchableOpacity style={s.correctionToggle} onPress={()=>setUsageValue('correcting',!usage.correcting)} accessibilityRole="checkbox" accessibilityState={{checked:usage.correcting}}><Text style={s.link}>{usage.correcting?'✓ Correction mode':'Correct the latest reading'}</Text></TouchableOpacity>
-          {usage.correcting&&<><Text style={s.warning}>Corrections append an audit record. They never lower the retained meter column.</Text><Field label="Correction reason *" value={usage.correctionReason} onChangeText={value=>setUsageValue('correctionReason',value)} multiline/></>}
-          <Button label={saving?'Saving…':usage.correcting?'Save Usage Correction':'Save Current Usage'} onPress={saveUsage} disabled={saving}/>
-        </View>}
-        {item.measurements.length===0&&<Text style={s.muted}>Edit Item details to enable miles, hours, or cycles.</Text>}
-      </View>
 
       <Text style={s.pageSection}>Due-state summary</Text>
       {dueStates.length===0?<View style={s.empty}><Text style={s.muted}>No maintenance schedules are due yet.</Text></View>:dueStates.map(value=>{
