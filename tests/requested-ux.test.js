@@ -34,7 +34,14 @@ test('expense labor is mandatory and expenses can be edited later', () => {
   assert.match(detail, /\.from\('expenses'\)\.update/)
 })
 
-test('project expenses use an accessible header plus instead of a bottom add button', () => {
+test('Projects reload whenever the Projects screen regains focus', () => {
+  const home = source('src/screens/HomeScreen.js')
+  assert.match(home, /import \{ useFocusEffect \} from '@react-navigation\/native'/)
+  assert.match(home, /useFocusEffect\(useCallback\(\(\) => \{ load\(\) \}, \[load\]\)\)/)
+  assert.doesNotMatch(home, /useEffect\(\(\) => \{ load\(\) \}, \[load\]\)/)
+})
+
+test('Project expenses use a heading-level plus action instead of a bottom add button', () => {
   const detail = source('src/screens/ProjectDetailScreen.js')
   const expenses = detail.slice(detail.indexOf('{/* Expenses */}'), detail.indexOf('{/* Sales Listing Editor */}'))
   assert.match(expenses, /style=\{s\.expenseSectionHeader\}/)

@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, TextInput, Alert, Image } from 'react-native'
+import { useFocusEffect } from '@react-navigation/native'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -21,7 +22,7 @@ export default function HomeScreen({ navigation }) {
     setRefreshing(false)
   }, [user])
 
-  useEffect(() => { load() }, [load])
+  useFocusEffect(useCallback(() => { load() }, [load]))
 
   const active = projects.filter(p => p.status === 'active')
   const sold = projects.filter(p => p.status === 'sold')
