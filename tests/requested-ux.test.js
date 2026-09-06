@@ -34,6 +34,17 @@ test('expense labor is mandatory and expenses can be edited later', () => {
   assert.match(detail, /\.from\('expenses'\)\.update/)
 })
 
+test('project expenses use an accessible header plus instead of a bottom add button', () => {
+  const detail = source('src/screens/ProjectDetailScreen.js')
+  const expenses = detail.slice(detail.indexOf('{/* Expenses */}'), detail.indexOf('{/* Sales Listing Editor */}'))
+  assert.match(expenses, /style=\{s\.expenseSectionHeader\}/)
+  assert.match(expenses, /accessibilityLabel="Add expense"/)
+  assert.match(expenses, /<Text style=\{s\.expenseAddText\}>\+<\/Text>/)
+  assert.match(expenses, /\{showAddExpense && \(editingExpenseId \|\| project\.status === 'active'\) && \(/)
+  assert.match(detail, /if \(!editingExpenseId && project\.status !== 'active'\)/)
+  assert.doesNotMatch(expenses, />Add Expense<\/Text>/)
+})
+
 test('goal progress transitions from red to green', () => {
   assert.equal(progressColor(0), '#C8402F')
   assert.equal(progressColor(100), '#2D7A4F')

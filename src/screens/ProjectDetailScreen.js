@@ -277,6 +277,10 @@ export default function ProjectDetailScreen({ navigation, route }) {
   }
 
   async function handleAddExpense() {
+    if (!editingExpenseId && project.status !== 'active') {
+      cancelExpense()
+      return Alert.alert('Project is sold', 'New expenses can only be added to active Projects.')
+    }
     const amount = Number(expense.amount)
     const laborHours = roundLaborHours(expense.laborHours)
     if (!expense.description.trim() || !Number.isFinite(amount) || amount <= 0) {
@@ -587,7 +591,12 @@ export default function ProjectDetailScreen({ navigation, route }) {
         )}
 
         {/* Expenses */}
-        <Text style={s.sectionTitle}>Expenses ({project.expenses?.length || 0})</Text>
+        <View style={s.expenseSectionHeader}>
+          <Text style={s.sectionTitle}>Expenses ({project.expenses?.length || 0})</Text>
+          {project.status === 'active' && !showAddExpense && <TouchableOpacity style={s.expenseAddButton} onPress={beginAddExpense} accessibilityRole="button" accessibilityLabel="Add expense" hitSlop={8}>
+            <Text style={s.expenseAddText}>+</Text>
+          </TouchableOpacity>}
+        </View>
         <View style={s.card}>
           {(!project.expenses || project.expenses.length === 0) ? (
             <Text style={s.emptyText}>No expenses yet</Text>
@@ -610,7 +619,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
         </View>
 
         {/* Add expense form */}
-        {showAddExpense && (
+        {showAddExpense && (editingExpenseId || project.status === 'active') && (
           <View style={s.card}>
             <Text style={s.formTitle}>{editingExpenseId ? 'Edit Expense' : 'Add Expense'}</Text>
             <Text style={[s.label,{marginBottom:6}]}>Description</Text>
@@ -696,12 +705,6 @@ export default function ProjectDetailScreen({ navigation, route }) {
         {/* Actions */}
         {project.status === 'active' && (
           <>
-            {!showAddExpense && (
-              <TouchableOpacity style={[s.btn,{backgroundColor:'#F0EDE8',marginBottom:10}]} onPress={beginAddExpense}>
-                <Text style={[s.btnText,{color:'#1A1917'}]}>Add Expense</Text>
-              </TouchableOpacity>
-            )}
-
             {/* Sales Listing Editor */}
             <TouchableOpacity
               style={[s.btn, {backgroundColor:'#1A1917', marginBottom:10}]}
@@ -971,6 +974,9 @@ const s = StyleSheet.create({
   profitLabel:{fontSize:11,color:'#2D7A4F',textTransform:'uppercase',letterSpacing:0.5,marginBottom:2},
   profitAmount:{fontSize:24,fontWeight:'800',color:'#2D7A4F'},
   sectionTitle:{fontSize:13,fontWeight:'700',color:'#8C8880',textTransform:'uppercase',letterSpacing:0.5,marginBottom:8,marginTop:8},
+  expenseSectionHeader:{minHeight:44,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  expenseAddButton:{width:36,height:36,borderRadius:18,borderWidth:1.5,borderColor:ACCENT,backgroundColor:'#FFF2EE',alignItems:'center',justifyContent:'center'},
+  expenseAddText:{fontSize:25,lineHeight:27,fontWeight:'700',color:ACCENT},
   card:{backgroundColor:'#fff',borderRadius:12,padding:16,marginBottom:12,shadowColor:'#000',shadowOpacity:0.04,shadowRadius:8,shadowOffset:{width:0,height:2},elevation:2},
   vehicleDetailsHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',minHeight:44,gap:12},
   vehicleDetailsSummary:{flex:1},
