@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import { adaptSqlItem } from './myStuffAdapters'
 import { createMyStuffMaintenanceApi } from './myStuffMaintenanceApi'
 import { createMyStuffV3Client } from './myStuffV3Client'
+import { excludeTransferredItems } from '../domain/myStuff/transferVisibility'
 
 const maintenanceApi = createMyStuffMaintenanceApi(supabase)
 
@@ -84,16 +85,23 @@ export async function completeMyStuffMaintenance(values) {
   return maintenanceApi.completeLegacySchedule(values)
 }
 
-export async function listMyStuffItemsV2(userId, { includeArchived = true } = {}) {
+export async function listMyStuffItemsV2(userId, { includeArchived = true, excludeTransferred = false } = {}) {
   let query = supabase
     .from('my_stuff_items')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
   if (!includeArchived) query = query.is('archived_at', null)
-  const { data, error } = await query
+  const [itemResult, transferResult] = await Promise.all([
+    query,
+    excludeTransferred
+      ? supabase.from('my_stuff_to_project_transfers').select('item_id').eq('user_id', userId)
+      : Promise.resolve({ data:[], error:null }),
+  ])
+  const { data, error } = itemResult
   if (error) throw error
-  return (data || []).map(adaptSqlItem)
+  if (transferResult.error) throw transferResult.error
+  return excludeTransferredItems(data || [], transferResult.data || []).map(adaptSqlItem)
 }
 
 export async function getMyStuffItemV2(itemId, userId, { asOf = new Date().toISOString() } = {}) {

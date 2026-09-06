@@ -22,7 +22,7 @@ export default function MyStuffScreen({ navigation }) {
     if (!quiet) setLoading(true)
     setError('')
     try {
-      const nextItems = await listMyStuffItemsV2(user.id, { includeArchived: true })
+      const nextItems = await listMyStuffItemsV2(user.id, { includeArchived: true, excludeTransferred: true })
       if (generation !== requestGeneration.current) return
       setItems(nextItems)
     } catch (nextError) {

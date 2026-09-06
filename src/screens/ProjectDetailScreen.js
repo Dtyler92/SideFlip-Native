@@ -62,7 +62,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [activeGoals, setActiveGoals] = useState([])
   const [vehicleDetails, setVehicleDetails] = useState(EMPTY_VEHICLE_DETAILS)
   const [equipmentIdentifiers, setEquipmentIdentifiers] = useState({ modelNumber:'', serialNumber:'' })
-  const [showVehicleDetails, setShowVehicleDetails] = useState(true)
+  const [showVehicleDetails, setShowVehicleDetails] = useState(false)
   const [savingVehicleDetails, setSavingVehicleDetails] = useState(false)
   const [showAssignGoal, setShowAssignGoal] = useState(false)
   const vehicleDetailsInFlight = useRef(false)

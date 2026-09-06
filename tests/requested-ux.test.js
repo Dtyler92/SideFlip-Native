@@ -34,6 +34,32 @@ test('expense labor is mandatory and expenses can be edited later', () => {
   assert.match(detail, /\.from\('expenses'\)\.update/)
 })
 
+test('My Stuff hides items after they are transferred to Projects', () => {
+  const myStuff = source('src/screens/MyStuffScreen.js')
+  const client = source('src/lib/myStuffClient.js')
+  assert.match(myStuff, /listMyStuffItemsV2\(user\.id, \{ includeArchived: true, excludeTransferred: true \}\)/)
+  assert.match(client, /from\('my_stuff_to_project_transfers'\)\.select\('item_id'\)/)
+  assert.match(client, /excludeTransferredItems\(data \|\| \[\], transferResult\.data \|\| \[\]\)/)
+})
+
+test('VIN decoder and Project vehicle details start closed', () => {
+  const decoder = source('src/components/VinDecodePanel.js')
+  const detail = source('src/screens/ProjectDetailScreen.js')
+  assert.match(decoder, /const \[expanded, setExpanded\] = useState\(false\)/)
+  assert.match(decoder, /accessibilityLabel=\{expanded \? 'Close VIN decoder' : 'Open VIN decoder'\}/)
+  assert.match(decoder, /accessibilityState=\{\{ expanded \}\}/)
+  assert.match(detail, /const \[showVehicleDetails, setShowVehicleDetails\] = useState\(false\)/)
+})
+
+test('Maintenance shows an open current-usage editor with mileage-specific copy', () => {
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  assert.match(detail, /const \[showUsage,setShowUsage\]=useState\(true\)/)
+  assert.match(detail, /\{showUsage&&item\.measurements\.length>0&&<View>/)
+  assert.match(detail, /usage\.type==='miles'\?'Updated mileage \*'/)
+  assert.match(detail, /usage\.type==='miles'\?'Save Mileage'/)
+  assert.match(detail, /setShowUsage\(true\)/)
+})
+
 test('Projects reload whenever the Projects screen regains focus', () => {
   const home = source('src/screens/HomeScreen.js')
   assert.match(home, /import \{ useFocusEffect \} from '@react-navigation\/native'/)

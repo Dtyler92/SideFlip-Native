@@ -20,6 +20,7 @@ const ACCENT = '#C8402F'
 const client = createVinDecodeClient({ auth: supabase.auth })
 
 export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false, operationLock, onOperationLockChange }) {
+  const [expanded, setExpanded] = useState(false)
   const [decoding, setDecoding] = useState(false)
   const [preview, setPreview] = useState(null)
   const [warnings, setWarnings] = useState([])
@@ -43,6 +44,7 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
     projectConfirmationInFlight.current = false
     setConfirming(false)
     setConfirmed(false)
+    setExpanded(false)
     return () => { requestGate.current.invalidate();confirmationGeneration.current += 1 }
   }, [subjectType, subjectId])
 
@@ -185,7 +187,11 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
   const hasBlankSuggestions = entries.some(([, detail]) => detail.status === 'suggested')
 
   return <View style={s.panel}>
-    <Text style={s.title}>VIN Decoder <Text style={s.basic}>BASIC</Text></Text>
+    <TouchableOpacity style={s.titleRow} onPress={()=>setExpanded(value=>!value)} accessibilityRole="button" accessibilityLabel={expanded ? 'Close VIN decoder' : 'Open VIN decoder'} accessibilityState={{ expanded }}>
+      <Text style={s.title}>VIN Decoder <Text style={s.basic}>BASIC</Text></Text>
+      <Text style={s.chevron}>{expanded?'⌃':'⌄'}</Text>
+    </TouchableOpacity>
+    {expanded&&<>
     <Text style={s.hint}>Basic NHTSA decode is available to signed-in Free and Pro accounts. {autoFillBlanks ? 'Blank fields fill after decoding; review and edit every value before confirmation.' : 'Decoded values are an unconfirmed editable review and never save automatically.'}</Text>
     <Text style={s.label}>VIN / identifier</Text>
     <TextInput
@@ -221,6 +227,7 @@ export default function VinDecodePanel({ subjectType, subjectId, isPro, values, 
       {(subjectType==='my_stuff_item'||(subjectType==='project'&&typeof onConfirmDecoded==='function'))&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{confirmed?'Vehicle Confirmed':'Confirm Vehicle'}</Text></TouchableOpacity>}
       {subjectType==='my_stuff_item'&&<Text style={s.hint}>Confirmation saves identity only. Research is not available yet, so this queues zero research jobs.</Text>}
     </View>}
+    </>}
   </View>
 }
 
@@ -234,7 +241,7 @@ function defaultLabel(field) {
 
 const s = StyleSheet.create({
   panel:{marginTop:14,paddingTop:14,borderTopWidth:1,borderTopColor:'#E8E4DE'},
-  title:{fontSize:16,fontWeight:'800',color:'#1A1917'},basic:{fontSize:11,color:'#2D7A4F'},
+  titleRow:{minHeight:44,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},title:{fontSize:16,fontWeight:'800',color:'#1A1917'},basic:{fontSize:11,color:'#2D7A4F'},chevron:{fontSize:22,color:'#6B665E',fontWeight:'700'},
   hint:{fontSize:12,color:'#6B665E',lineHeight:17,marginTop:5},
   label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:12,marginBottom:5},
   input:{borderWidth:1,borderColor:'#D7D2CB',borderRadius:10,padding:12,fontSize:15,color:'#1A1917',backgroundColor:'#fff'},

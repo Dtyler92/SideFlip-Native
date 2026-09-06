@@ -161,10 +161,10 @@ test('non-VIN Projects keep editable model and serial identification without a V
   assert.match(detail, /accessibilityLabel=\{label\}/)
 })
 
-test('Project Detail confirms decoded transmission into expandable vehicle details before compressing', () => {
+test('Project Detail keeps VIN details closed by default and compresses again after confirmation', () => {
   const detail = source('src/screens/ProjectDetailScreen.js')
   const panel = source('src/components/VinDecodePanel.js')
-  assert.match(detail, /const \[showVehicleDetails, setShowVehicleDetails\] = useState\(true\)/)
+  assert.match(detail, /const \[showVehicleDetails, setShowVehicleDetails\] = useState\(false\)/)
   assert.match(detail, /accessibilityState=\{\{ expanded: showVehicleDetails \}\}/)
   assert.match(detail, /onPress=\{\(\) => setShowVehicleDetails\(current => !current\)\}/)
   assert.match(detail, /<ProjectVehicleField label="Transmission type" value=\{vehicleDetails\.transmission\}[^\n]+maxLength=\{200\}/)
