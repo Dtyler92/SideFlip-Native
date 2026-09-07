@@ -68,7 +68,7 @@ test('project listing editor exposes the requested quick style and preview flow'
   assert.match(detail, /had_existing_description: generatedPreviewSelection\?\.hadExistingDescription \?\? true/)
   assert.match(detail, /accessibilityState=\{\{ selected:/)
   assert.match(detail, /accessibilityLabel="Generated description preview"/)
-  assert.match(detail, /<ScrollView style=\{s\.generatorCard\}/)
+  assert.match(detail, /<FocusAwareScrollView style=\{s\.generatorCard\}/)
   assert.match(detail, /accessibilityElementsHidden=\{generatorStep !== null\}/)
   assert.match(detail, /importantForAccessibility=\{generatorStep !== null \? 'no-hide-descendants' : 'auto'\}/)
   assert.match(detail, /accessibilityViewIsModal importantForAccessibility="yes"/)
