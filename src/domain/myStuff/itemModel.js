@@ -79,6 +79,12 @@ export function supportsVinDecoder(itemType) {
   return VIN_ITEM_TYPE_SET.has(getItemTypeOption(itemType)?.value || '')
 }
 
+export function requiresResearchIdentityReconfirmation(previousItemType, nextItemType) {
+  const previous = getItemTypeOption(previousItemType)?.value
+  const next = getItemTypeOption(nextItemType)?.value
+  return previous !== next && VIN_ITEM_TYPE_SET.has(previous) && VIN_ITEM_TYPE_SET.has(next)
+}
+
 export function requiresUsageAndPurchase(itemType) {
   return USAGE_AND_PURCHASE_REQUIRED_TYPES.has(getItemTypeOption(itemType)?.value || '')
 }

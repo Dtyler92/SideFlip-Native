@@ -147,7 +147,7 @@ test('V2 item save finalizes retry state before a separately reported refresh fa
   const saveItem = detail.slice(start, end)
   assert.match(saveItem, /runMutationThenRefresh\(/)
   assert.match(saveItem, /mutate:\(\)=>updateMyStuffItemV2\(wirePayload,mutationId\)/)
-  assert.match(saveItem, /onMutationSuccess:\(\)=>\{resetMutationAttemptState\(itemMutationAttempt\.current\);setEditing\(false\)\}/)
+  assert.match(saveItem,/onMutationSuccess:\(\)=>\{resetMutationAttemptState\(itemMutationAttempt\.current\);if\(invalidatesResearchIdentity\)setResearchConfirmationInvalidated\(true\);setEditing\(false\)\}/)
   assert.match(saveItem, /refresh:\(\)=>load\(\{quiet:true,throwOnError:true\}\)/)
   assert.match(saveItem, /Item details saved, but refresh failed/)
   assert.doesNotMatch(saveItem, /await updateMyStuffItemV2\(wirePayload,mutationId\)/)

@@ -1,0 +1,119 @@
+function firstObject(value) {
+  if (Array.isArray(value)) return value[0] || null
+  return value && typeof value === 'object' ? value : null
+}
+
+function number(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function candidatePayload(row = {}) {
+  const value = row.candidate && typeof row.candidate === 'object' ? row.candidate : row
+  return {
+    ...value,
+    id: row.id || value.id || value.candidateId || value.candidate_id,
+    name: value.name || 'Maintenance task',
+    action: value.action || value.service_action || 'service',
+    profile: value.profile || value.active_profile || 'normal',
+    dueSemantics: value.dueSemantics || value.due_semantics || 'whichever_first',
+    intervalMiles: number(value.intervalMiles ?? value.interval_miles),
+    intervalHours: number(value.intervalHours ?? value.interval_hours),
+    intervalCycles: number(value.intervalCycles ?? value.interval_cycles),
+    intervalMonths: number(value.intervalMonths ?? value.interval_months),
+    evidenceIds: Array.isArray(value.evidenceIds) ? value.evidenceIds : Array.isArray(value.evidence_ids) ? value.evidence_ids : [],
+    uncertainty: value.uncertainty || 'Not specified',
+  }
+}
+
+function evidencePayload(row = {}) {
+  return {
+    ...row,
+    key: row.evidence_key || row.evidenceKey || row.key || row.id,
+    title: row.title || 'Manufacturer source',
+    canonicalUrl: row.canonical_url || row.canonicalUrl || '',
+    exactExcerpt: row.exact_excerpt || row.exactExcerpt || '',
+    accessedOn: row.accessed_on || row.accessed_at || row.accessedAt || '',
+    sourceClass: row.source_class || row.sourceClass || '',
+  }
+}
+
+export function normalizeResearchStatus(value) {
+  const row = firstObject(value)
+  if (!row) return null
+  const job = firstObject(row.job) || row
+  return {
+    ...row,
+    ...job,
+    jobId: job.id || job.job_id || row.job_id || null,
+    approvalId: job.approval_id || job.approvalId || row.approval_id || row.approvalId || null,
+    status: job.status || row.status || null,
+    errorCode: job.last_error_code || job.error_code || job.errorCode || row.last_error_code || row.error_code || null,
+  }
+}
+
+export function normalizeResearchReview(value) {
+  const root = firstObject(value) || {}
+  const job = normalizeResearchStatus(root.job || root)
+  return {
+    ...root,
+    jobId: job?.jobId || root.job_id || null,
+    status: job?.status || root.status || null,
+    approvalId: root.approval_id || root.approvalId || root.approval?.id || null,
+    candidates: (Array.isArray(root.candidates) ? root.candidates : []).map((row,index) => ({ ...candidatePayload(row),id:candidatePayload(row).id || `candidate-${index+1}` })),
+    evidence: (Array.isArray(root.evidence) ? root.evidence : []).map(evidencePayload),
+    unresolved: Array.isArray(root.unresolved) ? root.unresolved : [],
+  }
+}
+
+export function evidenceForCandidate(candidate, evidence = []) {
+  const keys = new Set(candidate?.evidenceIds || [])
+  return evidence.filter(row => keys.has(row.key))
+}
+
+export function formatResearchInterval(candidate = {}) {
+  const values = []
+  if (candidate.intervalMiles) values.push(`${candidate.intervalMiles.toLocaleString()} mi`)
+  if (candidate.intervalHours) values.push(`${candidate.intervalHours.toLocaleString()} hr`)
+  if (candidate.intervalCycles) values.push(`${candidate.intervalCycles.toLocaleString()} cycles`)
+  if (candidate.intervalMonths) values.push(`${candidate.intervalMonths.toLocaleString()} months`)
+  if (!values.length) return 'Interval unavailable'
+  return `Every ${values.join(candidate.dueSemantics === 'all' ? ' and ' : ' or ')}`
+}
+
+export function researchCanPoll(status) {
+  return status === 'queued' || status === 'running'
+}
+
+export function researchSourceClassLabel(sourceClass) {
+  if (sourceClass === 'manufacturer') return 'Manufacturer source'
+  if (sourceClass === 'authorized_dealer') return 'Authorized-dealer source'
+  return 'Unverified source'
+}
+
+export function researchSourceAccessibilityLabel(source = {}) {
+  return `${researchSourceClassLabel(source.sourceClass)}: ${source.title || 'Untitled source'}`
+}
+
+export function createResearchRequestGate() {
+  let generation = 0
+  let itemId = null
+  let active = false
+  return {
+    activate(nextItemId) {
+      generation += 1
+      itemId = nextItemId
+      active = true
+    },
+    invalidate() {
+      generation += 1
+      active = false
+    },
+    snapshot(expectedItemId = itemId) {
+      return { generation, itemId:expectedItemId }
+    },
+    isCurrent(snapshot, renderedItemId = itemId, renderedActive = active) {
+      return Boolean(active && renderedActive && snapshot && snapshot.generation === generation && snapshot.itemId === itemId && snapshot.itemId === renderedItemId)
+    },
+  }
+}
