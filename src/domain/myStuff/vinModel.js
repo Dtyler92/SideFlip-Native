@@ -21,7 +21,7 @@ export const VIN_SUGGESTION_FIELDS = Object.freeze([
 ])
 
 export const VIN_CONFIRMATION_PERSISTENCE_FIELDS = Object.freeze([
-  'vin', 'year', 'manufacturer', 'make', 'model', 'trim', 'engine', 'engineModel',
+  'vin', 'year', 'manufacturer', 'make', 'model', 'trim', 'series', 'engine', 'engineModel',
   'engineDisplacementLiters', 'engineCylinders', 'transmission', 'drivetrain', 'fuelType',
   'vehicleType', 'bodyStyle', 'plantName', 'plantCountry', 'vehicleMarket',
 ])

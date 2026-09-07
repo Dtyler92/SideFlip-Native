@@ -98,6 +98,7 @@ test('confirmation snapshot merges decoded blanks, preserves edits, normalizes V
     model: 'Accord',
     transmission: 'Automatic',
     engineModel: 'K24A4',
+    series: 'EX',
   })
 
   assert.deepEqual(buildVehicleConfirmationSnapshot(values, preview.fields), {
@@ -106,6 +107,7 @@ test('confirmation snapshot merges decoded blanks, preserves edits, normalizes V
     make: 'Owner corrected make',
     model: 'Accord',
     engineModel: 'K24A4',
+    series: 'EX',
     transmission: 'Automatic',
   })
 })
