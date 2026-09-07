@@ -97,6 +97,7 @@ test('screen names contain no record identifiers', () => {
   assert.equal(normalizeScreenName('ProjectDetail'), 'project_detail')
   assert.equal(normalizeScreenName('SellProject'), 'sell_project')
   assert.equal(normalizeScreenName('GoalCreate'), 'goal_create')
+  assert.equal(normalizeScreenName('Analyze'), 'analyze')
   assert.equal(normalizeScreenName('unexpected-value'), 'unknown')
 })
 

@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { clearSavedAnalyses } from '../lib/analysisStore'
 
 const API_URL = 'https://sideflip.org/api/delete-account'
 const IS_ANDROID = Platform.OS === 'android'
@@ -12,7 +13,7 @@ const BILLING_NOTICE = IS_ANDROID
 
 export default function DeleteAccountScreen({ navigation }) {
   const insets = useSafeAreaInsets()
-  const { signOut } = useAuth()
+  const { user, signOut } = useAuth()
   const [confirmation, setConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
 
@@ -24,8 +25,18 @@ export default function DeleteAccountScreen({ navigation }) {
       const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ confirmation: 'DELETE' }) })
       const body = await response.json().catch(() => ({}))
       if (!response.ok || !body.deleted) throw new Error(body.error || 'Could not delete your account. Please try again.')
-      await signOut()
-      Alert.alert('Account deleted', 'Your SideFlip account and associated app data have been deleted.')
+      let localCleanupFailed = false
+      try { await clearSavedAnalyses(user.id) } catch { localCleanupFailed = true }
+      try { await signOut() } catch { /* The server account is already deleted. */ }
+      if (localCleanupFailed) {
+        Alert.alert('Account deleted, but local cleanup is incomplete', 'Saved analyses may remain on this device. Retry cleanup now or clear SideFlip app storage.', [
+          { text: 'Close', style: 'cancel' },
+          { text: 'Retry Cleanup', onPress: async () => {
+            try { await clearSavedAnalyses(user.id); Alert.alert('Local data removed', 'Saved analyses were removed from this device.') }
+            catch { Alert.alert('Cleanup still incomplete', 'Clear SideFlip app storage from your device settings.') }
+          } },
+        ])
+      } else Alert.alert('Account deleted', 'Your SideFlip account and associated app data have been deleted.')
     } catch (error) {
       Alert.alert('Account not deleted', error.message)
     } finally { setDeleting(false) }

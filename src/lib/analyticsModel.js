@@ -47,7 +47,7 @@ const ENUM_PROPERTIES = new Map([
 const SCREEN_NAMES = {
   Login: 'login', SignUp: 'signup', ForgotPassword: 'forgot_password',
   Onboarding: 'onboarding', Projects: 'projects', Home: 'projects', Main: 'projects',
-  Calculator: 'calculator', Goals: 'goals', Analytics: 'analytics', Settings: 'settings',
+  Analyze: 'analyze', Calculator: 'calculator', Goals: 'goals', Analytics: 'analytics', Settings: 'settings',
   NewProject: 'new_project', ProjectDetail: 'project_detail', SellProject: 'sell_project',
   GoalCreate: 'goal_create', Pro: 'paywall', DeleteAccount: 'delete_account',
 }

@@ -13,7 +13,7 @@ import HomeScreen from './src/screens/HomeScreen'
 import NewProjectScreen from './src/screens/NewProjectScreen'
 import ProjectDetailScreen from './src/screens/ProjectDetailScreen'
 import SellProjectScreen from './src/screens/SellProjectScreen'
-import CalculatorScreen from './src/screens/CalculatorScreen'
+import AnalyzeScreen from './src/screens/AnalyzeScreen'
 import TradeUpGoalsScreen from './src/screens/TradeUpGoalsScreen'
 import GoalCreateScreen from './src/screens/GoalCreateScreen'
 import AnalyticsScreen from './src/screens/AnalyticsScreen'
@@ -73,8 +73,8 @@ function HomeTabs() {
     >
       <Tab.Screen name="Projects" component={HomeScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🔧" focused={focused} />, tabBarLabel: 'Projects' }} />
-      <Tab.Screen name="Calculator" component={CalculatorScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🧮" focused={focused} />, tabBarLabel: 'Calculator' }} />
+      <Tab.Screen name="Analyze" component={AnalyzeScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="📈" focused={focused} />, tabBarLabel: 'Analyze' }} />
       <Tab.Screen name="Goals" component={TradeUpGoalsScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🎯" focused={focused} />, tabBarLabel: 'Goals' }} />
       <Tab.Screen name="Analytics" component={AnalyticsScreen}

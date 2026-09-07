@@ -801,6 +801,14 @@ export default function ProjectDetailScreen({ navigation, route }) {
         </TouchableOpacity>
 
         {/* Actions */}
+        <TouchableOpacity
+          style={[s.btn,{backgroundColor:'#FFF1EC',marginBottom:10,borderWidth:1,borderColor:'#F3C8BD'}]}
+          onPress={()=>navigation.navigate('Main',{screen:'Analyze',params:{projectId}})}
+          accessibilityRole="button"
+          accessibilityLabel="Analyze Flip"
+        >
+          <Text style={[s.btnText,{color:ACCENT}]}>Analyze Flip</Text>
+        </TouchableOpacity>
         {project.status === 'active' && (
           <>
             {/* Sales Listing Editor */}

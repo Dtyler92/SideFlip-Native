@@ -7,6 +7,7 @@ const monetaryScreens = [
   'HomeScreen',
   'AnalyticsScreen',
   'CalculatorScreen',
+  'AnalyzeScreen',
   'NewProjectScreen',
   'ProjectDetailScreen',
   'SellProjectScreen',
@@ -27,11 +28,11 @@ test('sale guidance uses the selected currency symbol instead of hardcoded dolla
   assert.doesNotMatch(source, /greater than \$0|between \$0|Leave \$0/)
 })
 
-test('Android V1.3.3 advances version code while accepted iOS build remains frozen', () => {
+test('Android V1.4.0 advances version code while accepted iOS build remains frozen', () => {
   const app = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'))
-  assert.equal(app.expo.version, '1.3.3')
+  assert.equal(app.expo.version, '1.4.0')
   assert.equal(app.expo.android.package, 'com.sideflip.app')
-  assert.equal(app.expo.android.versionCode, 11)
+  assert.equal(app.expo.android.versionCode, 12)
   assert.equal(app.expo.ios.bundleIdentifier, 'com.sideflip.app')
   assert.equal(app.expo.ios.buildNumber, '17')
 })
