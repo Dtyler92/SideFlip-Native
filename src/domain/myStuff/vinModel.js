@@ -20,6 +20,12 @@ export const VIN_SUGGESTION_FIELDS = Object.freeze([
   'engine', 'bodyClass', 'title', 'name', 'category', 'itemType',
 ])
 
+export const VIN_CONFIRMATION_PERSISTENCE_FIELDS = Object.freeze([
+  'vin', 'year', 'manufacturer', 'make', 'model', 'trim', 'engine', 'engineModel',
+  'engineDisplacementLiters', 'engineCylinders', 'transmission', 'drivetrain', 'fuelType',
+  'vehicleType', 'bodyStyle', 'plantName', 'plantCountry', 'vehicleMarket',
+])
+
 export function normalizeVin(input) {
   return String(input ?? '').trim().toUpperCase().replace(/[ -]/g, '')
 }
@@ -204,6 +210,17 @@ export function decodedVehicleSuggestions(vehicle = {}) {
     drivetrain: vehicle.driveType,
   }
   return Object.fromEntries(Object.entries(mapped).filter(([, value]) => !isBlank(value)))
+}
+
+export function buildVehicleConfirmationSnapshot(values = {}, previewFields = {}) {
+  const merged = applyVinSuggestions(values, previewFields, { mode: 'fill_blanks' })
+  merged.vin = normalizeVin(values.vin)
+  const snapshot = {}
+  for (const field of VIN_CONFIRMATION_PERSISTENCE_FIELDS) {
+    const value = merged[field]
+    if (!isBlank(value)) snapshot[field] = clone(value)
+  }
+  return snapshot
 }
 
 export function applyVinSuggestions(existing = {}, previewFields = {}, { mode = 'selected', fields = [] } = {}) {

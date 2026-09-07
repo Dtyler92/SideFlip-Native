@@ -8,16 +8,27 @@ import { createVinDecodeClient } from '../lib/vinDecodeClient'
 import { hasProjectVehicleDetailsChanged } from '../domain/vinCreateModel'
 import {
   applyVinSuggestions,
+  buildVehicleConfirmationSnapshot,
   createVinDecodeRequestGate,
   decodedVehicleSuggestions,
   maskVin,
   mergeDecodedSuggestions,
   validateVin,
+  VIN_CONFIRMATION_PERSISTENCE_FIELDS,
   VIN_IDENTIFIER_MAX_LENGTHS,
 } from '../domain/myStuff/vinModel'
 
 const ACCENT = '#C8402F'
 const client = createVinDecodeClient({ auth: supabase.auth })
+const ALWAYS_EDITABLE_REVIEW_FIELDS = Object.freeze(['transmission'])
+
+function ensureEditableReviewFields(review, values = {}) {
+  const fields = { ...(review?.fields || {}) }
+  for (const field of ALWAYS_EDITABLE_REVIEW_FIELDS) {
+    fields[field] ||= { status:'manual', existing:values[field] ?? '' }
+  }
+  return { ...review, fields }
+}
 
 export default function VinDecodePanel({ subjectType, subjectId, values, onChange, persistIdentity, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false, initiallyExpanded = false, operationLock, onOperationLockChange }) {
   const [expanded, setExpanded] = useState(initiallyExpanded)
@@ -87,7 +98,7 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
       const merged = mergeDecodedSuggestions(currentValues, supported)
       const next = autoFillBlanks ? merged.values : currentValues
       if (autoFillBlanks) update(next)
-      setPreview({ ...mergeDecodedSuggestions(next, supported), requestVin: request.normalizedVin })
+      setPreview({ ...ensureEditableReviewFields(mergeDecodedSuggestions(next, supported),next), requestVin: request.normalizedVin })
       setWarnings(result.nhtsaWarnings)
       onDecoded?.({ vin: request.normalizedVin, vehicle: result.vehicle })
     } catch (error) {
@@ -103,14 +114,24 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
     if (!preview || preview.requestVin !== validateVin(valuesRef.current?.vin).normalized) return
     const next = applyVinSuggestions(valuesRef.current, preview.fields, { mode: 'fill_blanks' })
     update(next)
-    setPreview(current => current ? { ...mergeDecodedSuggestions(next, decodedVehicleSuggestionsFromFields(current.fields)), requestVin: current.requestVin } : null)
+    refreshPreview(next)
   }
 
   function useSuggestion(field) {
     if (!preview || preview.requestVin !== validateVin(valuesRef.current?.vin).normalized) return
     const next = applyVinSuggestions(valuesRef.current, preview.fields, { fields: [field] })
     update(next)
-    setPreview(current => current ? { ...mergeDecodedSuggestions(next, decodedVehicleSuggestionsFromFields(current.fields)), requestVin: current.requestVin } : null)
+    refreshPreview(next)
+  }
+
+  function editReviewField(field, value) {
+    const next = { ...valuesRef.current, [field]:value }
+    update(next)
+    refreshPreview(next)
+  }
+
+  function refreshPreview(next) {
+    setPreview(current => current ? { ...ensureEditableReviewFields(mergeDecodedSuggestions(next, decodedVehicleSuggestionsFromFields(current.fields)),next), requestVin: current.requestVin } : null)
   }
 
   async function confirmVehicle() {
@@ -141,12 +162,9 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
     if (subjectType !== 'my_stuff_item' || !subjectId) return
     if (typeof persistIdentity !== 'function') return setMessage('Vehicle confirmation is unavailable because item saving is not connected. Save item details manually instead.')
     if (!vinState.canDecode) return setMessage('Decode or manually enter a valid standard VIN before confirming vehicle identity.')
-    const identity = {}
-    for (const field of ['year','make','model','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','transmission','drivetrain']) {
-      const value = valuesRef.current?.[field]
-      if (value !== '' && value != null) identity[field] = value
-    }
-    const snapshot = { vin:vinState.normalized,...identity }
+    if (!preview || preview.requestVin !== vinState.normalized) return setMessage('Decode the current VIN before confirming vehicle identity.')
+    const snapshot = buildVehicleConfirmationSnapshot(valuesRef.current,preview.fields)
+    update({ ...valuesRef.current,...snapshot })
     const generation = ++confirmationGeneration.current
     const mutationId = mutationIdForPayload(confirmationAttempt.current,{ subjectId,identity:snapshot })
     if (operationLock?.current) return setMessage('Wait for the current item update to finish before confirming vehicle identity.')
@@ -157,7 +175,9 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
     try {
       const isCurrent = () => {
         const currentIdentity = { vin:validateVin(valuesRef.current?.vin).normalized }
-        for (const field of ['year','make','model','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','transmission','drivetrain']) currentIdentity[field] = valuesRef.current?.[field]
+        for (const field of VIN_CONFIRMATION_PERSISTENCE_FIELDS) {
+          if (field !== 'vin') currentIdentity[field] = valuesRef.current?.[field]
+        }
         return generation === confirmationGeneration.current && !hasVehicleIdentityChanged(snapshot,currentIdentity)
       }
       const result = await persistThenConfirmVehicleIdentity({
@@ -183,7 +203,7 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
     }
   }
 
-  const entries = preview ? Object.entries(preview.fields).filter(([, detail]) => detail.suggestion != null) : []
+  const entries = preview ? Object.entries(preview.fields).filter(([field, detail]) => detail.suggestion != null || ALWAYS_EDITABLE_REVIEW_FIELDS.includes(field)) : []
   const hasBlankSuggestions = entries.some(([, detail]) => detail.status === 'suggested')
 
   return <View style={s.panel}>
@@ -216,16 +236,17 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
       {entries.length === 0 ? <Text style={s.hint}>No additional vehicle details were returned.</Text> : entries.map(([field, detail]) => <View key={field} style={s.suggestion}>
         <View style={s.suggestionCopy}>
           <Text style={s.suggestionLabel}>{fieldLabels[field] || defaultLabel(field)}</Text>
-          <TextInput style={s.reviewInput} value={String(values?.[field] ?? detail.suggestion ?? '')} onChangeText={value=>update({...valuesRef.current,[field]:value})} accessibilityLabel={`Editable ${fieldLabels[field] || defaultLabel(field)}`}/>
+          <TextInput style={s.reviewInput} value={String(preview.values?.[field] ?? detail.suggestion ?? '')} onChangeText={value=>editReviewField(field,value)} accessibilityLabel={`Editable ${fieldLabels[field] || defaultLabel(field)}`}/>
           {detail.status === 'conflicting' && <Text style={s.conflict}>Decoder: {String(detail.suggestion)} · Unconfirmed</Text>}
           {detail.status === 'suggested' && <Text style={s.unconfirmed}>NHTSA suggestion · Unconfirmed</Text>}
           {detail.status === 'verified' && <Text style={s.verified}>Verified match with current value</Text>}
+          {detail.status === 'manual' && <Text style={s.unconfirmed}>Not returned by NHTSA · enter and verify manually</Text>}
         </View>
         {detail.status === 'conflicting' && <TouchableOpacity onPress={() => useSuggestion(field)} accessibilityRole="button" accessibilityLabel={`Use suggested ${fieldLabels[field] || defaultLabel(field)}`}><Text style={s.use}>Use suggestion</Text></TouchableOpacity>}
       </View>)}
       {hasBlankSuggestions && <TouchableOpacity style={s.fillButton} onPress={fillBlanks} accessibilityRole="button" accessibilityLabel="Fill Blank Fields"><Text style={s.fillText}>Fill Blank Fields</Text></TouchableOpacity>}
-      {(subjectType==='my_stuff_item'||(subjectType==='project'&&typeof onConfirmDecoded==='function'))&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{confirmed?'Vehicle Confirmed':'Confirm Vehicle'}</Text></TouchableOpacity>}
-      {subjectType==='my_stuff_item'&&<Text style={s.hint}>Confirmation saves identity only. Research is not available yet, so this queues zero research jobs.</Text>}
+      {((subjectType==='my_stuff_item'&&!!subjectId)||(subjectType==='project'&&typeof onConfirmDecoded==='function'))&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{confirmed?'Vehicle Confirmed':'Confirm Vehicle'}</Text></TouchableOpacity>}
+      {subjectType==='my_stuff_item'&&!!subjectId&&<Text style={s.hint}>Confirmation saves identity only. Research is not available yet, so this queues zero research jobs.</Text>}
     </View>}
     </>}
   </View>
@@ -236,6 +257,7 @@ function decodedVehicleSuggestionsFromFields(fields) {
 }
 
 function defaultLabel(field) {
+  if (field === 'transmission') return 'Transmission type'
   return field.replace(/([A-Z])/g, ' $1').replace(/^./, value => value.toUpperCase())
 }
 

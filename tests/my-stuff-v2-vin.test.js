@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  buildVehicleConfirmationSnapshot,
   calculateVinCheckDigit,
   isVinCheckDigitApplicable,
   maskVin,
@@ -80,4 +81,31 @@ test('decoded merge deeply isolates nested existing and decoded values', () => {
   assert.deepEqual(existing, { notes: { private: ['keep'] }, model: '' })
   assert.deepEqual(decoded, { model: { label: 'Accord', metadata: { source: ['decoder'] } } })
   assert.notStrictEqual(merged.values.model, merged.fields.model.suggestion)
+})
+
+test('confirmation snapshot merges decoded blanks, preserves edits, normalizes VIN, and omits absent fields', () => {
+  const values = {
+    vin: ' 1hg-cm826 33a004352 ',
+    year: '2003',
+    make: 'Owner corrected make',
+    model: '',
+    transmission: '',
+    plantName: '   ',
+    notes: 'not vehicle identity',
+  }
+  const preview = mergeDecodedSuggestions(values, {
+    make: 'Honda',
+    model: 'Accord',
+    transmission: 'Automatic',
+    engineModel: 'K24A4',
+  })
+
+  assert.deepEqual(buildVehicleConfirmationSnapshot(values, preview.fields), {
+    vin: '1HGCM82633A004352',
+    year: '2003',
+    make: 'Owner corrected make',
+    model: 'Accord',
+    engineModel: 'K24A4',
+    transmission: 'Automatic',
+  })
 })

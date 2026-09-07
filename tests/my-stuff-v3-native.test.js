@@ -221,6 +221,17 @@ test('owned-item update payload persists VIN and every typed confirmation identi
   })
 })
 
+test('VIN confirmation UI merges the decoded review before persistence and is not offered before item creation', () => {
+  const panel = source('src/components/VinDecodePanel.js')
+  const create = source('src/screens/MyStuffCreateScreen.js')
+  assert.match(panel,/buildVehicleConfirmationSnapshot\(valuesRef\.current,preview\.fields\)/)
+  assert.match(panel,/VIN_CONFIRMATION_PERSISTENCE_FIELDS/)
+  assert.doesNotMatch(panel,/for \(const field of \['year','make','model'/)
+  assert.ok(panel.indexOf('persist:persistIdentity') < panel.indexOf('confirm:value=>confirmMyStuffVehicleIdentityV3'))
+  assert.match(panel,/subjectType==='my_stuff_item'&&!!subjectId/)
+  assert.match(create,/Add the item to save and confirm its decoded vehicle identity/)
+})
+
 test('linked service expense edits use only the atomic service-expense RPC and cannot fall through', async () => {
   const calls=[]
   const linked={id:'expense-1',linked_occurrence_id:'occurrence-1'}
@@ -246,8 +257,8 @@ test('service form builds only the exact structured backend service contract', (
   }), {service_name:'Oil change',service_category:'maintenance',service_action:'replace',completed_at:'2026-09-05T12:00:00.000Z',mileage:12000,parts:[{description:'Filter and oil'}],labor:[],vendor:{type:'provider',name:'SideFlip Auto'},warranty:{},notes:'Done'})
 })
 
-test('editing any research-critical typed field invalidates confirmed VIN identity', () => {
-  const confirmed={vin:'1FTFW1E50MFA00001',year:2021,make:'Ford',model:'F-150',engineModel:'GTDI',engineDisplacementLiters:3.5,engineCylinders:6,transmission:'Automatic',drivetrain:'4WD',vehicleMarket:'US'}
+test('editing any persisted confirmation field invalidates confirmed VIN identity', () => {
+  const confirmed={vin:'1FTFW1E50MFA00001',year:2021,make:'Ford',model:'F-150',engine:'3.5L · 6 cylinders',engineModel:'GTDI',engineDisplacementLiters:3.5,engineCylinders:6,transmission:'Automatic',drivetrain:'4WD',vehicleMarket:'US'}
   assert.equal(hasVehicleIdentityChanged(confirmed,{...confirmed}),false)
   for(const field of Object.keys(confirmed)) assert.equal(hasVehicleIdentityChanged(confirmed,{...confirmed,[field]:`${confirmed[field]} changed`}),true,field)
 })
@@ -286,6 +297,8 @@ test('Free decode and identity confirmation are reachable while unapproved resea
   assert.match(vin, /Unconfirmed/)
   assert.match(vin, /Verified/)
   assert.match(vin, /confirmMyStuffVehicleIdentityV3/)
+  assert.match(vin, /ALWAYS_EDITABLE_REVIEW_FIELDS[^]*transmission/)
+  assert.match(vin, /Transmission type/)
   assert.doesNotMatch(vin, /enqueueMyStuffResearchV3|enqueue_my_stuff_research_v3|Confirm Vehicle & Research/)
   assert.match(vin, /Research is not available yet/)
 })

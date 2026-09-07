@@ -76,6 +76,7 @@ export default function MyStuffCreateScreen({ navigation }) {
         autoFillBlanks
         initiallyExpanded
       />}
+      {supportsVinDecoder(draft.itemType) && <Text style={s.help}>Add the item to save and confirm its decoded vehicle identity. No research runs before the item exists.</Text>}
       <Field label="Item name *" value={draft.name || ''} onChangeText={value => setValue('name', value)} placeholder="e.g. Work Truck" maxLength={200} />
       <MyStuffItemTypePicker value={draft.itemType} onChange={setExactType} error={validationErrors.itemType || validationErrors.category} />
       <View style={s.twoColumn}>
@@ -93,8 +94,8 @@ export default function MyStuffCreateScreen({ navigation }) {
       <Field label="Fuel / power type" value={draft.fuelType || ''} onChangeText={value => setValue('fuelType', value)} />
       <Field label="Acquired on" value={draft.acquiredOn || ''} onChangeText={value => setValue('acquiredOn', value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" autoCapitalize="none" />
 
-      <Text style={s.section}>Usage tracking</Text>
-      <Text style={s.help}>{requiresUsageAndPurchase(draft.itemType)?'Choose every measurement that applies and enter its current reading.':'Choose every measurement that applies. You can append readings later.'}</Text>
+      <Text style={s.section}>Usage tracking *</Text>
+      <Text style={s.help}>{requiresUsageAndPurchase(draft.itemType)?'Choose at least one measurement and enter a current reading for every selection.':'Choose at least one measurement. Current readings are optional and can be added later.'}</Text>
       <View style={s.choices} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis => getItemCategoryContract(draft.category)?.measurements.includes(axis.key)).map(axis => <Choice key={axis.key} label={axis.label} selected={draft.measurements.includes(axis.key)} onPress={() => toggleAxis(axis.key)} />)}</View>
       {AXES.filter(axis => draft.measurements.includes(axis.key)).map(axis => <Field key={axis.key} label={`Current ${axis.label.toLowerCase()} ${requiresUsageAndPurchase(draft.itemType)?'*':'(optional)'}`} value={draft[axis.key] || ''} onChangeText={value => setValue(axis.key, value)} keyboardType="decimal-pad" />)}
       <Field label={requiresUsageAndPurchase(draft.itemType)?'Purchase price *':'Purchase price (optional)'} value={draft.purchasePrice || ''} onChangeText={value => setValue('purchasePrice', value)} keyboardType="decimal-pad" placeholder="0.00" />

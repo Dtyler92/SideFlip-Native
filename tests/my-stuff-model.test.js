@@ -12,6 +12,7 @@ import {
   validateCalendarDate,
   validateMaintenanceCompletion,
 } from '../src/screens/myStuffModel.js'
+import { validateItemDraft } from '../src/domain/myStuff/itemModel.js'
 
 test('Free creation gate allows item one, blocks item two, and never hides existing items', () => {
   assert.equal(canCreateMyStuffItem({ isPro: false, itemCount: 0 }), true)
@@ -19,6 +20,18 @@ test('Free creation gate allows item one, blocks item two, and never hides exist
   assert.equal(canCreateMyStuffItem({ isPro: true, itemCount: 8 }), true)
   const existing = [{ id: 'a' }, { id: 'b' }]
   assert.deepEqual(existing.filter(() => true), existing)
+})
+
+test('creating every item requires at least one allowed usage tracking type', () => {
+  for (const [itemType, category] of [['car', 'vehicle'], ['electronics', 'electronics'], ['watch', 'other'], ['other', 'other']]) {
+    const result = validateItemDraft({ name: 'Owned item', itemType, category, measurements: [] }, { requireOwnershipFields: true })
+    assert.equal(result.errors.measurements, 'Choose at least one usage tracking type.', itemType)
+  }
+
+  const optionalReading = validateItemDraft({ name: 'Console', itemType: 'gaming', category: 'electronics', measurements: ['cycles'], currentUsage: {} }, { requireOwnershipFields: true })
+  assert.equal(optionalReading.ok, true)
+  const requiredReading = validateItemDraft({ name: 'Truck', itemType: 'truck', category: 'vehicle', measurements: ['miles'], currentUsage: {}, purchasePrice: 100 }, { requireOwnershipFields: true })
+  assert.match(requiredReading.errors.currentUsage, /Current miles is required/)
 })
 
 test('mileage schedule becomes due at its next reading', () => {

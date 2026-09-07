@@ -154,7 +154,7 @@ export function validateItemDraft(item = {}, { requireOwnershipFields = false } 
   }
 
   const requiresOwnership = requireOwnershipFields && requiresUsageAndPurchase(selectedType?.value)
-  if (requiresOwnership && measurements.length === 0) errors.measurements = 'Choose at least one usage tracking type.'
+  if (requireOwnershipFields && measurements.length === 0) errors.measurements = 'Choose at least one usage tracking type.'
   if (requiresOwnership) {
     const rawPrice = item.purchasePrice
     const price = Number(rawPrice)
