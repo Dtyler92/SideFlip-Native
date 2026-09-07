@@ -241,14 +241,12 @@ export default function NewProjectScreen({ navigation, route }) {
         {VEHICLE_PROJECT_CATEGORIES.has(category) && (
           <View style={s.vehicleCard}>
             <Text style={s.vehicleTitle}>Vehicle details</Text>
-            <Text style={s.goalHint}>Decode first with Pro or enter every vehicle field manually.</Text>
+            <Text style={s.goalHint}>Decode with NHTSA or enter every vehicle field manually.</Text>
             <VinDecodePanel
               subjectType="project"
               subjectId={null}
-              isPro={isPro}
               values={{ title, category, ...vehicleDetails }}
               onChange={applyVinValues}
-              onUpgrade={() => navigation.navigate('Pro')}
               mapSuggestions={buildProjectVinCreateSuggestions}
               suggestionFields={['title','category','year','make','model','engine']}
               autoFillBlanks

@@ -19,7 +19,7 @@ import {
 const ACCENT = '#C8402F'
 const client = createVinDecodeClient({ auth: supabase.auth })
 
-export default function VinDecodePanel({ subjectType, subjectId, isPro, values, onChange, onUpgrade, persistIdentity, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false, initiallyExpanded = false, operationLock, onOperationLockChange }) {
+export default function VinDecodePanel({ subjectType, subjectId, values, onChange, persistIdentity, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false, initiallyExpanded = false, operationLock, onOperationLockChange }) {
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [decoding, setDecoding] = useState(false)
   const [preview, setPreview] = useState(null)

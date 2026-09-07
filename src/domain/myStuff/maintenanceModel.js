@@ -136,7 +136,7 @@ function latestCompletion(completions, asOfDate) {
     .at(-1) || null
 }
 
-function numericAxisState(axis, interval, anchor, current, threshold) {
+function numericAxisState(interval, anchor, current, threshold) {
   const base = Number(anchor)
   const reading = Number(current)
   if (anchor == null || current == null || !Number.isFinite(base) || !Number.isFinite(reading) || base < 0 || reading < base) {
@@ -186,7 +186,7 @@ export function calculateMaintenanceDueState({ task = {}, assetOrigin = {}, curr
     } else {
       const readings = completion?.readings || completion?.usage || {}
       const anchor = completion ? readings[axis] : assetOrigin[axis]
-      axes[axis] = numericAxisState(axis, Number(intervals[axis]), anchor, currentUsage[axis], Number(thresholds[axis]))
+      axes[axis] = numericAxisState(Number(intervals[axis]), anchor, currentUsage[axis], Number(thresholds[axis]))
     }
   }
 

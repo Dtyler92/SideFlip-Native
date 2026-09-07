@@ -15,7 +15,7 @@ import {
   createMyStuffMaintenanceDefinitionV2,
   deleteMyStuffItem,
   deleteMyStuffSchedule,
-  getMyStuffItem,
+  getMyStuffLegacyMaintenance,
   getMyStuffItemV2,
   getMyStuffDueViewsV3,
   listMyStuffScheduleGroupsV3,
@@ -117,7 +117,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     setError('')
     try{
       const [legacy,result,v3]=await Promise.all([
-        getMyStuffItem(itemId,user.id),
+        getMyStuffLegacyMaintenance(itemId,user.id),
         getMyStuffItemV2(itemId,user.id),
         Promise.all([listMyStuffScheduleGroupsV3(itemId),getMyStuffDueViewsV3(itemId,new Date().toISOString())]).then(([schedule,due])=>({available:true,schedule,due}),()=>({available:false,schedule:[],due:[]})),
       ])
@@ -468,7 +468,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
           <Field label="Transmission" value={edit.transmission} onChangeText={value=>setEditValue('transmission',value)}/>
           <Field label="Drivetrain" value={edit.drivetrain} onChangeText={value=>setEditValue('drivetrain',value)}/>
           <Field label="Fuel / power type" value={edit.fuelType} onChangeText={value=>setEditValue('fuelType',value)}/>
-          {supportsVinDecoder(edit.itemType)&&<VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} isPro={hasPro} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} onUpgrade={()=>navigation.navigate('Pro')} persistIdentity={persistIdentityForConfirmation} operationLock={itemOperationInFlight} onOperationLockChange={setVinConfirmationBusy} onIdentityConfirmed={async()=>{setEditing(false);try{await load({quiet:true,throwOnError:true})}catch(nextError){reportSavedRefreshFailure('Vehicle confirmed, but refresh failed',nextError)}}} suggestionFields={['year','make','model','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','engine','transmission','drivetrain']}/>}
+          {supportsVinDecoder(edit.itemType)&&<VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} persistIdentity={persistIdentityForConfirmation} operationLock={itemOperationInFlight} onOperationLockChange={setVinConfirmationBusy} onIdentityConfirmed={async()=>{setEditing(false);try{await load({quiet:true,throwOnError:true})}catch(nextError){reportSavedRefreshFailure('Vehicle confirmed, but refresh failed',nextError)}}} suggestionFields={['year','make','model','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','engine','transmission','drivetrain']}/>}
           <Field label="Acquired on" value={edit.acquiredOn} onChangeText={value=>setEditValue('acquiredOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
           <Text style={s.label}>Usage measurements</Text><View style={s.modeRow} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis=>getItemCategoryContract(edit.category).measurements.includes(axis.key)).map(axis=><Choice key={axis.key} label={axis.label} selected={edit.measurements.includes(axis.key)} onPress={()=>toggleEditMeasurement(axis.key)} multiple={true}/>)}</View>
           <Text style={s.label}>Usage profile</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Usage profile">{['normal','severe'].map(value=><Choice key={value} label={value==='normal'?'Normal use':'Severe use'} selected={edit.usageProfile===value} onPress={()=>setEditValue('usageProfile',value)}/>)}</View>

@@ -16,6 +16,9 @@ export async function listMyStuffItems(userId) {
   return data || []
 }
 
+// Kept for released V1 call-site compatibility. New detail screens reuse the
+// V2 item payload and call getMyStuffLegacyMaintenance to avoid a duplicate
+// item query.
 export async function getMyStuffItem(itemId, userId) {
   const [itemResult, schedulesResult, logsResult] = await Promise.all([
     supabase.from('my_stuff_items').select('*').eq('id', itemId).eq('user_id', userId).single(),
@@ -26,6 +29,16 @@ export async function getMyStuffItem(itemId, userId) {
   if (schedulesResult.error) throw schedulesResult.error
   if (logsResult.error) throw logsResult.error
   return { item: itemResult.data, schedules: schedulesResult.data || [], logs: logsResult.data || [] }
+}
+
+export async function getMyStuffLegacyMaintenance(itemId, userId) {
+  const [schedulesResult, logsResult] = await Promise.all([
+    supabase.from('my_stuff_schedules').select('*').eq('item_id', itemId).eq('user_id', userId).order('created_at', { ascending: true }),
+    supabase.from('my_stuff_service_logs').select('*').eq('item_id', itemId).eq('user_id', userId).order('completed_at', { ascending: false }),
+  ])
+  if (schedulesResult.error) throw schedulesResult.error
+  if (logsResult.error) throw logsResult.error
+  return { schedules: schedulesResult.data || [], logs: logsResult.data || [] }
 }
 
 export async function createMyStuffItem(values) {

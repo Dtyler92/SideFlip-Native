@@ -27,7 +27,7 @@ const LANGUAGES = [
 ]
 
 export default function OnboardingScreen({ onComplete }) {
-  const { user, signOut } = useAuth()
+  const { signOut } = useAuth()
   const [currency, setCurrency] = useState('USD')
   const [language, setLanguage] = useState('en')
   const [saving, setSaving] = useState(false)

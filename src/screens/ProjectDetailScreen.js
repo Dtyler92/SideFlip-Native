@@ -776,7 +776,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
             <ProjectVehicleField label="Model" value={vehicleDetails.model} onChangeText={model => setVehicleDetails(current => ({ ...current, model }))} />
             <ProjectVehicleField label="Engine" value={vehicleDetails.engine} onChangeText={engine => setVehicleDetails(current => ({ ...current, engine }))} />
             <ProjectVehicleField label="Transmission type" value={vehicleDetails.transmission} onChangeText={transmission => setVehicleDetails(current => ({ ...current, transmission }))} maxLength={200} />
-            <VinDecodePanel subjectType="project" subjectId={projectId} isPro={isPro} values={vehicleDetails} onChange={setVehicleDetails} onUpgrade={() => navigation.navigate('Pro')} suggestionFields={['year','make','model','engine','transmission']} onConfirmDecoded={confirmDecodedVehicle} onIdentityConfirmed={() => setShowVehicleDetails(false)} />
+            <VinDecodePanel subjectType="project" subjectId={projectId} values={vehicleDetails} onChange={setVehicleDetails} suggestionFields={['year','make','model','engine','transmission']} onConfirmDecoded={confirmDecodedVehicle} onIdentityConfirmed={() => setShowVehicleDetails(false)} />
             <TouchableOpacity style={[s.btn,{marginTop:12},savingVehicleDetails&&s.btnDisabled]} onPress={saveVehicleDetails} disabled={savingVehicleDetails} accessibilityRole="button" accessibilityLabel="Save Vehicle Details" accessibilityState={{disabled:savingVehicleDetails,busy:savingVehicleDetails}}>
               {savingVehicleDetails ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.btnText}>Save Vehicle Details</Text>}
             </TouchableOpacity>

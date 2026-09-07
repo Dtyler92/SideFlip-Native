@@ -132,7 +132,7 @@ test('My Stuff V2 create payload persists VIN and every supported decoded value'
   assert.match(screen, /<VinDecodePanel[\s\S]*subjectType="my_stuff_item"[\s\S]*subjectId=\{null\}[\s\S]*autoFillBlanks/)
   assert.match(panel, /vin: request\.normalizedVin/)
   assert.ok(screen.indexOf('<VinDecodePanel') < screen.indexOf('label="Item name *"'))
-  assert.match(screen, /onUpgrade=\{\(\) => navigation\.navigate\('Pro'\)\}/)
+  assert.doesNotMatch(screen, /<VinDecodePanel[\s\S]{0,500}onUpgrade=/)
 })
 
 test('VIN decoder starts expanded only on applicable My Stuff creation', () => {
@@ -153,7 +153,7 @@ test('New Project offers pre-save Pro VIN decoding for vehicle details', () => {
   assert.match(screen, /VEHICLE_PROJECT_CATEGORIES\.has\(category\)[\s\S]*<VinDecodePanel/)
   assert.match(screen, /<VinDecodePanel[\s\S]*subjectType="project"[\s\S]*subjectId=\{null\}[\s\S]*autoFillBlanks/)
   assert.match(screen, /mapSuggestions=\{buildProjectVinCreateSuggestions\}/)
-  assert.match(screen, /onUpgrade=\{\(\) => navigation\.navigate\('Pro'\)\}/)
+  assert.doesNotMatch(screen, /<VinDecodePanel[\s\S]{0,500}onUpgrade=/)
   assert.match(screen, /Model number/)
   assert.match(screen, /Serial number/)
   assert.match(screen, /p_model_number: identifiers\.modelNumber/)

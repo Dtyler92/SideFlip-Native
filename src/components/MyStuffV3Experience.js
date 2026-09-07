@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, InputAccessoryView, Keyboard, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import * as Crypto from 'expo-crypto'
 import {
   createMyStuffExpenseV3,
   getMyStuffExpensesV3,

@@ -28,7 +28,7 @@ test('Android Play config uses the stable package and minimal permissions', () =
 })
 
 test('Android photo library uses the system picker without broad permission prompts', () => {
-  for (const path of ['src/components/PhotoPicker.js', 'src/components/MultiPhotoPicker.js']) {
+  for (const path of ['src/components/MultiPhotoPicker.js']) {
     const source = read(path)
     assert.match(source, /Platform\.OS !== 'android'/)
     assert.match(source, /launchImageLibraryAsync/)

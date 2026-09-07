@@ -6,7 +6,7 @@ const screen = name => readFileSync(new URL(`../src/screens/${name}.js`, import.
 const monetaryScreens = [
   'HomeScreen',
   'AnalyticsScreen',
-  'CalculatorScreen',
+
   'AnalyzeScreen',
   'NewProjectScreen',
   'ProjectDetailScreen',

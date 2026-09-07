@@ -6,7 +6,7 @@ import { buildCreateMyStuffItemV2WirePayload } from '../lib/myStuffPayloads'
 import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
 import { deriveItemCategory, getItemCategoryContract, requiresUsageAndPurchase, selectItemType, supportsVinDecoder, toggleItemMeasurementDraft, validateItemDraft } from '../domain/myStuff/itemModel'
 import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptState, validateCalendarDate } from './myStuffModel'
-import { useAuth } from '../context/AuthContext'
+
 import VinDecodePanel from '../components/VinDecodePanel'
 import { buildMyStuffVinCreateSuggestions } from '../domain/vinCreateModel'
 
@@ -14,7 +14,7 @@ const ACCENT = '#C8402F'
 const AXES = [{ key: 'miles', label: 'Miles' }, { key: 'hours', label: 'Hours' }, { key: 'cycles', label: 'Cycles' }]
 
 export default function MyStuffCreateScreen({ navigation }) {
-  const { isPro } = useAuth()
+
   const [draft, setDraft] = useState({ itemType: '', category: '', measurements: [], usageProfile: 'normal' })
   const [validationErrors, setValidationErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -70,10 +70,8 @@ export default function MyStuffCreateScreen({ navigation }) {
       {supportsVinDecoder(draft.itemType) && <VinDecodePanel
         subjectType="my_stuff_item"
         subjectId={null}
-        isPro={isPro}
         values={draft}
         onChange={applyVinValues}
-        onUpgrade={() => navigation.navigate('Pro')}
         mapSuggestions={buildMyStuffVinCreateSuggestions}
         autoFillBlanks
         initiallyExpanded
