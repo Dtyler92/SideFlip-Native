@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Linking } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { captureEvent } from '../lib/analytics'
+import FocusAwareScrollView from '../components/FocusAwareScrollView'
 
 export default function LoginScreen({ navigation }) {
   const { signIn } = useAuth()
@@ -19,7 +20,7 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+      <FocusAwareScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
         <View style={s.logoWrap}>
           <Text style={s.logo}><Text style={s.logoSide}>Side</Text><Text style={s.logoFlip}>Flip</Text></Text>
           <Text style={s.tagline}>Track every flip. Know every profit.</Text>
@@ -49,7 +50,7 @@ export default function LoginScreen({ navigation }) {
           <Text style={s.legalDot}> · </Text>
           <TouchableOpacity onPress={() => Linking.openURL('https://sideflip.org/terms')}><Text style={s.legalLink}>Terms of Service</Text></TouchableOpacity>
         </View>
-      </ScrollView>
+      </FocusAwareScrollView>
     </KeyboardAvoidingView>
   )
 }

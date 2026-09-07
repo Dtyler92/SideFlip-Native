@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { captureEvent } from '../lib/analytics'
+import FocusAwareScrollView from '../components/FocusAwareScrollView'
 
 export default function SignUpScreen({ navigation }) {
   const { signUp } = useAuth()
@@ -33,7 +34,7 @@ export default function SignUpScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+      <FocusAwareScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
         <Text style={s.title}>Create your Free account</Text>
         <Text style={s.subtitle}>Track projects, expenses, profit, and one Trade-Up Goal. No card required.</Text>
         <View style={s.card}>
@@ -48,7 +49,7 @@ export default function SignUpScreen({ navigation }) {
           </TouchableOpacity>
         </View>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.signInLink}><Text style={s.link}>Already have an account? Sign in</Text></TouchableOpacity>
-      </ScrollView>
+      </FocusAwareScrollView>
     </KeyboardAvoidingView>
   )
 }

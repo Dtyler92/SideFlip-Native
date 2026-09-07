@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { createMyStuffItemV2 } from '../lib/myStuffClient'
 import { buildCreateMyStuffItemV2WirePayload } from '../lib/myStuffPayloads'
@@ -9,6 +9,7 @@ import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptS
 
 import VinDecodePanel from '../components/VinDecodePanel'
 import { buildMyStuffVinCreateSuggestions } from '../domain/vinCreateModel'
+import FocusAwareScrollView from '../components/FocusAwareScrollView'
 
 const ACCENT = '#C8402F'
 const AXES = [{ key: 'miles', label: 'Miles' }, { key: 'hours', label: 'Hours' }, { key: 'cycles', label: 'Cycles' }]
@@ -65,7 +66,7 @@ export default function MyStuffCreateScreen({ navigation }) {
 
   return <SafeAreaView style={s.root} edges={['top']}>
     <Header title="Add Item" onBack={() => navigation.goBack()} />
-    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
+    <FocusAwareScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
       <Text style={s.section}>Identity</Text>
       {supportsVinDecoder(draft.itemType) && <VinDecodePanel
         subjectType="my_stuff_item"
@@ -106,7 +107,7 @@ export default function MyStuffCreateScreen({ navigation }) {
       <TouchableOpacity style={[s.button, saving && s.disabled]} onPress={save} disabled={saving} accessibilityRole="button" accessibilityLabel="Add My Stuff item" accessibilityState={{ disabled: saving, busy: saving }}>
         {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.buttonText}>Add Item</Text>}
       </TouchableOpacity>
-    </ScrollView>
+    </FocusAwareScrollView>
   </SafeAreaView>
 }
 

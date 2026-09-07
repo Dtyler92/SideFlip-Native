@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, InputAccessoryView, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Alert, InputAccessoryView, Keyboard, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
@@ -7,6 +7,7 @@ import { formatMoneyForCurrency } from '../lib/currencyModel'
 import { supabase } from '../lib/supabase'
 import { deleteSavedAnalysis, loadSavedAnalyses, saveAnalysis } from '../lib/analysisStore'
 import { MAX_CURRENCY_AMOUNT, MAX_PLATFORM_FEE_PERCENT, MAX_ROI_PERCENT, analyzeDeal, calculateListPrice, calculateMaximumBuyPrice, calculateProfit, normalizeCurrencyAmount, projectAnalysisDraft, quickDealCheck } from '../domain/analyzeModel'
+import FocusAwareScrollView from '../components/FocusAwareScrollView'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -224,13 +225,13 @@ export default function AnalyzeScreen({ navigation, route }) {
     }
   }
 
-  return <View style={s.root}><ScrollView contentContainerStyle={[s.content,{paddingTop:insets.top+18,paddingBottom:100+insets.bottom}]}
+  return <View style={s.root}><FocusAwareScrollView contentContainerStyle={[s.content,{paddingTop:insets.top+18,paddingBottom:100+insets.bottom}]}
     keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS==='ios'?'interactive':'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS==='ios'}>
     <Text style={s.heading}>Analyze</Text><Text style={s.sub}>Know what to pay, what to list for, and whether the flip is worth it.</Text>
-    <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={s.toolRow} accessibilityLabel="Analyze tools">{TOOLS.map(([key,label])=><TouchableOpacity key={key}
+    <FocusAwareScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={s.toolRow} accessibilityLabel="Analyze tools">{TOOLS.map(([key,label])=><TouchableOpacity key={key}
       style={[s.toolCard,tool===key&&s.toolCardActive]} onPress={()=>setTool(key)} accessibilityRole="button" accessibilityLabel={label} accessibilityHint="Opens this analysis tool" accessibilityState={{selected:tool===key}}>
       <Text style={s.toolIcon}>{key==='deal'?'📈':key==='quick'?'⚡':key==='list'?'🏷️':key==='max'?'🎯':'💵'}</Text><Text style={[s.toolText,tool===key&&s.toolTextActive]}>{label}</Text>
-    </TouchableOpacity>)}</ScrollView>
+    </TouchableOpacity>)}</FocusAwareScrollView>
 
     {tool==='deal'&&<>
       <View style={s.hero}><Text style={s.heroEyebrow}>PRIMARY TOOL</Text><Text style={s.heroTitle}>Deal Analyzer</Text><Text style={s.heroText}>Evaluate a potential flip before you buy it.</Text></View>
@@ -281,11 +282,11 @@ export default function AnalyzeScreen({ navigation, route }) {
     {tool==='profit'&&<><View style={s.hero}><Text style={s.heroTitle}>Profit Calculator</Text><Text style={s.heroText}>See the bottom line after every selling cost.</Text></View><View style={s.card}><CurrencyField label="Total Invested" value={profit.totalInvested} onChangeText={v=>setProfit(x=>({...x,totalInvested:v}))}/><CurrencyField label="Selling Price" value={profit.sellingPrice} onChangeText={v=>setProfit(x=>({...x,sellingPrice:v}))}/><PlatformPicker preset={profitPlatformPreset} setPreset={setProfitPlatformPreset} fee={profit.platformFeePct} setFee={v=>setProfit(x=>({...x,platformFeePct:v}))}/><CurrencyField label="Seller-Paid Shipping" value={profit.sellerPaidShipping} onChangeText={v=>setProfit(x=>({...x,sellerPaidShipping:v}))}/><CurrencyField label="Additional Selling Costs" value={profit.additionalSellingCosts} onChangeText={v=>setProfit(x=>({...x,additionalSellingCosts:v}))}/></View>{Number(profit.sellingPrice)>0&&<ResultCard><View style={s.metricGrid}><Metric primary label="Expected Profit" value={money(profitResult.expectedProfit)} tone={profitResult.expectedProfit>=0?'positive':'negative'}/><Metric primary label="ROI" value={pct(profitResult.roiPct)} tone={profitResult.roiPct>=0?'positive':'negative'}/><Metric label="Profit Margin" value={pct(profitResult.profitMarginPct)}/><Metric label="Break-Even Price" value={money(profitResult.breakEvenPrice)}/><Metric label="Platform Fees" value={money(profitResult.platformFees)}/><Metric label="Total Selling Costs" value={money(profitResult.totalSellingCosts)}/></View></ResultCard>}</>}
 
     {!!saved.length&&<View style={s.card}><Text style={s.sectionTitle}>Saved Analyses on This Device</Text>{saved.map(record=><View key={record.id} style={s.savedRow}><TouchableOpacity accessibilityRole="button" accessibilityLabel={`Load ${record.itemName} analysis`} style={s.savedLoad} onPress={()=>loadAnalysis(record)}><Text style={s.savedTitle}>{record.itemName}</Text><Text style={s.savedMeta}>{formatMoneyForCurrency(record.projectedProfit,record.currency)} profit · {pct(record.projectedRoi)} ROI · {new Date(record.analyzedAt).toLocaleDateString()}</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" accessibilityLabel={`Delete ${record.itemName} analysis`} disabled={!!deletingId} onPress={()=>Alert.alert('Delete analysis?',record.itemName,[{text:'Cancel',style:'cancel'},{text:'Delete',style:'destructive',onPress:()=>removeAnalysis(record)}])}>{deletingId===record.id?<ActivityIndicator color={ACCENT}/>:<Text style={s.deleteText}>Delete</Text>}</TouchableOpacity></View>)}</View>}
-  </ScrollView>
+  </FocusAwareScrollView>
 
   {Platform.OS === 'ios' && <InputAccessoryView nativeID={ANALYZE_NUMERIC_ACCESSORY_ID}><View style={s.keyboardToolbar}><TouchableOpacity accessibilityRole="button" accessibilityLabel="Dismiss number keyboard" style={s.keyboardDone} onPress={()=>Keyboard.dismiss()}><Text style={s.keyboardDoneText}>Done</Text></TouchableOpacity></View></InputAccessoryView>}
 
-  <Modal visible={showProjects} animationType="slide" presentationStyle="pageSheet" onRequestClose={()=>setShowProjects(false)}><View style={[s.modal,{paddingTop:Math.max(insets.top,20)}]}><View style={s.modalHeader}><Text style={s.modalTitle}>Analyze Existing Project</Text><TouchableOpacity style={s.closeButton} accessibilityRole="button" accessibilityLabel="Close Project picker" onPress={()=>setShowProjects(false)}><Text style={s.close}>Done</Text></TouchableOpacity></View><TextInput accessibilityLabel="Search Projects" style={s.search} value={projectSearch} onChangeText={setProjectSearch} placeholder="Search projects" placeholderTextColor="#737069"/><ScrollView contentContainerStyle={{padding:16,paddingBottom:40}} keyboardShouldPersistTaps="handled">{shownProjects.map(project=>{const draft=projectAnalysisDraft(project);return <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Analyze ${project.title}`} key={project.id} style={s.projectRow} onPress={()=>applyProject(project)}><View style={{flex:1}}><Text style={s.projectTitle}>{project.title}</Text><Text style={s.projectMeta}>{project.status==='sold'?'Sold':'Active'} · {money(draft.totalInvested)} invested</Text></View><Text style={s.chevron}>›</Text></TouchableOpacity>})}{!shownProjects.length&&<Text style={s.empty}>No matching projects.</Text>}</ScrollView></View></Modal>
+  <Modal visible={showProjects} animationType="slide" presentationStyle="pageSheet" onRequestClose={()=>setShowProjects(false)}><View style={[s.modal,{paddingTop:Math.max(insets.top,20)}]}><View style={s.modalHeader}><Text style={s.modalTitle}>Analyze Existing Project</Text><TouchableOpacity style={s.closeButton} accessibilityRole="button" accessibilityLabel="Close Project picker" onPress={()=>setShowProjects(false)}><Text style={s.close}>Done</Text></TouchableOpacity></View><TextInput accessibilityLabel="Search Projects" style={s.search} value={projectSearch} onChangeText={setProjectSearch} placeholder="Search projects" placeholderTextColor="#737069"/><FocusAwareScrollView contentContainerStyle={{padding:16,paddingBottom:40}} keyboardShouldPersistTaps="handled">{shownProjects.map(project=>{const draft=projectAnalysisDraft(project);return <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Analyze ${project.title}`} key={project.id} style={s.projectRow} onPress={()=>applyProject(project)}><View style={{flex:1}}><Text style={s.projectTitle}>{project.title}</Text><Text style={s.projectMeta}>{project.status==='sold'?'Sold':'Active'} · {money(draft.totalInvested)} invested</Text></View><Text style={s.chevron}>›</Text></TouchableOpacity>})}{!shownProjects.length&&<Text style={s.empty}>No matching projects.</Text>}</FocusAwareScrollView></View></Modal>
   </View>
 }
 

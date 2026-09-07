@@ -1,8 +1,9 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { captureEvent } from '../lib/analytics'
+import FocusAwareScrollView from '../components/FocusAwareScrollView'
 
 const ACCENT = '#C8402F'
 
@@ -56,7 +57,7 @@ export default function OnboardingScreen({ onComplete }) {
   }
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={s.content}>
+    <FocusAwareScrollView style={s.root} contentContainerStyle={s.content}>
       <View style={s.logoRow}>
         <Text style={s.logo}><Text style={s.logoSide}>Side</Text><Text style={s.logoFlip}>Flip</Text></Text>
       </View>
@@ -99,7 +100,7 @@ export default function OnboardingScreen({ onComplete }) {
       <TouchableOpacity onPress={signOut} style={s.backButton} disabled={saving}>
         <Text style={s.backText}>← Back to Sign In</Text>
       </TouchableOpacity>
-    </ScrollView>
+    </FocusAwareScrollView>
   )
 }
 

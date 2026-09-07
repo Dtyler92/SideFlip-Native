@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator, Platform } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator, Platform } from 'react-native'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -10,6 +10,7 @@ import VinDecodePanel from '../components/VinDecodePanel'
 import { buildProjectCreatePersistence, buildProjectVinCreateSuggestions, vehicleDetailsAfterCategoryChange } from '../domain/vinCreateModel'
 import { validateVinIdentifier } from '../domain/myStuff/vinModel'
 import { createMutationAttemptState, mutationIdForPayload, resetMutationAttemptState } from './myStuffModel'
+import FocusAwareScrollView from '../components/FocusAwareScrollView'
 
 const CATEGORIES = [
   {value:'mower',label:'🚜 Lawn Mower'},{value:'car',label:'🚗 Car'},{value:'truck',label:'🛻 Truck'},
@@ -203,7 +204,7 @@ export default function NewProjectScreen({ navigation, route }) {
         <View style={{width:60}} />
       </View>
 
-      <ScrollView
+      <FocusAwareScrollView
         style={s.scroll}
         contentContainerStyle={s.content}
         keyboardShouldPersistTaps="handled"
@@ -279,7 +280,7 @@ export default function NewProjectScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
             <Text style={s.goalHint}>Connect this project to a goal. Its purchase and sale will update goal progress.</Text>
-            {selectableGoals.length > 0 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.goalChoices}>
+            {selectableGoals.length > 0 ? <FocusAwareScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.goalChoices}>
               <TouchableOpacity style={[s.goalChoice, !selectedGoalId && s.goalChoiceActive]} onPress={() => { setSelectedGoalId(null); setGoalFundingInput('0') }}>
                 <Text style={[s.goalChoiceText, !selectedGoalId && s.goalChoiceTextActive]}>No goal</Text>
               </TouchableOpacity>
@@ -288,7 +289,7 @@ export default function NewProjectScreen({ navigation, route }) {
                   <Text style={[s.goalChoiceText, selectedGoalId === goal.id && s.goalChoiceTextActive]} numberOfLines={1}>{goal.name}</Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView> : <Text style={s.noGoalsText}>No active goals yet. Tap + to create one.</Text>}
+            </FocusAwareScrollView> : <Text style={s.noGoalsText}>No active goals yet. Tap + to create one.</Text>}
           </View>
 
         <Text style={[s.label, {marginTop:16}]}>Purchase Price</Text>
@@ -332,7 +333,7 @@ export default function NewProjectScreen({ navigation, route }) {
         <TouchableOpacity style={[s.btn, saving && s.btnDisabled]} onPress={handleSave} disabled={saving}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Create Project</Text>}
         </TouchableOpacity>
-      </ScrollView>
+      </FocusAwareScrollView>
     </View>
   )
 }

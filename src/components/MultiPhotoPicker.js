@@ -2,6 +2,7 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicat
 import * as ImagePicker from 'expo-image-picker'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import PhotoViewer from './PhotoViewer'
 
 const ACCENT = '#C8402F'
 export const FREE_PHOTO_LIMIT = 5
@@ -9,6 +10,7 @@ export const PRO_PHOTO_LIMIT = 25
 
 export default function MultiPhotoPicker({ userId, photos = [], onUpdate, isPro = false, onUpgrade, additionalPhotoCount = 0 }) {
   const [uploading, setUploading] = useState(false)
+  const [viewedPhoto, setViewedPhoto] = useState(null)
   const photoLimit = isPro ? PRO_PHOTO_LIMIT : FREE_PHOTO_LIMIT
   const totalPhotoCount = photos.length + additionalPhotoCount
 
@@ -96,11 +98,15 @@ export default function MultiPhotoPicker({ userId, photos = [], onUpdate, isPro 
     <View style={s.container}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.scroll}>
         {photos.map((url, i) => (
-          <TouchableOpacity key={url} onPress={() => removePhoto(url)} style={s.photoWrap}>
-            <Image source={{ uri: url }} style={s.photo} resizeMode="cover" />
-            <View style={s.removeBtn}><Text style={s.removeTxt}>✕</Text></View>
+          <View key={url} style={s.photoWrap}>
+            <TouchableOpacity onPress={() => setViewedPhoto(url)} accessibilityRole="button" accessibilityLabel={`View photo ${i + 1}`}>
+              <Image source={{ uri: url }} style={s.photo} resizeMode="cover" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.removeBtn} onPress={() => removePhoto(url)} accessibilityRole="button" accessibilityLabel={`Remove photo ${i + 1}`} hitSlop={8}>
+              <Text style={s.removeTxt}>✕</Text>
+            </TouchableOpacity>
             {i === 0 && <View style={s.primaryBadge}><Text style={s.primaryTxt}>Main</Text></View>}
-          </TouchableOpacity>
+          </View>
         ))}
         <TouchableOpacity style={s.addBtn} onPress={showAddOptions} disabled={uploading}>
           {uploading
@@ -113,9 +119,10 @@ export default function MultiPhotoPicker({ userId, photos = [], onUpdate, isPro 
         </TouchableOpacity>
       </ScrollView>
       <Text style={s.hint}>
-        {photos.length > 0 ? 'Tap a photo to remove · First photo is main · ' : ''}
+        {photos.length > 0 ? 'Tap a photo to view · First photo is main · ' : ''}
         {totalPhotoCount}/{photoLimit} photos
       </Text>
+      <PhotoViewer uri={viewedPhoto} visible={!!viewedPhoto} onClose={() => setViewedPhoto(null)} />
     </View>
   )
 }

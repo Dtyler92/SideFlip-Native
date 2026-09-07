@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator, Share, Modal, KeyboardAvoidingView, Platform } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator, Share, Modal, KeyboardAvoidingView, Platform } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -15,6 +15,7 @@ import { createDescriptionRequest, needsDescriptionPreview, normalizeListingSele
 import { transferProjectToMyStuffV3 } from '../lib/myStuffClient'
 import { hasProjectVehicleDetailsChanged } from '../domain/vinCreateModel'
 import { resolveProjectNotesSaveResponse } from './projectNotesModel'
+import FocusAwareScrollView from '../components/FocusAwareScrollView'
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
@@ -637,7 +638,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
+      <FocusAwareScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
         {/* Multi Photo */}
         <MultiPhotoPicker
           userId={user.id}
@@ -844,7 +845,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
             </TouchableOpacity>
           </>
         )}
-      </ScrollView>
+      </FocusAwareScrollView>
 
       <Modal visible={showAssignGoal} transparent animationType="fade" onRequestClose={() => setShowAssignGoal(false)}>
         <View style={s.assignOverlay}>
@@ -885,7 +886,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
                   <Text style={s.modalTitle}>Description Preview</Text>
                   <View style={s.headerSpacer} />
                 </View>
-                <ScrollView
+                <FocusAwareScrollView
                   style={s.modalScroll}
                   contentContainerStyle={[s.modalScrollContent, { paddingBottom: modalContentPaddingBottom }]}
                   keyboardShouldPersistTaps="handled"
@@ -951,7 +952,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
                     <Text style={s.secondaryModalButtonText}>Regenerate</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={s.generatorCancel} onPress={closeDescriptionPreview} accessibilityRole="button" accessibilityLabel="Cancel description preview"><Text style={s.generatorCancelText}>Cancel</Text></TouchableOpacity>
-                </ScrollView>
+                </FocusAwareScrollView>
               </>
             ) : (
               <>
@@ -964,7 +965,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
                     <Text style={[s.modalShare, (!listingText.trim() || generatingListing) && s.mutedAction]}>Share</Text>
                   </TouchableOpacity>
                 </View>
-                <ScrollView
+                <FocusAwareScrollView
                   style={s.modalScroll}
                   contentContainerStyle={[s.modalScrollContent, { paddingBottom: modalContentPaddingBottom }]}
                   keyboardShouldPersistTaps="handled"
@@ -1010,14 +1011,14 @@ export default function ProjectDetailScreen({ navigation, route }) {
                   >
                     <Text style={s.modalShareBtnText}>Share / Copy Listing</Text>
                   </TouchableOpacity>
-                </ScrollView>
+                </FocusAwareScrollView>
               </>
               )}
             </View>
 
             {generatorStep !== null && (
               <View style={s.generatorOverlay} accessibilityViewIsModal importantForAccessibility="yes">
-                <ScrollView style={s.generatorCard} contentContainerStyle={[s.generatorCardContent, { paddingBottom: generatorCardPaddingBottom }]} keyboardShouldPersistTaps="handled" bounces={false}>
+                <FocusAwareScrollView style={s.generatorCard} contentContainerStyle={[s.generatorCardContent, { paddingBottom: generatorCardPaddingBottom }]} keyboardShouldPersistTaps="handled" bounces={false}>
                   <Text style={s.generatorTitle}>{generatorStep === 'brief' ? 'What should buyers know?' : generatorStep === 'humor' ? 'How funny?' : 'Choose a style'}</Text>
                   {generatorStep === 'brief' ? (
                     <>
@@ -1071,7 +1072,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
                     </>
                   )}
                   <TouchableOpacity style={s.generatorCancel} onPress={() => setGeneratorStep(null)} accessibilityRole="button"><Text style={s.generatorCancelText}>Cancel</Text></TouchableOpacity>
-                </ScrollView>
+                </FocusAwareScrollView>
               </View>
             )}
           </View>

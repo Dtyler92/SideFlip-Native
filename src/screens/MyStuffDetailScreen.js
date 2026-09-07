@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Alert, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
@@ -7,6 +7,7 @@ import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffIt
 import VinDecodePanel from '../components/VinDecodePanel'
 import ReportPanel from '../components/ReportPanel'
 import MyStuffV3Experience from '../components/MyStuffV3Experience'
+import FocusAwareScrollView from '../components/FocusAwareScrollView'
 import { maskVin } from '../domain/myStuff/vinModel'
 import { normalizePlannedOccurrences } from '../domain/myStuff/v3Model'
 import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, selectItemType, supportsVinDecoder, validateItemDraft } from '../domain/myStuff/itemModel'
@@ -449,7 +450,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
 
   return <SafeAreaView style={s.root} edges={['top']}>
     <Header title={item.name} onBack={()=>navigation.goBack()}/>
-    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS==='ios'?'interactive':'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load({quiet:true})}} tintColor={ACCENT}/>}>
+    <FocusAwareScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS==='ios'?'interactive':'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load({quiet:true})}} tintColor={ACCENT}/>}>
       {!!error&&<Text style={s.errorText}>{error}</Text>}
       {detailTab==='Maintenance'&&<TouchableOpacity style={s.settingsButton} onPress={()=>setShowItemSettings(value=>!value)} accessibilityRole="button" accessibilityLabel="Item settings" accessibilityState={{expanded:showItemSettings}}><Text style={s.settingsButtonText}>{showItemSettings?'Hide item settings':'Item settings'}</Text></TouchableOpacity>}
       {detailTab==='Maintenance'&&showItemSettings&&<View style={s.card}>
@@ -595,7 +596,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         return <View key={log.id} style={s.historyRow}><View style={s.flex}><Text style={s.historyName}>{log.name||linked?.name||'Maintenance'}</Text><Text style={s.muted}>{String(log.completed_at||'').slice(0,10)}{logReading!=null?` · ${Number(logReading).toLocaleString()}${readingSuffix}`:''}</Text>{!!log.notes&&<Text style={s.notes}>{log.notes}</Text>}<Text style={s.eyebrow}>Legacy · read-only</Text></View>{log.cost!=null&&<Text style={s.cost}>{formatMoney(log.cost)}</Text>}</View>
       })}
       </>}
-    </ScrollView>
+    </FocusAwareScrollView>
     <Modal visible={!!completionCelebration} transparent animationType="fade" onRequestClose={()=>setCompletionCelebration(null)}>
       <View style={s.celebrationOverlay}>
         <View style={s.celebrationCard} accessibilityViewIsModal>

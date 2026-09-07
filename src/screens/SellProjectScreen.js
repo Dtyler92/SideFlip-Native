@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, InputAccessoryView, Keyboard, KeyboardAvoidingView, Platform } from 'react-native'
 import { supabase } from '../lib/supabase'
 import { captureEvent } from '../lib/analytics'
 import { useAuth } from '../context/AuthContext'
+import FocusAwareScrollView from '../components/FocusAwareScrollView'
 
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
 const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100
@@ -67,7 +68,7 @@ export default function SellProjectScreen({ navigation, route }) {
       </View>
 
       <KeyboardAvoidingView style={s.keyboardArea} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
+        <FocusAwareScrollView
           contentContainerStyle={s.content}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
@@ -120,7 +121,7 @@ export default function SellProjectScreen({ navigation, route }) {
         <TouchableOpacity style={s.cancelBtn} onPress={() => { Keyboard.dismiss(); navigation.goBack() }}>
           <Text style={s.cancelText}>Cancel</Text>
         </TouchableOpacity>
-        </ScrollView>
+        </FocusAwareScrollView>
       </KeyboardAvoidingView>
 
       {Platform.OS === 'ios' && (
