@@ -11,6 +11,8 @@ import {
   normalizeResearchReview,
   normalizeResearchStatus,
   researchCanPoll,
+  researchEvidenceVerificationLabel,
+  researchSourceAccessibilityLabel,
   researchSourceClassLabel,
 } from '../domain/myStuff/maintenanceResearchModel'
 
@@ -26,17 +28,12 @@ function messageForError(error) {
   return error?.message||'Manufacturer research could not be loaded. Manual schedule entry still works.'
 }
 
-function sourceLocation(source) {
-  if(source.page)return `Page ${source.page}`
-  if(source.section)return `Section: ${source.section}`
-  return 'Location verified by SideFlip'
-}
-
 export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,onApplied,operationLock,parentBusy=false}) {
   const isFocused=useIsFocused()
   const [status,setStatus]=useState(null)
   const [review,setReview]=useState(null)
   const [selected,setSelected]=useState(new Set())
+  const [sourcesVerified,setSourcesVerified]=useState(false)
   const [loading,setLoading]=useState(false)
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
@@ -80,6 +77,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
         if(next.status==='awaiting_review'&&selectionJobId.current!==next.jobId){
           selectionJobId.current=next.jobId
           setSelected(new Set(nextReview.candidates.map(row=>row.id)))
+          setSourcesVerified(false)
         }
       }else if(!researchCanPoll(next?.status))setReview(null)
       return next
@@ -95,7 +93,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
 
   useEffect(()=>{
     requestGate.current.invalidate();loadGeneration.current+=1
-    setStatus(null);setReview(null);setSelected(new Set());setError('');setLoading(false);setBusy(false)
+    setStatus(null);setReview(null);setSelected(new Set());setSourcesVerified(false);setError('');setLoading(false);setBusy(false)
     selectionJobId.current=null
     resetMutationAttemptState(enqueueAttempt.current);resetMutationAttemptState(approveAttempt.current);resetMutationAttemptState(applyAttempt.current);resetMutationAttemptState(cancelAttempt.current)
   },[item?.id])
@@ -160,10 +158,14 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
     finally{if(mounted.current)setBusy(false);releaseOperation(token)}
   }
 
-  function toggleCandidate(id){setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
+  function toggleCandidate(id){
+    setSourcesVerified(false)
+    setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})
+  }
 
   function confirmApproval(){
     if(selected.size===0)return Alert.alert('Choose at least one task','Select each cited task you want in the approved snapshot.')
+    if(!sourcesVerified)return Alert.alert('Verify official sources','Open the official source links, check the citation text and selected maintenance intervals, then acknowledge that review.')
     Alert.alert('Approve selected research?','This seals an evidence snapshot. It does not change your maintenance schedules until you separately apply it.',[
       {text:'Cancel',style:'cancel'},
       {text:'Approve',onPress:approveSelected},
@@ -171,7 +173,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
   }
 
   async function approveSelected(){
-    if(busy||!status?.jobId)return
+    if(busy||!status?.jobId||selected.size===0||!sourcesVerified)return
     if(!isPro)return onUpgrade?.()
     const snapshot=currentSnapshot()
     if(!snapshot)return
@@ -179,10 +181,10 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
     if(!token)return Alert.alert('Finish the current change','Wait for the current item update to finish.')
     const jobId=status.jobId
     const candidateIds=[...selected].sort()
-    const mutationId=mutationIdForPayload(approveAttempt.current,{jobId,candidateIds})
+    const mutationId=mutationIdForPayload(approveAttempt.current,{jobId,candidateIds,sourcesVerified:true})
     setBusy(true);setError('')
     try{
-      await approveMyStuffResearch(jobId,candidateIds,mutationId)
+      await approveMyStuffResearch(jobId,candidateIds,true,mutationId)
       if(!isCurrentRequest(snapshot))return
       resetMutationAttemptState(approveAttempt.current)
       await load({quiet:true})
@@ -250,14 +252,15 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
   }
 
   const disabled=busy||parentBusy||operationLock?.current
+  const approvalDisabled=disabled||selected.size===0||!sourcesVerified
   if(!isPro)return <View style={s.card}><Text style={s.title}>Manufacturer maintenance research</Text><Text style={s.copy}>Pro can research cited manufacturer guidance for a confirmed vehicle. You review every suggestion before anything is applied.</Text><Text style={s.manual}>Manual schedule entry stays available for everyone.</Text><TouchableOpacity style={s.secondary} onPress={onUpgrade} accessibilityRole="button" accessibilityLabel="Upgrade for manufacturer maintenance research"><Text style={s.secondaryText}>View Pro</Text></TouchableOpacity></View>
 
   const retryButton=(message,label='Research manufacturer schedule again')=><TouchableOpacity style={[s.primary,disabled&&s.disabled]} onPress={startResearch} disabled={disabled} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{disabled}}><Text style={s.primaryText}>{message}</Text></TouchableOpacity>
 
   return <View style={s.card}>
     <Text style={s.title}>Manufacturer maintenance research</Text>
-    <Text style={s.copy}>Research results are suggestions, not service or safety advice. Review applicability and the exact manufacturer source before approval.</Text>
-    <Text style={s.copy}>Starting sends the vehicle/item type and available confirmed year, make, model, trim, engine, transmission, drivetrain, fuel, and market details to Anthropic to search approved manufacturer or authorized-dealer sources. VIN, notes, costs, and expenses are never sent.</Text>
+    <Text style={s.copy}>Grok uses real web search for this research. Completed citation text and maintenance intervals must be checked against the official source links before approval because SideFlip has not independently verified them. Research results are suggestions, not service or safety advice.</Text>
+    <Text style={s.copy}>Starting sends the vehicle/item type and available confirmed year, make, model, trim, engine, transmission, drivetrain, fuel, and market details to xAI for Grok to search manufacturer or authorized-dealer sources. VIN, notes, costs, and expenses are never sent.</Text>
     <Text style={s.manual}>Manual schedule entry stays available if research is unavailable or inconclusive.</Text>
     {!!error&&<View style={s.errorBox}><Text style={s.error}>{error}</Text><TouchableOpacity onPress={()=>load()} disabled={disabled} accessibilityRole="button" accessibilityLabel="Retry research status" accessibilityState={{disabled}}><Text style={s.link}>Retry status</Text></TouchableOpacity></View>}
     {loading&&!status?<ActivityIndicator color={ACCENT}/>:null}
@@ -267,10 +270,10 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
     {status?.status==='failed'&&<><Text style={s.error}>Research ended without an applicable result{status.errorCode?` (${status.errorCode})`:'.'}</Text>{retryButton('Research again')}</>}
     {status?.status==='cancelled'&&<><Text style={s.copy}>This research job was cancelled. No suggestions were applied.</Text>{retryButton('Research again')}</>}
     {['superseded','deleted'].includes(status?.status)&&<><Text style={s.copy}>This research result is no longer current and nothing was applied.</Text>{retryButton('Research again')}</>}
-    {status?.status==='awaiting_review'&&review&&<View><Text style={s.heading}>Review suggestions</Text>{review.candidates.map(candidate=><View key={candidate.id} style={s.candidate}><TouchableOpacity style={s.choice} onPress={()=>toggleCandidate(candidate.id)} accessibilityRole="checkbox" accessibilityState={{checked:selected.has(candidate.id)}} accessibilityLabel={`Include ${candidate.name}`}><Text style={s.check}>{selected.has(candidate.id)?'☑':'☐'}</Text><View style={s.flex}><Text style={s.rowTitle}>{candidate.name}</Text><Text style={s.interval}>{formatResearchInterval(candidate)}</Text><Text style={s.meta}>Action: {candidate.action} · {candidate.profile==='severe'?'Severe use':'Normal use'} · {candidate.uncertainty} uncertainty</Text></View></TouchableOpacity>{evidenceForCandidate(candidate,review.evidence).map(source=><View key={source.key} style={s.source}><Text style={s.sourceClass}>{researchSourceClassLabel(source.sourceClass)}</Text><Text style={s.sourceTitle}>{source.title}</Text><Text style={s.excerpt}>“{source.exactExcerpt}”</Text><Text style={s.meta}>{sourceLocation(source)} · accessed {String(source.accessedOn).slice(0,10)} · {source.applicability}</Text><TouchableOpacity onPress={()=>openSource(source.canonicalUrl)} accessibilityRole="link" accessibilityLabel={`Open ${researchSourceClassLabel(source.sourceClass).toLowerCase()} for ${candidate.name}`}><Text style={s.link}>Open source</Text></TouchableOpacity></View>)}</View>)}{review.candidates.length===0&&<Text style={s.copy}>No cited maintenance tasks were found. Add a manual schedule instead.</Text>}{review.unresolved.map((row,index)=><View key={`unresolved-${index}`} style={s.unresolved}><Text style={s.rowTitle}>{row.name||'Unresolved guidance'}</Text><Text style={s.copy}>{row.reason||row.message||'The sources did not support one clear interval.'}</Text></View>)}{review.candidates.length>0&&<TouchableOpacity style={[s.primary,disabled&&s.disabled]} onPress={confirmApproval} disabled={disabled} accessibilityRole="button" accessibilityLabel="Approve cited research suggestions" accessibilityState={{disabled}}><Text style={s.primaryText}>{busy?'Approving…':'Approve cited suggestions'}</Text></TouchableOpacity>}</View>}
+    {status?.status==='awaiting_review'&&review&&<View><Text style={s.heading}>Review suggestions</Text>{review.candidates.map(candidate=><View key={candidate.id} style={s.candidate}><TouchableOpacity style={s.choice} onPress={()=>toggleCandidate(candidate.id)} accessibilityRole="checkbox" accessibilityState={{checked:selected.has(candidate.id)}} accessibilityLabel={`Include ${candidate.name}`}><Text style={s.check}>{selected.has(candidate.id)?'☑':'☐'}</Text><View style={s.flex}><Text style={s.rowTitle}>{candidate.name}</Text><Text style={s.interval}>{formatResearchInterval(candidate)}</Text><Text style={s.meta}>Action: {candidate.action} · {candidate.profile==='severe'?'Severe use':'Normal use'} · {candidate.uncertainty} uncertainty</Text></View></TouchableOpacity>{evidenceForCandidate(candidate,review.evidence).map(source=><View key={source.key} style={s.source}><Text style={s.sourceClass}>{researchSourceClassLabel(source.sourceClass)}</Text><Text style={s.sourceTitle}>{source.title}</Text><Text style={s.excerpt}>“{source.exactExcerpt}”</Text><Text style={s.meta}>{researchEvidenceVerificationLabel(source)} · provider citation requires confirmation · accessed {String(source.accessedOn).slice(0,10)} · {source.applicability}</Text><TouchableOpacity onPress={()=>openSource(source.canonicalUrl)} accessibilityRole="link" accessibilityLabel={`Open ${researchSourceAccessibilityLabel(source)} for ${candidate.name}`}><Text style={s.link}>Open source</Text></TouchableOpacity></View>)}</View>)}{review.candidates.length===0&&<Text style={s.copy}>No cited maintenance tasks were found. Add a manual schedule instead.</Text>}{review.unresolved.map((row,index)=><View key={`unresolved-${index}`} style={s.unresolved}><Text style={s.rowTitle}>{row.name||'Unresolved guidance'}</Text><Text style={s.copy}>{row.reason||row.message||'The sources did not support one clear interval.'}</Text></View>)}{review.candidates.length>0&&<><TouchableOpacity style={[s.acknowledgement,disabled&&s.disabled]} onPress={()=>setSourcesVerified(current=>!current)} disabled={disabled} accessibilityRole="checkbox" accessibilityLabel="I checked the official source links and verified the selected maintenance intervals" accessibilityState={{checked:sourcesVerified,disabled}}><Text style={s.check}>{sourcesVerified?'☑':'☐'}</Text><Text style={s.acknowledgementText}>I checked the official source links and verified the citation text and selected maintenance intervals.</Text></TouchableOpacity><TouchableOpacity style={[s.primary,approvalDisabled&&s.disabled]} onPress={confirmApproval} disabled={approvalDisabled} accessibilityRole="button" accessibilityLabel="Approve cited research suggestions" accessibilityState={{disabled:approvalDisabled}}><Text style={s.primaryText}>{busy?'Approving…':'Approve cited suggestions'}</Text></TouchableOpacity></>}</View>}
     {status?.status==='approved'&&<View><Text style={s.heading}>Research approved</Text><Text style={s.copy}>The cited snapshot is sealed. Apply is a separate step and rechecks ownership and Pro access.</Text><TouchableOpacity style={[s.primary,disabled&&s.disabled]} onPress={confirmApply} disabled={disabled} accessibilityRole="button" accessibilityLabel="Apply approved schedules" accessibilityState={{disabled}}><Text style={s.primaryText}>{busy?'Applying…':'Apply approved schedules'}</Text></TouchableOpacity></View>}
     {status?.status==='applied'&&<View style={s.success}><Text style={s.rowTitle}>Manufacturer schedules applied</Text><Text style={s.copy}>The approved citation snapshot is preserved with the schedules. Manual schedules were not overwritten.</Text><TouchableOpacity onPress={startResearch} disabled={disabled} accessibilityRole="button" accessibilityLabel="Research updated manufacturer guidance" accessibilityState={{disabled}}><Text style={s.link}>Research updated guidance</Text></TouchableOpacity></View>}
   </View>
 }
 
-const s=StyleSheet.create({card:{backgroundColor:'#FFF8EE',borderWidth:1,borderColor:'#E8D5B5',borderRadius:14,padding:16,marginBottom:12},title:{fontSize:17,fontWeight:'800',color:'#1A1917'},heading:{fontSize:16,fontWeight:'800',color:'#1A1917',marginTop:16,marginBottom:8},copy:{color:'#6B665E',lineHeight:20,marginTop:5},manual:{color:'#5C5850',fontWeight:'700',lineHeight:20,marginTop:8},primary:{backgroundColor:ACCENT,minHeight:46,borderRadius:10,alignItems:'center',justifyContent:'center',paddingHorizontal:14,marginTop:12},primaryText:{color:'#fff',fontWeight:'800'},secondary:{minHeight:46,borderRadius:10,borderWidth:1,borderColor:ACCENT,alignItems:'center',justifyContent:'center',marginTop:12},secondaryText:{color:ACCENT,fontWeight:'800'},disabled:{opacity:.55},progress:{flexDirection:'row',alignItems:'center',gap:12,marginTop:14},flex:{flex:1},candidate:{backgroundColor:'#fff',borderWidth:1,borderColor:'#E8E4DE',borderRadius:12,padding:12,marginBottom:10},choice:{flexDirection:'row',alignItems:'flex-start',gap:10,minHeight:44},check:{fontSize:23,color:ACCENT},rowTitle:{fontWeight:'800',color:'#1A1917'},interval:{fontWeight:'700',color:ACCENT,marginTop:3},meta:{fontSize:12,color:'#79736A',lineHeight:17,marginTop:4},source:{borderTopWidth:1,borderTopColor:'#E8E4DE',marginTop:10,paddingTop:10},sourceClass:{fontSize:11,fontWeight:'800',color:'#6B4B16',textTransform:'uppercase',marginBottom:3},sourceTitle:{fontWeight:'700',color:'#34312D'},excerpt:{color:'#444039',fontStyle:'italic',lineHeight:19,marginTop:5},link:{color:ACCENT,fontWeight:'700',paddingVertical:8},unresolved:{backgroundColor:'#FFF1C9',borderRadius:9,padding:10,marginBottom:8},errorBox:{backgroundColor:'#FDECE8',borderRadius:9,padding:10,marginTop:10},error:{color:'#8B3328',lineHeight:19},success:{backgroundColor:'#EEF7E9',borderRadius:9,padding:12,marginTop:12}})
+const s=StyleSheet.create({card:{backgroundColor:'#FFF8EE',borderWidth:1,borderColor:'#E8D5B5',borderRadius:14,padding:16,marginBottom:12},title:{fontSize:17,fontWeight:'800',color:'#1A1917'},heading:{fontSize:16,fontWeight:'800',color:'#1A1917',marginTop:16,marginBottom:8},copy:{color:'#6B665E',lineHeight:20,marginTop:5},manual:{color:'#5C5850',fontWeight:'700',lineHeight:20,marginTop:8},primary:{backgroundColor:ACCENT,minHeight:46,borderRadius:10,alignItems:'center',justifyContent:'center',paddingHorizontal:14,marginTop:12},primaryText:{color:'#fff',fontWeight:'800'},secondary:{minHeight:46,borderRadius:10,borderWidth:1,borderColor:ACCENT,alignItems:'center',justifyContent:'center',marginTop:12},secondaryText:{color:ACCENT,fontWeight:'800'},disabled:{opacity:.55},progress:{flexDirection:'row',alignItems:'center',gap:12,marginTop:14},flex:{flex:1},candidate:{backgroundColor:'#fff',borderWidth:1,borderColor:'#E8E4DE',borderRadius:12,padding:12,marginBottom:10},choice:{flexDirection:'row',alignItems:'flex-start',gap:10,minHeight:44},acknowledgement:{flexDirection:'row',alignItems:'flex-start',gap:10,minHeight:48,paddingVertical:8},acknowledgementText:{flex:1,color:'#34312D',fontWeight:'700',lineHeight:20},check:{fontSize:23,color:ACCENT},rowTitle:{fontWeight:'800',color:'#1A1917'},interval:{fontWeight:'700',color:ACCENT,marginTop:3},meta:{fontSize:12,color:'#79736A',lineHeight:17,marginTop:4},source:{borderTopWidth:1,borderTopColor:'#E8E4DE',marginTop:10,paddingTop:10},sourceClass:{fontSize:11,fontWeight:'800',color:'#6B4B16',textTransform:'uppercase',marginBottom:3},sourceTitle:{fontWeight:'700',color:'#34312D'},excerpt:{color:'#444039',fontStyle:'italic',lineHeight:19,marginTop:5},link:{color:ACCENT,fontWeight:'700',paddingVertical:8},unresolved:{backgroundColor:'#FFF1C9',borderRadius:9,padding:10,marginBottom:8},errorBox:{backgroundColor:'#FDECE8',borderRadius:9,padding:10,marginTop:10},error:{color:'#8B3328',lineHeight:19},success:{backgroundColor:'#EEF7E9',borderRadius:9,padding:12,marginTop:12}})

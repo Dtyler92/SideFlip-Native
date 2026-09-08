@@ -32,7 +32,7 @@ test('Android V1.4.0 advances version code while accepted iOS build remains froz
   const app = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'))
   assert.equal(app.expo.version, '1.4.0')
   assert.equal(app.expo.android.package, 'com.sideflip.app')
-  assert.equal(app.expo.android.versionCode, 14)
+  assert.equal(app.expo.android.versionCode, 15)
   assert.equal(app.expo.ios.bundleIdentifier, 'com.sideflip.app')
   assert.equal(app.expo.ios.buildNumber, '17')
 })

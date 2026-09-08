@@ -11,7 +11,11 @@ export function createMaintenanceResearchClient(database) {
     }),
     getStatus: itemId => call('get_my_stuff_research_status_v1',{ p_item_id:itemId }),
     getReview: jobId => call('get_my_stuff_research_review_v1',{ p_job_id:jobId }),
-    approve: (jobId,candidateIds,mutationId) => call('approve_my_stuff_research_v1',{ p_job_id:jobId,p_candidate_ids:candidateIds,p_mutation_id:mutationId }),
+    approve: async (jobId,candidateIds,sourcesVerified,mutationId) => {
+      if (sourcesVerified !== true) throw new Error('SOURCES_NOT_VERIFIED')
+      if (!Array.isArray(candidateIds) || candidateIds.length === 0) throw new Error('CANDIDATES_REQUIRED')
+      return call('approve_my_stuff_research_v2',{ p_job_id:jobId,p_candidate_ids:candidateIds,p_sources_verified:true,p_mutation_id:mutationId })
+    },
     apply: (approvalId,mutationId) => call('apply_my_stuff_research_v1',{ p_approval_id:approvalId,p_mutation_id:mutationId }),
     cancel: (jobId,mutationId) => call('cancel_my_stuff_research_v1',{ p_job_id:jobId,p_mutation_id:mutationId }),
   }

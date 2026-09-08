@@ -7,6 +7,7 @@ import {
   evidenceForCandidate,
   formatResearchInterval,
   normalizeResearchReview,
+  researchEvidenceVerificationLabel,
   researchCanPoll,
   researchSourceAccessibilityLabel,
   researchSourceClassLabel,
@@ -22,17 +23,26 @@ test('research client uses the narrow lifecycle RPCs with explicit idempotency',
   await client.enqueue('item-1','a'.repeat(64),'enqueue-1')
   await client.getStatus('item-1')
   await client.getReview('job-1')
-  await client.approve('job-1',['candidate-a'],'approve-1')
+  await client.approve('job-1',['candidate-a'],true,'approve-1')
   await client.apply('approval-1','apply-1')
   await client.cancel('job-1','cancel-1')
   assert.deepEqual(calls,[
     {name:'enqueue_my_stuff_research_v3',payload:{p_item_id:'item-1',p_confirmed_fingerprint:'a'.repeat(64),p_mutation_id:'enqueue-1'}},
     {name:'get_my_stuff_research_status_v1',payload:{p_item_id:'item-1'}},
     {name:'get_my_stuff_research_review_v1',payload:{p_job_id:'job-1'}},
-    {name:'approve_my_stuff_research_v1',payload:{p_job_id:'job-1',p_candidate_ids:['candidate-a'],p_mutation_id:'approve-1'}},
+    {name:'approve_my_stuff_research_v2',payload:{p_job_id:'job-1',p_candidate_ids:['candidate-a'],p_sources_verified:true,p_mutation_id:'approve-1'}},
     {name:'apply_my_stuff_research_v1',payload:{p_approval_id:'approval-1',p_mutation_id:'apply-1'}},
     {name:'cancel_my_stuff_research_v1',payload:{p_job_id:'job-1',p_mutation_id:'cancel-1'}},
   ])
+})
+
+test('research approval fails closed unless official sources were explicitly verified', async () => {
+  const calls=[]
+  const client=createMaintenanceResearchClient({rpc:async(name,payload)=>{calls.push({name,payload});return {data:null,error:null}}})
+  await assert.rejects(()=>client.approve('job-1',['candidate-a'],false,'approve-1'),/SOURCES_NOT_VERIFIED/)
+  await assert.rejects(()=>client.approve('job-1',['candidate-a'],undefined,'approve-1'),/SOURCES_NOT_VERIFIED/)
+  await assert.rejects(()=>client.approve('job-1',[],true,'approve-1'),/CANDIDATES_REQUIRED/)
+  assert.deepEqual(calls,[])
 })
 
 test('research client propagates server authorization and availability errors', async () => {
@@ -45,7 +55,7 @@ test('review normalization joins citation evidence and preserves unresolved resu
   const review=normalizeResearchReview({
     job:{id:'job-1',status:'awaiting_review'},
     candidates:[{id:'candidate-a',name:'Engine oil',action:'replace',profile:'normal',dueSemantics:'whichever_first',intervalMiles:7500,evidenceIds:['e1'],uncertainty:'low'}],
-    evidence:[{id:'row-1',evidence_key:'e1',title:'2020 owner guide',canonical_url:'https://manufacturer.test/manual.pdf',exact_excerpt:'Replace every 7,500 miles.',page:'42',accessed_at:'2026-09-07T12:00:00.000Z',applicability:'2020 model',source_class:'manufacturer'}],
+    evidence:[{id:'row-1',evidence_key:'e1',title:'2020 owner guide',canonical_url:'https://manufacturer.test/manual.pdf',exact_excerpt:'Replace every 7,500 miles.',page:'42',accessed_at:'2026-09-07T12:00:00.000Z',applicability:'2020 model',source_class:'manufacturer',location_verified:false,verification_status:'provider_citation_unconfirmed'}],
     unresolved:[{name:'Coolant',reason:'Conflicting intervals'}],
   })
   assert.equal(review.jobId,'job-1')
@@ -53,6 +63,9 @@ test('review normalization joins citation evidence and preserves unresolved resu
   assert.deepEqual(evidenceForCandidate(review.candidates[0],review.evidence).map(row=>row.key),['e1'])
   assert.equal(review.unresolved[0].reason,'Conflicting intervals')
   assert.equal(review.evidence[0].accessedOn,'2026-09-07T12:00:00.000Z')
+  assert.equal(review.evidence[0].locationVerified,false)
+  assert.equal(review.evidence[0].verificationStatus,'provider_citation_unconfirmed')
+  assert.match(researchEvidenceVerificationLabel(review.evidence[0]),/not verified/i)
   assert.equal(formatResearchInterval(review.candidates[0]),'Every 7,500 mi')
   assert.equal(researchCanPoll('queued'),true)
   assert.equal(researchCanPoll('running'),true)
@@ -96,7 +109,10 @@ test('native detail exposes Pro-only explicit review, approval, and apply gates 
   assert.match(detail,/ManufacturerMaintenanceResearch/)
   assert.match(detail,/isPro=\{hasPro\}/)
   assert.match(panel,/Research manufacturer schedule/)
-  assert.match(panel,/Anthropic/)
+  assert.match(panel,/xAI/)
+  assert.match(panel,/Grok uses real web search/i)
+  assert.match(panel,/citation text and maintenance intervals.*official source links/i)
+  assert.doesNotMatch(panel,/Anthropic/)
   assert.match(panel,/item type/i)
   assert.match(panel,/VIN, notes, costs, and expenses are never sent/)
   assert.match(panel,/Review suggestions/)
@@ -123,7 +139,16 @@ test('native detail exposes Pro-only explicit review, approval, and apply gates 
   assert.match(panel,/if\(!isFocused\|\|!researchCanPoll/)
   assert.match(panel,/researchSourceClassLabel\(source\.sourceClass\)/)
   assert.doesNotMatch(panel,/<View key=\{source\.key\}[^>]*\saccessible(?:\s|>)/)
-  assert.match(panel,/accessibilityRole="link" accessibilityLabel=\{`Open/)
+  assert.match(panel,/accessibilityRole="link" accessibilityLabel=\{`Open \$\{researchSourceAccessibilityLabel\(source\)\} for \$\{candidate\.name\}`\}/)
+  assert.match(panel,/researchSourceAccessibilityLabel/)
+  assert.match(panel,/accessibilityRole="checkbox" accessibilityLabel="I checked the official source links and verified the selected maintenance intervals"/)
+  assert.match(panel,/const approvalDisabled=disabled\|\|selected\.size===0\|\|!sourcesVerified/)
+  assert.match(panel,/disabled=\{approvalDisabled\}/)
+  assert.match(panel,/setSourcesVerified\(false\)/)
+  assert.match(panel,/selectionJobId\.current!==next\.jobId[\s\S]*setSourcesVerified\(false\)/)
+  assert.match(panel,/function toggleCandidate\(id\)\{\s*setSourcesVerified\(false\)/)
+  assert.match(panel,/setSelected\(new Set\(\)\);setSourcesVerified\(false\)/)
+  assert.match(panel,/approveMyStuffResearch\(jobId,candidateIds,true,mutationId\)/)
   for (const label of ['Retry research status','Research manufacturer schedule again','Approve cited research suggestions','Research updated manufacturer guidance']) assert.match(panel,new RegExp(label))
   assert.match(panel,/const retryButton=.*accessibilityRole="button".*accessibilityLabel=\{label\}.*accessibilityState=\{\{disabled\}\}/)
   assert.match(panel,/accessibilityState=\{\{disabled\}\}/)

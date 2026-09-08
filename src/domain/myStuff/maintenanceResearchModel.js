@@ -35,6 +35,8 @@ function evidencePayload(row = {}) {
     exactExcerpt: row.exact_excerpt || row.exactExcerpt || '',
     accessedOn: row.accessed_on || row.accessed_at || row.accessedAt || '',
     sourceClass: row.source_class || row.sourceClass || '',
+    locationVerified: row.location_verified === true || row.locationVerified === true,
+    verificationStatus: row.verification_status || row.verificationStatus || 'provider_citation_unconfirmed',
   }
 }
 
@@ -93,6 +95,17 @@ export function researchSourceClassLabel(sourceClass) {
 
 export function researchSourceAccessibilityLabel(source = {}) {
   return `${researchSourceClassLabel(source.sourceClass)}: ${source.title || 'Untitled source'}`
+}
+
+export function researchEvidenceVerificationLabel(source = {}) {
+  if (source.locationVerified === true) {
+    if (source.page) return `Verified location: page ${source.page}`
+    if (source.section) return `Verified location: ${source.section}`
+    return 'Location verified by SideFlip'
+  }
+  if (source.page) return `Reported page ${source.page}; citation location not verified`
+  if (source.section) return `Reported section ${source.section}; citation location not verified`
+  return 'Citation location not verified'
 }
 
 export function createResearchRequestGate() {
