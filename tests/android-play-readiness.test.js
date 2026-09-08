@@ -10,7 +10,7 @@ test('Android Play config uses the stable package and minimal permissions', () =
   assert.equal(config.android.package, 'com.sideflip.app')
   assert.equal(config.scheme, 'sideflip')
   assert.equal(config.version, '1.4.0')
-  assert.equal(config.android.versionCode, 13)
+  assert.equal(config.android.versionCode, 14)
   assert.equal(config.android.softwareKeyboardLayoutMode, 'resize')
   assert.equal(config.android.intentFilters, undefined)
   assert.equal(config.android.googleServicesFile, undefined)
