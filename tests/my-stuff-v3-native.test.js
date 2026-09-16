@@ -23,6 +23,24 @@ import { buildUpdateMyStuffItemV2WirePayload } from '../src/lib/myStuffPayloads.
 
 const source = relative => readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8')
 
+test('vehicle confirmation wire payload carries series without unrelated item drafts', async () => {
+  let request
+  const api=createMyStuffV3Client({rpc:async(name,args)=>{request={name,args};return {data:{fingerprint:'ok'},error:null}}})
+  await api.confirmVehicleIdentity('item-1',{
+    vin:' 1hg-cm82633a004352 ',year:2024,make:'Honda',model:'Accord',series:'EX',engine:'2.0L I4',notes:'must not be sent',purchasePrice:'25000',
+  },'mutation-1')
+  assert.equal(request.name,'confirm_my_stuff_vehicle_identity_v3')
+  assert.deepEqual(request.args.p_identity,{vin:'1HGCM82633A004352',model_year:2024,make:'Honda',model:'Accord',series:'EX',engine:'2.0L I4'})
+  assert.equal(request.args.p_mutation_id,'mutation-1')
+})
+
+test('vehicle confirmation preserves explicit clears while omitting unspecified fields', async () => {
+  let request
+  const api=createMyStuffV3Client({rpc:async(name,args)=>{request={name,args};return {data:{fingerprint:'ok'},error:null}}})
+  await api.confirmVehicleIdentity('item-1',{vin:'1HGCM82633A004352',series:'',transmission:null},'mutation-clear')
+  assert.deepEqual(request.args.p_identity,{vin:'1HGCM82633A004352',series:null,transmission:null})
+})
+
 test('V3 expense model preserves purchase price separately and totals immutable current revisions', () => {
   const expenses = [
     { id:'transfer', source_type:'project_transfer', latest_revision:{ amount:'125.50', category:'repair', incurred_on:'2026-01-02' } },
@@ -143,18 +161,21 @@ test('changing from a VIN type to a non-VIN type clears hidden vehicle identity'
   }
 })
 
-test('My Stuff opens on maintenance with expense and transfer actions while details are secondary', () => {
+test('My Stuff opens on maintenance without a duplicate expense action while details are secondary', () => {
   const detail = source('src/screens/MyStuffDetailScreen.js')
   const experience = source('src/components/MyStuffV3Experience.js')
   assert.match(detail, /useState\('Maintenance'\)/)
   assert.match(experience, /const TABS = \['Maintenance','Expenses','History'\]/)
   assert.doesNotMatch(experience, /activeTab==='Details'/)
-  assert.match(experience, /Add expense/)
+  const maintenance = experience.slice(experience.indexOf("{activeTab==='Maintenance'"), experience.indexOf("{activeTab==='History'"))
+  const expenses = experience.slice(experience.indexOf("{activeTab==='Expenses'"), experience.indexOf("{activeTab==='Maintenance'"))
+  assert.doesNotMatch(maintenance, /Add expense/)
+  assert.match(expenses, /Add expense/)
   assert.match(detail, /Item settings/)
   assert.match(experience, /Move to Project to Sell/)
   assert.match(detail, /transferMyStuffToProjectV1/)
   assert.match(detail, /itemOperationInFlight/)
-  assert.ok((detail.match(/beginItemOperation\(\)/g)||[]).length>=9,'all parent item/maintenance mutations claim the shared lock')
+  assert.ok((detail.match(/beginItemOperation\(\)/g)||[]).length>=7,'all remaining parent item/maintenance mutations claim the shared lock')
   assert.match(detail, /VinDecodePanel[^\n]+operationLock=\{itemOperationInFlight\}/)
   assert.match(detail, /onOperationLockChange=\{setVinConfirmationBusy\}/)
   assert.match(detail, /parentBusy=\{saving\|\|vinConfirmationBusy\}/)
@@ -289,18 +310,19 @@ test('V3 native experience exposes tabs, forms, status controls, provenance, and
   assert.doesNotMatch(detail, /ImagePicker|Select receipt photo|Receipt \/ photo/)
 })
 
-test('Free decode and identity confirmation are reachable while unapproved research enqueue is absent', () => {
+test('Free decode can update every supported field and points to separately authorized Pro research', () => {
   const vin = source('src/components/VinDecodePanel.js')
   assert.doesNotMatch(vin, /if \(!isPro\) return onUpgrade\(\)/)
   assert.match(vin, /Basic NHTSA decode/)
-  assert.match(vin, /Confirm Vehicle/)
+  assert.match(vin, /Update All Fields/)
   assert.match(vin, /Unconfirmed/)
   assert.match(vin, /Verified/)
   assert.match(vin, /confirmMyStuffVehicleIdentityV3/)
   assert.match(vin, /ALWAYS_EDITABLE_REVIEW_FIELDS[^]*transmission/)
   assert.match(vin, /Transmission type/)
   assert.doesNotMatch(vin, /enqueueMyStuffResearchV3|enqueue_my_stuff_research_v3|Confirm Vehicle & Research/)
-  assert.match(vin, /Research is not available yet/)
+  assert.match(vin, /Research manufacturer schedule/)
+  assert.doesNotMatch(vin, /Research is not available yet|queues zero research jobs/)
 })
 
 test('V3 detail loads planned schedules and due views without duplicate V2/history rendering', () => {
@@ -312,12 +334,13 @@ test('V3 detail loads planned schedules and due views without duplicate V2/histo
   assert.doesNotMatch(experience,/legacyLogs\.map|occurrences\.map/)
 })
 
-test('detail parent wires safe VIN persistence and makes legacy completion read-only while V3 is active', () => {
+test('detail parent uses the atomic confirmation RPC without committing unrelated item drafts', () => {
   const detail=source('src/screens/MyStuffDetailScreen.js')
-  assert.match(detail,/persistIdentity=\{persistIdentityForConfirmation\}/)
+  assert.match(detail,/confirmationPersistsIdentity/)
+  assert.doesNotMatch(detail,/persistIdentityForConfirmation/)
   assert.match(detail,/v3MaintenanceActive/)
   assert.match(detail,/!v3MaintenanceActive&&value.enabled&&canCompleteMaintenanceDefinition/)
-  assert.match(detail,/!v3MaintenanceActive&&canCompleteMaintenanceSchedule/)
+  assert.doesNotMatch(detail,/canCompleteMaintenanceSchedule/)
 })
 
 test('V3 runtime uses linked-service atomic revisions, supplied money formatting, linked history, and truthful attachment copy', () => {

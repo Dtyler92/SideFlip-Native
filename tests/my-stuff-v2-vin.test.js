@@ -9,10 +9,16 @@ import {
   normalizeVin,
   validateVin,
 } from '../src/domain/myStuff/vinModel.js'
+import { adaptItemPatchToSql } from '../src/lib/myStuffAdapters.js'
 
 test('VIN normalization uppercases and removes spaces and hyphens only', () => {
   assert.equal(normalizeVin(' 1hg-cm826 33a004352 '), '1HGCM82633A004352')
   assert.equal(normalizeVin('abc_def'), 'ABC_DEF')
+})
+
+test('ordinary item patch persists and can clear decoded series', () => {
+  assert.equal(adaptItemPatchToSql({ series:'EX-L' }).series,'EX-L')
+  assert.equal(adaptItemPatchToSql({ series:'' }).series,null)
 })
 
 test('standard North American VIN validates forbidden letters and check digit', () => {
@@ -104,10 +110,22 @@ test('confirmation snapshot merges decoded blanks, preserves edits, normalizes V
   assert.deepEqual(buildVehicleConfirmationSnapshot(values, preview.fields), {
     vin: '1HGCM82633A004352',
     year: '2003',
+    manufacturer: null,
     make: 'Owner corrected make',
     model: 'Accord',
+    trim: null,
     engineModel: 'K24A4',
     series: 'EX',
+    engine: null,
+    engineDisplacementLiters: null,
+    engineCylinders: null,
     transmission: 'Automatic',
+    drivetrain: null,
+    fuelType: null,
+    vehicleType: null,
+    bodyStyle: null,
+    plantName: null,
+    plantCountry: null,
+    vehicleMarket: null,
   })
 })

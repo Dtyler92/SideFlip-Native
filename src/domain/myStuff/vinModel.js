@@ -218,7 +218,9 @@ export function buildVehicleConfirmationSnapshot(values = {}, previewFields = {}
   const snapshot = {}
   for (const field of VIN_CONFIRMATION_PERSISTENCE_FIELDS) {
     const value = merged[field]
-    if (!isBlank(value)) snapshot[field] = clone(value)
+    // Confirmation is a full identity replacement. Preserve reviewed blanks
+    // as explicit nulls so stale decoded values can be cleared atomically.
+    snapshot[field] = isBlank(value) ? null : clone(value)
   }
   return snapshot
 }

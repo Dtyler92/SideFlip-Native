@@ -9,26 +9,45 @@ function compactObject(value) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== '' && entry != null))
 }
 
+function canonicalVin(value) {
+  return String(value ?? '').trim().toUpperCase().replace(/[ -]/g, '')
+}
+
+function identityValue(identity, ...keys) {
+  const key = keys.find(candidate => Object.prototype.hasOwnProperty.call(identity, candidate))
+  if (key == null) return undefined
+  const value = identity[key]
+  return value == null || (typeof value === 'string' && value.trim() === '') ? null : value
+}
+
+function compactIdentityObject(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined))
+}
+
 function vehicleIdentityPayload(identity = {}) {
-  return compactObject({
-    model_year: identity.year ?? identity.model_year,
-    manufacturer: identity.manufacturer,
-    make: identity.make,
-    model: identity.model,
-    trim: identity.trim,
-    engine_model: identity.engineModel ?? identity.engine_model,
-    engine_displacement_liters: identity.engineDisplacementLiters ?? identity.engine_displacement_liters,
-    engine_cylinders: identity.engineCylinders ?? identity.engine_cylinders,
-    transmission: identity.transmission,
-    drivetrain: identity.drivetrain,
-    fuel_power_type: identity.fuelType ?? identity.fuel_power_type,
-    vehicle_type: identity.vehicleType ?? identity.vehicle_type,
-    body_style: identity.bodyStyle ?? identity.body_style,
-    plant_name: identity.plantName ?? identity.plant_name,
-    plant_country: identity.plantCountry ?? identity.plant_country,
-    vehicle_market: identity.vehicleMarket ?? identity.vehicle_market,
-    vin_decoder_source: identity.vinDecoderSource ?? identity.vin_decoder_source,
-    vin_decoder_version: identity.vinDecoderVersion ?? identity.vin_decoder_version,
+  const vin = identityValue(identity, 'vin')
+  return compactIdentityObject({
+    vin: vin === undefined ? undefined : (canonicalVin(vin) || null),
+    model_year: identityValue(identity, 'year', 'model_year'),
+    manufacturer: identityValue(identity, 'manufacturer'),
+    make: identityValue(identity, 'make'),
+    model: identityValue(identity, 'model'),
+    series: identityValue(identity, 'series'),
+    trim: identityValue(identity, 'trim'),
+    engine: identityValue(identity, 'engine'),
+    engine_model: identityValue(identity, 'engineModel', 'engine_model'),
+    engine_displacement_liters: identityValue(identity, 'engineDisplacementLiters', 'engine_displacement_liters'),
+    engine_cylinders: identityValue(identity, 'engineCylinders', 'engine_cylinders'),
+    transmission: identityValue(identity, 'transmission'),
+    drivetrain: identityValue(identity, 'drivetrain'),
+    fuel_power_type: identityValue(identity, 'fuelType', 'fuel_power_type'),
+    vehicle_type: identityValue(identity, 'vehicleType', 'vehicle_type'),
+    body_style: identityValue(identity, 'bodyStyle', 'body_style'),
+    plant_name: identityValue(identity, 'plantName', 'plant_name'),
+    plant_country: identityValue(identity, 'plantCountry', 'plant_country'),
+    vehicle_market: identityValue(identity, 'vehicleMarket', 'vehicle_market'),
+    vin_decoder_source: identityValue(identity, 'vinDecoderSource', 'vin_decoder_source'),
+    vin_decoder_version: identityValue(identity, 'vinDecoderVersion', 'vin_decoder_version'),
   })
 }
 

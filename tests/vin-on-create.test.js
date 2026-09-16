@@ -160,7 +160,7 @@ test('New Project offers pre-save Pro VIN decoding for vehicle details', () => {
   assert.match(screen, /p_serial_number: identifiers\.serialNumber/)
 })
 
-test('non-VIN Projects keep editable model and serial identification without a VIN panel', () => {
+test('non-VIN Projects keep editable model and serial identification in a collapsed expandable section', () => {
   const create = source('src/screens/NewProjectScreen.js')
   const detail = source('src/screens/ProjectDetailScreen.js')
   assert.match(detail, /VIN_PROJECT_CATEGORIES\.has\(project\.category\)/)
@@ -168,6 +168,19 @@ test('non-VIN Projects keep editable model and serial identification without a V
   assert.match(detail, /model_number/)
   assert.match(detail, /serial_number/)
   assert.match(detail, /saveEquipmentIdentifiers/)
+  assert.match(detail, /const \[showEquipmentIdentifiers, setShowEquipmentIdentifiers\] = useState\(false\)/)
+  assert.match(detail, /onPress=\{\(\) => setShowEquipmentIdentifiers\(current => !current\)\}/)
+  assert.match(detail, /accessibilityState=\{\{ expanded: showEquipmentIdentifiers \}\}/)
+  assert.match(detail, /style=\{\[s\.vehicleDetailsBody, !showEquipmentIdentifiers && s\.vehicleDetailsBodyHidden\]\}/)
+  assert.match(detail, /importantForAccessibility=\{showEquipmentIdentifiers \? 'auto' : 'no-hide-descendants'\}/)
+  assert.match(detail, /showEquipmentIdentifiers \? 'Hide' : 'Show'/)
+  assert.match(detail, /project\?\.model_number \|\| project\?\.serial_number/)
+  assert.match(detail, /equipmentIdentifierEditVersion\.current \+= 1/)
+  assert.match(detail, /equipmentIdentifierSaveGeneration\.current \+= 1/)
+  assert.match(detail, /submittedVersion === equipmentIdentifierEditVersion\.current/)
+  assert.match(detail, /targetProjectId !== activeProjectId\.current/)
+  assert.match(detail, /activeProjectId\.current = null/)
+  assert.match(detail, /Your newer edits are still open and have not been saved/)
   assert.match(create, /accessibilityLabel="Model number"/)
   assert.match(create, /accessibilityLabel="Serial number"/)
   assert.match(detail, /accessibilityLabel=\{label\}/)

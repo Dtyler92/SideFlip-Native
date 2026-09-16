@@ -30,7 +30,7 @@ function ensureEditableReviewFields(review, values = {}) {
   return { ...review, fields }
 }
 
-export default function VinDecodePanel({ subjectType, subjectId, values, onChange, persistIdentity, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false, initiallyExpanded = false, operationLock, onOperationLockChange }) {
+export default function VinDecodePanel({ subjectType, subjectId, values, onChange, persistIdentity, confirmationPersistsIdentity = false, onIdentityConfirmed, onDecoded, onConfirmDecoded, fieldLabels = {}, suggestionFields, mapSuggestions = decodedVehicleSuggestions, autoFillBlanks = false, initiallyExpanded = false, operationLock, onOperationLockChange }) {
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [decoding, setDecoding] = useState(false)
   const [preview, setPreview] = useState(null)
@@ -160,7 +160,7 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
       return
     }
     if (subjectType !== 'my_stuff_item' || !subjectId) return
-    if (typeof persistIdentity !== 'function') return setMessage('Vehicle confirmation is unavailable because item saving is not connected. Save item details manually instead.')
+    if (!confirmationPersistsIdentity && typeof persistIdentity !== 'function') return setMessage('Vehicle confirmation is unavailable because item saving is not connected. Save item details manually instead.')
     if (!vinState.canDecode) return setMessage('Decode or manually enter a valid standard VIN before confirming vehicle identity.')
     if (!preview || preview.requestVin !== vinState.normalized) return setMessage('Decode the current VIN before confirming vehicle identity.')
     const snapshot = buildVehicleConfirmationSnapshot(valuesRef.current,preview.fields)
@@ -182,14 +182,14 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
       }
       const result = await persistThenConfirmVehicleIdentity({
         snapshot,
-        persist:persistIdentity,
+        persist:confirmationPersistsIdentity ? async()=>{} : persistIdentity,
         confirm:value=>confirmMyStuffVehicleIdentityV3(subjectId,value,mutationId),
         isCurrent,
       })
       if (!result.confirmed) return
       resetMutationAttemptState(confirmationAttempt.current)
       setConfirmed(true)
-      setMessage('Vehicle identity confirmed. Research is not available yet; no research job was queued. Manual schedules remain available.')
+      setMessage('All supported vehicle fields were saved. In Maintenance, tap Research manufacturer schedule to start separate Pro research.')
       await onIdentityConfirmed?.()
     } catch (error) {
       if (generation !== confirmationGeneration.current) return
@@ -245,8 +245,8 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
         {detail.status === 'conflicting' && <TouchableOpacity onPress={() => useSuggestion(field)} accessibilityRole="button" accessibilityLabel={`Use suggested ${fieldLabels[field] || defaultLabel(field)}`}><Text style={s.use}>Use suggestion</Text></TouchableOpacity>}
       </View>)}
       {hasBlankSuggestions && <TouchableOpacity style={s.fillButton} onPress={fillBlanks} accessibilityRole="button" accessibilityLabel="Fill Blank Fields"><Text style={s.fillText}>Fill Blank Fields</Text></TouchableOpacity>}
-      {((subjectType==='my_stuff_item'&&!!subjectId)||(subjectType==='project'&&typeof onConfirmDecoded==='function'))&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{confirmed?'Vehicle Confirmed':'Confirm Vehicle'}</Text></TouchableOpacity>}
-      {subjectType==='my_stuff_item'&&!!subjectId&&<Text style={s.hint}>Confirmation saves identity only. Research is not available yet, so this queues zero research jobs.</Text>}
+      {((subjectType==='my_stuff_item'&&!!subjectId)||(subjectType==='project'&&typeof onConfirmDecoded==='function'))&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityLabel={subjectType==='my_stuff_item'?'Update all VIN fields':'Confirm vehicle'} accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{subjectType==='my_stuff_item'?(confirmed?'All Fields Updated':'Update All Fields'):(confirmed?'Vehicle Confirmed':'Confirm Vehicle')}</Text></TouchableOpacity>}
+      {subjectType==='my_stuff_item'&&!!subjectId&&<Text style={s.hint}>This saves and confirms the reviewed identity. Manufacturer research is a separate action in Maintenance and never starts automatically.</Text>}
     </View>}
     </>}
   </View>

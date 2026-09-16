@@ -10,7 +10,7 @@ const TYPE_ALIASES = Object.freeze({
 
 const FIELD_MAP = Object.freeze({
   customName: 'custom_name', year: 'model_year', modelYear: 'model_year', manufacturer: 'manufacturer',
-  make: 'make', model: 'model', trim: 'trim', modelNumber: 'model_number', engine: 'engine',
+  make: 'make', model: 'model', series: 'series', trim: 'trim', modelNumber: 'model_number', engine: 'engine',
   engineModel: 'engine_model', engineDisplacementLiters: 'engine_displacement_liters', engineCylinders: 'engine_cylinders',
   vehicleType: 'vehicle_type', bodyStyle: 'body_style', plantName: 'plant_name', plantCountry: 'plant_country', vehicleMarket: 'vehicle_market',
   transmission: 'transmission', drivetrain: 'drivetrain',
