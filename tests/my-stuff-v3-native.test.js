@@ -321,8 +321,7 @@ test('Free decode can update every supported field and points to separately auth
   assert.match(vin, /ALWAYS_EDITABLE_REVIEW_FIELDS[^]*transmission/)
   assert.match(vin, /Transmission type/)
   assert.doesNotMatch(vin, /enqueueMyStuffResearchV3|enqueue_my_stuff_research_v3|Confirm Vehicle & Research/)
-  assert.match(vin, /Research manufacturer schedule/)
-  assert.doesNotMatch(vin, /Research is not available yet|queues zero research jobs/)
+  assert.doesNotMatch(vin, /Research manufacturer schedule|never starts automatically/)
 })
 
 test('V3 detail loads planned schedules and due views without duplicate V2/history rendering', () => {

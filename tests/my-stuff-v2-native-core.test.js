@@ -293,7 +293,11 @@ test('native UI exposes rich identity, cycles, and append/correction without arc
   assert.doesNotMatch(detail, /Due-state summary/)
   assert.match(detail, /getMaintenanceDefinitionAxes/)
   assert.doesNotMatch(detail, /current_mileage\s*:/)
-  assert.match(list, /listMyStuffItemsV2/)
+  assert.match(list, /listMyStuffItemsV4/)
+  assert.doesNotMatch(list, /listMyStuffItemsV2/)
+  assert.match(list, /item\.is_locked/)
+  assert.match(list, /Locked · SideFlip Pro required/)
+  assert.match(list, /navigation\.navigate\('Pro'\)/)
   assert.match(list, /Archived/)
   assert.match(list, /item\.currentUsage\.cycles/)
   for (const sourceText of [create, detail]) {

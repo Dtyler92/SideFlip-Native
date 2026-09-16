@@ -106,6 +106,15 @@ test('goal balance adjustments reject invalid money and preserve retry idempoten
   assert.match(goals, /p_mutation_id: mutationId/)
 })
 
+test('goal status and target changes use one owner-scoped full-state RPC with stable retries', () => {
+  const goals = source('src/screens/TradeUpGoalsScreen.js')
+  assert.match(goals, /updateTradeUpGoal/)
+  assert.doesNotMatch(goals, /\.from\('trade_up_goals'\)[\s\S]{0,160}\.update\(/)
+  assert.match(goals, /goalUpdateMutation\.current/)
+  assert.match(goals, /status: status, targetAmount/)
+  assert.match(goals, /status: mutationGoal\.status, targetAmount/)
+})
+
 test('goal-linked projects and Settings are visible from Home', () => {
   const home = source('src/screens/HomeScreen.js')
   const settings = source('src/screens/SettingsScreen.js')

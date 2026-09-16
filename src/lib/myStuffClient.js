@@ -3,10 +3,12 @@ import { adaptSqlItem } from './myStuffAdapters'
 import { createMyStuffMaintenanceApi } from './myStuffMaintenanceApi'
 import { createMyStuffV3Client } from './myStuffV3Client'
 import { createMaintenanceResearchClient } from './maintenanceResearchClient'
+import { createMyStuffListClient } from './myStuffListClient'
 import { excludeTransferredItems } from '../domain/myStuff/transferVisibility'
 
 const maintenanceApi = createMyStuffMaintenanceApi(supabase)
 const maintenanceResearchApi = createMaintenanceResearchClient(supabase)
+const myStuffListApi = createMyStuffListClient(supabase)
 
 export async function listMyStuffItems(userId) {
   const { data, error } = await supabase
@@ -118,6 +120,8 @@ export async function listMyStuffItemsV2(userId, { includeArchived = true, exclu
   if (transferResult.error) throw transferResult.error
   return excludeTransferredItems(data || [], transferResult.data || []).map(adaptSqlItem)
 }
+
+export const listMyStuffItemsV4 = options => myStuffListApi.list(options)
 
 export async function getMyStuffItemV2(itemId, userId, { asOf = new Date().toISOString() } = {}) {
   const [itemResult, readingsResult, definitionsResult, occurrencesResult, revisionsResult, dueResult] = await Promise.all([

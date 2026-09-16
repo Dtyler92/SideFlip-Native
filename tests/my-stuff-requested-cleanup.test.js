@@ -22,20 +22,18 @@ test('Item Settings shows the complete saved VIN and every supported decoded ide
   ]) assert.match(screen, new RegExp(label.replaceAll(' / ',' \\/ '), 'i'), label)
 })
 
-test('VIN review saves all supported fields and then exposes the separate research action', () => {
+test('VIN review saves all supported fields without promising inactive manufacturer research', () => {
   const panel = source('src/components/VinDecodePanel.js')
   const detail = source('src/screens/MyStuffDetailScreen.js')
   assert.match(panel, /Update All Fields/)
   assert.match(panel, /buildVehicleConfirmationSnapshot\(valuesRef\.current,preview\.fields\)/)
-  assert.match(panel, /Research manufacturer schedule/)
-  assert.doesNotMatch(panel, /Research is not available yet|queues zero research jobs/)
-  assert.match(detail, /Confirm vehicle identity for manufacturer research/)
+  assert.doesNotMatch(panel, /Research manufacturer schedule|never starts automatically/)
+  assert.doesNotMatch(detail, /<ManufacturerMaintenanceResearch/)
+  assert.doesNotMatch(detail, /Confirm vehicle identity for manufacturer research/)
   assert.match(detail, /confirmationPersistsIdentity/)
   assert.doesNotMatch(detail, /persistIdentityForConfirmation/)
   assert.match(detail, /'series'/)
   assert.match(detail, /label="Series" value=\{item\.series\}/)
-  assert.match(detail, /!item\.vin_confirmation_fingerprint/)
-  assert.ok(detail.indexOf('<ManufacturerMaintenanceResearch') < detail.indexOf('<MyStuffV3Experience'), 'research CTA should be near the top of Maintenance after identity confirmation')
 })
 
 test('requested My Stuff maintenance cleanup removes duplicate and legacy controls without deleting history', () => {

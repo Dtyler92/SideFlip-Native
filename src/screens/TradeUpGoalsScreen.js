@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { captureEvent } from '../lib/analytics'
+import { createTradeUpGoalClient } from '../lib/tradeUpGoalClient'
 import {
   calculateGoalSummary,
   canCompleteGoal,
@@ -28,6 +29,7 @@ import {
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
+const tradeUpGoalClient = createTradeUpGoalClient(supabase)
 const roundMoney = value => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100
 const EMPTY_FORM = {
   name: '',
@@ -55,6 +57,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
   const [celebrationVisible, setCelebrationVisible] = useState(false)
   const celebratedGoalIds = useRef(new Set())
   const adjustmentMutation = useRef({ key: null, id: null })
+  const goalUpdateMutation = useRef({ key: null, id: null })
   const currentGoals = useRef(goals)
   const currentPlan = useRef(plan)
   currentGoals.current = goals
@@ -134,6 +137,22 @@ export default function TradeUpGoalsScreen({ navigation }) {
     setForm(current => ({ ...current, [key]: value }))
   }
 
+  async function updateTradeUpGoal({ goalId, status, targetAmount }) {
+    const mutationKey = JSON.stringify([goalId, status, targetAmount])
+    if (goalUpdateMutation.current.key !== mutationKey) {
+      goalUpdateMutation.current = { key: mutationKey, id: createMutationId() }
+    }
+    const updated = await tradeUpGoalClient.update(
+      goalId,
+      status,
+      targetAmount,
+      goalUpdateMutation.current.id,
+      user.id,
+    )
+    goalUpdateMutation.current = { key: null, id: null }
+    return updated
+  }
+
   async function createGoal() {
     const name = form.name.trim()
     const targetAmount = Number(form.targetAmount || 0)
@@ -192,14 +211,8 @@ export default function TradeUpGoalsScreen({ navigation }) {
     }
     setSaving(true)
     try {
-      const { error } = await supabase
-        .from('trade_up_goals')
-        .update({ status, completed_at: status === 'completed' ? new Date().toISOString() : null })
-        .eq('id', mutationGoal.id)
-        .eq('user_id', user.id)
-        .select('id')
-        .single()
-      if (error) throw error
+      const targetAmount = Number(mutationGoal.target_amount)
+      await updateTradeUpGoal({ goalId: mutationGoal.id, status: status, targetAmount })
       if (status === 'completed') captureEvent('goal_completed', { goal_type: mutationGoal.goal_type })
       await load({ quiet: true })
     } catch (error) {
@@ -263,21 +276,16 @@ export default function TradeUpGoalsScreen({ navigation }) {
     if (saving) return
     const mutationGoal = getCurrentlyAccessibleGoal(goalId)
     if (!mutationGoal) return
-    const targetAmount = Number(targetAmountInput)
-    if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
+    const rawTargetAmount = Number(targetAmountInput)
+    if (!Number.isFinite(rawTargetAmount) || rawTargetAmount <= 0) {
       return Alert.alert('Target amount required', 'Enter an amount greater than zero.')
     }
+    const targetAmount = roundMoney(rawTargetAmount)
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) return Alert.alert('Target amount required', 'Enter at least 0.01.')
 
     setSaving(true)
     try {
-      const { error } = await supabase
-        .from('trade_up_goals')
-        .update({ target_amount: targetAmount })
-        .eq('id', mutationGoal.id)
-        .eq('user_id', user.id)
-        .select('id')
-        .single()
-      if (error) throw error
+      await updateTradeUpGoal({ goalId: mutationGoal.id, status: mutationGoal.status, targetAmount })
       setShowTargetEditor(false)
       setTargetAmountInput('')
       await load({ quiet: true })

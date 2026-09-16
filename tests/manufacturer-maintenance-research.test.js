@@ -103,11 +103,16 @@ test('supported item-type changes require a fresh identity confirmation', () => 
   assert.equal(requiresResearchIdentityReconfirmation('mower','truck'),false)
 })
 
-test('native detail exposes Pro-only explicit review, approval, and apply gates without replacing manual entry', () => {
+test('build 20 hides inactive manufacturer research controls without replacing manual entry', () => {
   const detail=source('src/screens/MyStuffDetailScreen.js')
+  assert.doesNotMatch(detail,/<ManufacturerMaintenanceResearch/)
+  assert.doesNotMatch(detail,/Confirm vehicle identity for manufacturer research/)
+  assert.match(detail,/MyStuffV3Experience/)
+  assert.match(detail,/\{showDefinition\?'Cancel':'\+ Add'\}/)
+})
+
+test('dormant manufacturer research component retains its reviewed lifecycle implementation', () => {
   const panel=source('src/components/ManufacturerMaintenanceResearch.js')
-  assert.match(detail,/ManufacturerMaintenanceResearch/)
-  assert.match(detail,/isPro=\{hasPro\}/)
   assert.match(panel,/Research manufacturer schedule/)
   assert.match(panel,/xAI/)
   assert.match(panel,/Grok uses real web search/i)
@@ -129,7 +134,6 @@ test('native detail exposes Pro-only explicit review, approval, and apply gates 
   assert.match(panel,/captureEvent\('my_stuff_research_started'/)
   assert.match(panel,/captureEvent\('my_stuff_research_completed'/)
   assert.match(panel,/captureEvent\('my_stuff_research_failed'/)
-  assert.match(detail,/\{showDefinition\?'Cancel':'\+ Add'\}/)
   assert.match(panel,/useIsFocused/)
   assert.match(panel,/requestGate\.current\.snapshot\(item\.id\)/)
   assert.match(panel,/isCurrentRequest\(snapshot\)/)
@@ -152,8 +156,4 @@ test('native detail exposes Pro-only explicit review, approval, and apply gates 
   for (const label of ['Retry research status','Research manufacturer schedule again','Approve cited research suggestions','Research updated manufacturer guidance']) assert.match(panel,new RegExp(label))
   assert.match(panel,/const retryButton=.*accessibilityRole="button".*accessibilityLabel=\{label\}.*accessibilityState=\{\{disabled\}\}/)
   assert.match(panel,/accessibilityState=\{\{disabled\}\}/)
-  assert.match(detail,/requiresResearchIdentityReconfirmation/)
-  assert.match(detail,/setResearchConfirmationInvalidated\(true\)/)
-  assert.match(detail,/Confirm the current vehicle identity again/)
-  assert.match(detail,/!researchConfirmationInvalidated&&<ManufacturerMaintenanceResearch/)
 })

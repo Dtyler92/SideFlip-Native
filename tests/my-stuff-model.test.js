@@ -14,12 +14,10 @@ import {
 } from '../src/screens/myStuffModel.js'
 import { validateItemDraft } from '../src/domain/myStuff/itemModel.js'
 
-test('Free creation gate allows item one, blocks item two, and never hides existing items', () => {
+test('Free creation gate allows item one and blocks item two', () => {
   assert.equal(canCreateMyStuffItem({ isPro: false, itemCount: 0 }), true)
   assert.equal(canCreateMyStuffItem({ isPro: false, itemCount: 1 }), false)
   assert.equal(canCreateMyStuffItem({ isPro: true, itemCount: 8 }), true)
-  const existing = [{ id: 'a' }, { id: 'b' }]
-  assert.deepEqual(existing.filter(() => true), existing)
 })
 
 test('creating every item requires at least one allowed usage tracking type', () => {

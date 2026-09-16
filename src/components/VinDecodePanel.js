@@ -189,7 +189,7 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
       if (!result.confirmed) return
       resetMutationAttemptState(confirmationAttempt.current)
       setConfirmed(true)
-      setMessage('All supported vehicle fields were saved. In Maintenance, tap Research manufacturer schedule to start separate Pro research.')
+      setMessage('All supported vehicle fields were saved.')
       await onIdentityConfirmed?.()
     } catch (error) {
       if (generation !== confirmationGeneration.current) return
@@ -246,7 +246,7 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
       </View>)}
       {hasBlankSuggestions && <TouchableOpacity style={s.fillButton} onPress={fillBlanks} accessibilityRole="button" accessibilityLabel="Fill Blank Fields"><Text style={s.fillText}>Fill Blank Fields</Text></TouchableOpacity>}
       {((subjectType==='my_stuff_item'&&!!subjectId)||(subjectType==='project'&&typeof onConfirmDecoded==='function'))&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityLabel={subjectType==='my_stuff_item'?'Update all VIN fields':'Confirm vehicle'} accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{subjectType==='my_stuff_item'?(confirmed?'All Fields Updated':'Update All Fields'):(confirmed?'Vehicle Confirmed':'Confirm Vehicle')}</Text></TouchableOpacity>}
-      {subjectType==='my_stuff_item'&&!!subjectId&&<Text style={s.hint}>This saves and confirms the reviewed identity. Manufacturer research is a separate action in Maintenance and never starts automatically.</Text>}
+      {subjectType==='my_stuff_item'&&!!subjectId&&<Text style={s.hint}>This saves and confirms the reviewed vehicle identity.</Text>}
     </View>}
     </>}
   </View>

@@ -7,10 +7,10 @@ import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffIt
 import VinDecodePanel from '../components/VinDecodePanel'
 import ReportPanel from '../components/ReportPanel'
 import MyStuffV3Experience from '../components/MyStuffV3Experience'
-import ManufacturerMaintenanceResearch from '../components/ManufacturerMaintenanceResearch'
+
 import FocusAwareScrollView from '../components/FocusAwareScrollView'
 import { normalizePlannedOccurrences } from '../domain/myStuff/v3Model'
-import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, requiresResearchIdentityReconfirmation, selectItemType, supportsVinDecoder, validateItemDraft } from '../domain/myStuff/itemModel'
+import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, selectItemType, supportsVinDecoder, validateItemDraft } from '../domain/myStuff/itemModel'
 import {
   createMyStuffMaintenanceDefinitionV2,
   deleteMyStuffItem,
@@ -69,7 +69,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [refreshing,setRefreshing]=useState(false)
   const [saving,setSaving]=useState(false)
   const [vinConfirmationBusy,setVinConfirmationBusy]=useState(false)
-  const [researchConfirmationInvalidated,setResearchConfirmationInvalidated]=useState(false)
+
   const [error,setError]=useState('')
   const [editing,setEditing]=useState(false)
   const [edit,setEdit]=useState({})
@@ -127,7 +127,6 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     return()=>{requestGeneration.current+=1;completionInFlight.current=false}
   },[load]))
 
-  useEffect(()=>{setResearchConfirmationInvalidated(false)},[itemId])
 
   useEffect(()=>{
     if(!item)return
@@ -168,12 +167,11 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       const {itemType,...editable}=validatedEdit
       const payload={...editable,itemId:item.id,acquiredOn:edit.acquiredOn.trim()||null,notes:edit.notes.trim()||null}
       if(itemType!==item.itemType)payload.itemType=itemType
-      const invalidatesResearchIdentity=requiresResearchIdentityReconfirmation(item.itemType,itemType)
       const wirePayload=buildUpdateMyStuffItemV2WirePayload(payload)
       const mutationId=mutationIdForPayload(itemMutationAttempt.current,wirePayload)
       await runMutationThenRefresh({
         mutate:()=>updateMyStuffItemV2(wirePayload,mutationId),
-        onMutationSuccess:()=>{resetMutationAttemptState(itemMutationAttempt.current);if(invalidatesResearchIdentity)setResearchConfirmationInvalidated(true);setEditing(false)},
+        onMutationSuccess:()=>{resetMutationAttemptState(itemMutationAttempt.current);setEditing(false)},
         refresh:()=>load({quiet:true,throwOnError:true}),
         onMutationError:nextError=>Alert.alert('Could not update item',nextError.message||'Please try again.'),
         onRefreshError:nextError=>reportSavedRefreshFailure('Item details saved, but refresh failed',nextError),
@@ -383,7 +381,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
           <Field label="Vehicle market" value={edit.vehicleMarket} onChangeText={value=>setEditValue('vehicleMarket',value)}/>
           <Field label="Plant name" value={edit.plantName} onChangeText={value=>setEditValue('plantName',value)}/>
           <Field label="Plant country" value={edit.plantCountry} onChangeText={value=>setEditValue('plantCountry',value)}/>
-          {supportsVinDecoder(edit.itemType)&&<VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} confirmationPersistsIdentity operationLock={itemOperationInFlight} onOperationLockChange={setVinConfirmationBusy} onIdentityConfirmed={async()=>{setResearchConfirmationInvalidated(false);setEditing(false);try{await load({quiet:true,throwOnError:true});setShowItemSettings(false);Alert.alert('Vehicle details updated','All supported VIN fields were saved. Tap Research manufacturer schedule in Maintenance to start Pro research.')}catch(nextError){reportSavedRefreshFailure('Vehicle confirmed, but refresh failed',nextError)}}} fieldLabels={{transmission:'Transmission type'}} suggestionFields={['year','make','model','series','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','engine','transmission','drivetrain']}/>}
+          {supportsVinDecoder(edit.itemType)&&<VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} confirmationPersistsIdentity operationLock={itemOperationInFlight} onOperationLockChange={setVinConfirmationBusy} onIdentityConfirmed={async()=>{setEditing(false);try{await load({quiet:true,throwOnError:true});setShowItemSettings(false);Alert.alert('Vehicle details updated','All supported VIN fields were saved.')}catch(nextError){reportSavedRefreshFailure('Vehicle confirmed, but refresh failed',nextError)}}} fieldLabels={{transmission:'Transmission type'}} suggestionFields={['year','make','model','series','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','engine','transmission','drivetrain']}/>}
           <Field label="Acquired on" value={edit.acquiredOn} onChangeText={value=>setEditValue('acquiredOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
           <Text style={s.label}>Usage measurements</Text><View style={s.modeRow} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis=>getItemCategoryContract(edit.category).measurements.includes(axis.key)).map(axis=><Choice key={axis.key} label={axis.label} selected={edit.measurements.includes(axis.key)} onPress={()=>toggleEditMeasurement(axis.key)} multiple={true}/>)}</View>
           <Text style={s.label}>Usage profile</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Usage profile">{['normal','severe'].map(value=><Choice key={value} label={value==='normal'?'Normal use':'Severe use'} selected={edit.usageProfile===value} onPress={()=>setEditValue('usageProfile',value)}/>)}</View>
@@ -418,9 +416,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         </>}
         <TouchableOpacity style={s.deleteItem} onPress={confirmDeleteItem} disabled={saving} accessibilityRole="button" accessibilityLabel="Delete My Stuff item" accessibilityState={{disabled:saving}}><Text style={s.deleteItemText}>Delete Item Permanently</Text></TouchableOpacity>
       </View>}
-      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&!item.vin_confirmation_fingerprint&&!researchConfirmationInvalidated&&<View style={s.card}><Text style={s.sectionTitle}>Confirm vehicle identity for manufacturer research</Text><Text style={s.muted}>Decode the VIN, review the returned fields, and tap Update All Fields. Pro research remains a separate action and will not start automatically.</Text><TouchableOpacity style={s.settingsButton} onPress={()=>{setShowItemSettings(true);setEditing(true)}} accessibilityRole="button" accessibilityLabel="Review VIN and update all vehicle fields"><Text style={s.settingsButtonText}>Review VIN and vehicle fields</Text></TouchableOpacity></View>}
-      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&researchConfirmationInvalidated&&<View style={s.card}><Text style={s.sectionTitle}>Confirm the current vehicle identity again</Text><Text style={s.muted}>The item type changed, so the previous confirmation cannot authorize manufacturer research. Decode and confirm the current identity before researching.</Text><TouchableOpacity style={s.settingsButton} onPress={()=>{setShowItemSettings(true);setEditing(true)}} accessibilityRole="button" accessibilityLabel="Reconfirm current vehicle identity"><Text style={s.settingsButtonText}>Review and confirm identity</Text></TouchableOpacity></View>}
-      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&item.vin_confirmation_fingerprint&&!researchConfirmationInvalidated&&<ManufacturerMaintenanceResearch item={item} isPro={hasPro} onUpgrade={()=>navigation.navigate('Pro')} onApplied={()=>load({quiet:true,throwOnError:true})} operationLock={itemOperationInFlight} parentBusy={saving||vinConfirmationBusy}/>}
+
       <MyStuffV3Experience
         item={item}
         definitions={definitions}
