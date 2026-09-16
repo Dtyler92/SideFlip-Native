@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Switch } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Platform, Switch } from 'react-native'
 import { useEffect, useState } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
@@ -174,6 +174,24 @@ export default function SettingsScreen({ navigation }) {
         <Switch disabled={analyticsSaving} value={analyticsEnabled} onValueChange={handleAnalyticsPreference} trackColor={{ false: '#D7D2CB', true: '#E7AAA1' }} thumbColor={analyticsEnabled ? ACCENT : '#fff'} />
       </View>
 
+      {Platform.OS === 'ios' && (
+        <>
+          <Text style={s.sectionTitle}>Help</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Replay Tutorial"
+            style={s.replayButton}
+            onPress={() => navigation.navigate('Tutorial', { mode: 'replay' })}
+          >
+            <View style={s.replayCopy}>
+              <Text style={s.replayTitle}>Replay Tutorial</Text>
+              <Text style={s.replayNote}>Review the SideFlip basics anytime.</Text>
+            </View>
+            <Text style={s.replayChevron} accessibilityElementsHidden>›</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
       {/* Sign Out */}
       <TouchableOpacity style={s.signOutBtn} onPress={confirmSignOut}>
         <Text style={s.signOutText}>Sign Out</Text>
@@ -223,6 +241,11 @@ const s = StyleSheet.create({
   langLabel: { fontSize: 15, color: '#1A1917', fontWeight: '500' },
   btn: { backgroundColor: ACCENT, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 12 },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  replayButton: { minHeight: 60, borderRadius: 14, backgroundColor: '#fff', padding: 16, marginBottom: 20, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  replayCopy: { flex: 1 },
+  replayTitle: { fontSize: 15, color: '#1A1917', fontWeight: '700', marginBottom: 3 },
+  replayNote: { fontSize: 12, color: '#8C8880', lineHeight: 18 },
+  replayChevron: { color: ACCENT, fontSize: 28, marginLeft: 12 },
   signOutBtn: { borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1.5, borderColor: '#E8E4DE', marginBottom: 24 },
   signOutText: { color: '#5C5850', fontSize: 15, fontWeight: '600' },
   deleteBtn: { alignItems: 'center', padding: 12, marginBottom: 20 },
