@@ -94,6 +94,16 @@ test('goal mutations and project pickers recheck entitlement after plan changes'
   assert.match(projectDetail, /const projectLoadGeneration = useRef\(0\)/)
   assert.match(projectDetail, /if \(request !== projectLoadGeneration\.current\) return/)
   assert.match(projectDetail, /accessibleActiveGoalsAfterProLoss\(candidateGoals, currentPlan\.current\)/)
+  assert.match(goals, /status === 'active' && !canCreateAnotherGoal\(currentPlan\.current, otherGoals\)/)
+})
+
+test('goal balance adjustments reject invalid money and preserve retry idempotency', () => {
+  const goals = source('src/screens/TradeUpGoalsScreen.js')
+  assert.match(goals, /!Number\.isFinite\(rawAmount\) \|\| rawAmount <= 0/)
+  assert.match(goals, /const amount = roundMoney\(rawAmount\)/)
+  assert.match(goals, /!Number\.isFinite\(amount\) \|\| amount <= 0/)
+  assert.match(goals, /adjustmentMutation\.current/)
+  assert.match(goals, /p_mutation_id: mutationId/)
 })
 
 test('goal-linked projects and Settings are visible from Home', () => {
@@ -109,7 +119,9 @@ test('goal-linked projects and Settings are visible from Home', () => {
 
 test('iOS goal upsells retain Apple wording and no alternate purchase path', () => {
   const goals = source('src/screens/TradeUpGoalsScreen.js')
+  const createGoal = source('src/screens/GoalCreateScreen.js')
   assert.match(goals, /Upgrade in the App Store/)
   assert.match(goals, /Upgrade with Apple in the app/)
-  assert.doesNotMatch(goals, /Google Play|Stripe/)
+  assert.match(createGoal, /Upgrade in the App Store/)
+  assert.doesNotMatch(`${goals}\n${createGoal}`, /Google Play|Stripe/)
 })

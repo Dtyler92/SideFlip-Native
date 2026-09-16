@@ -32,7 +32,7 @@ export default function GoalCreateScreen({ navigation, route }) {
   }
 
   function showPaywall() {
-    Alert.alert('SideFlip Pro', 'Free includes one active Trade-Up Goal. Upgrade to SideFlip Pro to create additional active goals.', [
+    Alert.alert('SideFlip Pro', 'Free includes one active Trade-Up Goal. Upgrade in the App Store to create additional active goals.', [
       { text: 'Not Now', style: 'cancel' },
       { text: 'View Pro', onPress: () => navigation.navigate('Pro') },
     ])

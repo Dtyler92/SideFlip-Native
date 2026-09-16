@@ -28,6 +28,7 @@ import {
 
 const ACCENT = '#C8402F'
 const GREEN = '#2D7A4F'
+const roundMoney = value => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100
 const EMPTY_FORM = {
   name: '',
   goalType: 'item',
@@ -53,6 +54,7 @@ export default function TradeUpGoalsScreen({ navigation }) {
   const [targetAmountInput, setTargetAmountInput] = useState('')
   const [celebrationVisible, setCelebrationVisible] = useState(false)
   const celebratedGoalIds = useRef(new Set())
+  const adjustmentMutation = useRef({ key: null, id: null })
   const currentGoals = useRef(goals)
   const currentPlan = useRef(plan)
   currentGoals.current = goals
@@ -176,6 +178,10 @@ export default function TradeUpGoalsScreen({ navigation }) {
     if (saving) return
     const mutationGoal = getCurrentlyAccessibleGoal(goalId)
     if (!mutationGoal) return
+    const otherGoals = currentGoals.current.filter(goal => goal.id !== mutationGoal.id)
+    if (status === 'active' && !canCreateAnotherGoal(currentPlan.current, otherGoals)) {
+      return Alert.alert('SideFlip Pro', 'Free includes one active Trade-Up Goal. Upgrade in the App Store to reopen another goal.')
+    }
     if (status === 'completed' && !canCompleteGoal(mutationGoal, calculateGoalSummary(mutationGoal, projects))) {
       const targetAmount = Number(mutationGoal.target_amount) || 0
       const progressValue = calculateGoalSummary(mutationGoal, projects).progressValue
@@ -191,6 +197,8 @@ export default function TradeUpGoalsScreen({ navigation }) {
         .update({ status, completed_at: status === 'completed' ? new Date().toISOString() : null })
         .eq('id', mutationGoal.id)
         .eq('user_id', user.id)
+        .select('id')
+        .single()
       if (error) throw error
       if (status === 'completed') captureEvent('goal_completed', { goal_type: mutationGoal.goal_type })
       await load({ quiet: true })
@@ -217,10 +225,18 @@ export default function TradeUpGoalsScreen({ navigation }) {
     if (saving) return
     const mutationGoal = getCurrentlyAccessibleGoal(goalId)
     if (!mutationGoal) return
-    const amount = Number(adjustmentAmount)
+    const rawAmount = Number(adjustmentAmount)
+    if (!Number.isFinite(rawAmount) || rawAmount <= 0) return Alert.alert('Enter an amount', 'The adjustment must be greater than zero.')
+    const amount = roundMoney(rawAmount)
+    if (!Number.isFinite(amount) || amount <= 0) return Alert.alert('Enter an amount', 'Enter at least 0.01.')
     const summary = calculateGoalSummary(mutationGoal, projects)
-    if (amount <= 0) return Alert.alert('Enter an amount', 'The adjustment must be greater than zero.')
     if (adjustmentType === 'cash_out' && amount > summary.available) return Alert.alert('Amount too high', `You currently have ${formatMoney(summary.available)} available toward this goal.`)
+    const note = adjustmentNote.trim() || null
+    const mutationKey = JSON.stringify([mutationGoal.id, adjustmentType, amount, note])
+    if (adjustmentMutation.current.key !== mutationKey) {
+      adjustmentMutation.current = { key: mutationKey, id: createMutationId() }
+    }
+    const mutationId = adjustmentMutation.current.id
 
     setSaving(true)
     try {
@@ -228,10 +244,11 @@ export default function TradeUpGoalsScreen({ navigation }) {
         p_goal_id: mutationGoal.id,
         p_type: adjustmentType,
         p_amount: amount,
-        p_note: adjustmentNote.trim() || null,
-        p_mutation_id: createMutationId(),
+        p_note: note,
+        p_mutation_id: mutationId,
       })
       if (error) throw error
+      adjustmentMutation.current = { key: null, id: null }
       setAdjustmentAmount('')
       setAdjustmentNote('')
       await load({ quiet: true })
@@ -258,6 +275,8 @@ export default function TradeUpGoalsScreen({ navigation }) {
         .update({ target_amount: targetAmount })
         .eq('id', mutationGoal.id)
         .eq('user_id', user.id)
+        .select('id')
+        .single()
       if (error) throw error
       setShowTargetEditor(false)
       setTargetAmountInput('')
