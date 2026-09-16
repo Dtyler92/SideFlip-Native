@@ -176,21 +176,19 @@ export default function SettingsScreen({ navigation }) {
         <Switch disabled={analyticsSaving} value={analyticsEnabled} onValueChange={handleAnalyticsPreference} trackColor={{ false: '#D7D2CB', true: '#E7AAA1' }} thumbColor={analyticsEnabled ? ACCENT : '#fff'} />
       </View>
 
-      {Platform.OS === 'android' && <>
-        <Text style={s.sectionTitle}>Help</Text>
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Replay Tutorial"
-          style={s.replayButton}
-          onPress={() => navigation.navigate('Tutorial', { mode: 'replay' })}
-        >
-          <View style={s.replayCopy}>
-            <Text style={s.replayTitle}>Replay Tutorial</Text>
-            <Text style={s.replayNote}>Review the six-step SideFlip guide.</Text>
-          </View>
-          <Text style={s.replayArrow} accessibilityElementsHidden>›</Text>
-        </TouchableOpacity>
-      </>}
+      <Text style={s.sectionTitle}>Help</Text>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Replay Tutorial"
+        style={s.replayButton}
+        onPress={() => navigation.navigate('Tutorial', { mode: 'replay' })}
+      >
+        <View style={s.replayCopy}>
+          <Text style={s.replayTitle}>Replay Tutorial</Text>
+          <Text style={s.replayNote}>Review the six-step SideFlip guide.</Text>
+        </View>
+        <Text style={s.replayArrow} accessibilityElementsHidden>›</Text>
+      </TouchableOpacity>
 
       {/* Sign Out */}
       <TouchableOpacity style={s.signOutBtn} onPress={confirmSignOut}>

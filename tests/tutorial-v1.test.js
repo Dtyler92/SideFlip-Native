@@ -42,11 +42,11 @@ test('tutorial completion persists against the versioned install-local key', asy
 })
 
 
-test('first-run tutorial waits for account onboarding and persisted completion lookup', () => {
+test('first-run tutorial runs on every native build after onboarding and persisted completion lookup', () => {
   const app = source('App.js')
   assert.match(app, /needsOnboarding === false/)
   assert.match(app, /hasCompletedTutorial\(\)/)
-  assert.match(app, /Platform\.OS !== 'android'/)
+  assert.doesNotMatch(app, /Platform\.OS !== 'android'/)
   assert.match(app, /needsOnboarding == null/)
   assert.match(app, /catch\(\(\) => \{ if \(active\) setTutorialState\('complete'\) \}\)/)
   assert.match(app, /if \(needsOnboarding\)/)
@@ -69,7 +69,7 @@ test('skip and finish persist completion while replay always returns to Settings
   assert.match(tutorial, /BackHandler\.addEventListener\('hardwareBackPress'/)
   assert.match(tutorial, /savingRef\.current/)
   assert.match(tutorial, /The tutorial may appear again next time/)
-  assert.match(settings, /Platform\.OS === 'android' && <>[\s\S]*>Replay Tutorial<\/Text>/)
+  assert.doesNotMatch(settings, /Platform\.OS === 'android' && <>[\s\S]*>Replay Tutorial<\/Text>/)
   assert.match(settings, /navigation\.navigate\('Tutorial', \{ mode: 'replay' \}\)/)
   assert.match(settings, />Replay Tutorial<\/Text>/)
 })

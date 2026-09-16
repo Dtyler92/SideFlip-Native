@@ -92,10 +92,6 @@ function RootNavigator() {
   const [tutorialState, setTutorialState] = useState('checking')
 
   useEffect(() => {
-    if (Platform.OS !== 'android') {
-      setTutorialState('complete')
-      return undefined
-    }
     if (!user || loading || needsOnboarding) {
       setTutorialState('checking')
       return undefined
