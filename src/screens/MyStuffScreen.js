@@ -53,14 +53,16 @@ export default function MyStuffScreen({ navigation }) {
         contentContainerStyle={s.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load({ quiet: true }) }} tintColor={ACCENT} />}
       >
-        <Text style={s.heading}>My Stuff</Text>
+        <View style={s.headingRow}>
+          <Text style={s.heading}>My Stuff</Text>
+          <TouchableOpacity style={s.addButton} onPress={startCreate} accessibilityRole="button" accessibilityLabel="Add a My Stuff item">
+            <Text style={s.addButtonText}>+</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={s.subheading}>Keep maintenance, readings, and service history for the things you own.</Text>
 
         {!!error && <View style={s.errorCard}><Text style={s.errorText}>{error}</Text><TouchableOpacity onPress={() => load()} accessibilityRole="button" accessibilityLabel="Retry loading My Stuff"><Text style={s.retry}>Try Again</Text></TouchableOpacity></View>}
 
-        <TouchableOpacity style={s.primary} onPress={startCreate} accessibilityRole="button" accessibilityLabel="Add a My Stuff item">
-          <Text style={s.primaryText}>Add an Item</Text>
-        </TouchableOpacity>
         {!canCreate && (
           <View style={s.proCard}>
             <Text style={s.proEyebrow}>SIDEFLIP PRO</Text>
@@ -102,8 +104,7 @@ export default function MyStuffScreen({ navigation }) {
 
 const s = StyleSheet.create({
   root:{flex:1,backgroundColor:'#FAFAF7'},center:{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:'#FAFAF7'},content:{padding:20,paddingBottom:90},
-  heading:{fontSize:30,fontWeight:'800',color:'#1A1917'},subheading:{fontSize:15,color:'#6B665E',lineHeight:22,marginTop:6,marginBottom:20},
-  primary:{backgroundColor:ACCENT,borderRadius:12,padding:16,alignItems:'center'},primaryText:{color:'#fff',fontWeight:'700',fontSize:16},
+  headingRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},heading:{fontSize:30,fontWeight:'800',color:'#1A1917'},addButton:{width:44,height:44,borderRadius:22,borderWidth:1.5,borderColor:ACCENT,backgroundColor:'#FFF2EE',alignItems:'center',justifyContent:'center'},addButtonText:{fontSize:28,lineHeight:30,fontWeight:'700',color:ACCENT},subheading:{fontSize:15,color:'#6B665E',lineHeight:22,marginTop:6,marginBottom:20},
   proCard:{backgroundColor:'#FFF4E5',borderWidth:1,borderColor:'#F0D4A5',borderRadius:14,padding:16},proEyebrow:{fontSize:11,fontWeight:'800',letterSpacing:1,color:ACCENT},proTitle:{fontSize:17,fontWeight:'700',color:'#1A1917',marginTop:4},proLink:{color:ACCENT,fontWeight:'700',marginTop:12},
   sectionTitle:{fontSize:18,fontWeight:'800',color:'#1A1917',marginTop:26,marginBottom:10},empty:{backgroundColor:'#fff',borderRadius:14,padding:22,borderWidth:1,borderColor:'#E8E4DE',alignItems:'center'},emptyTitle:{fontWeight:'700',fontSize:17,color:'#1A1917',marginBottom:5},muted:{color:'#6B665E',lineHeight:20},
   itemCard:{backgroundColor:'#fff',borderRadius:14,padding:16,borderWidth:1,borderColor:'#E8E4DE',marginBottom:10},row:{flexDirection:'row',alignItems:'center'},flex:{flex:1},itemName:{fontSize:18,fontWeight:'700',color:'#1A1917'},category:{fontSize:13,color:'#6B665E',marginTop:3,textTransform:'capitalize'},chevron:{fontSize:30,color:'#A8A49E'},readingRow:{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:12},reading:{fontSize:12,color:'#5C5850',backgroundColor:'#F3F1EC',paddingHorizontal:9,paddingVertical:5,borderRadius:12},

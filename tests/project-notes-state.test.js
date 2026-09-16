@@ -30,3 +30,11 @@ test('stale responses from a prior Project are ignored even after route reuse', 
     savedEditVersion:4, currentEditVersion:4,
   }), { applyProject:false, replaceDraft:false })
 })
+
+test('responses completing after the Project screen unmounts are ignored', () => {
+  assert.deepEqual(resolveProjectNotesSaveResponse({
+    targetProjectId:'project-a', currentProjectId:null,
+    saveRequest:3, currentSaveRequest:4,
+    savedEditVersion:4, currentEditVersion:4,
+  }), { applyProject:false, replaceDraft:false })
+})

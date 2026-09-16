@@ -18,6 +18,8 @@ test('My Stuff integrates usage updates with maintenance and removes the standal
   assert.doesNotMatch(detail, /No appended usage readings yet/)
   assert.match(detail, />Maintenance schedules</)
   assert.match(detail, /Update current usage/)
+  assert.doesNotMatch(detail, />Current usage</)
+  assert.doesNotMatch(detail, /Update mileage, hours, or cycles here/)
   assert.match(detail, /Save Current Usage/)
   assert.match(detail, /recordMyStuffReadingV2/)
   assert.match(detail, /refresh:\(\)=>load\(\{quiet:true,throwOnError:true\}\)/)

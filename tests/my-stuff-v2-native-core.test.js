@@ -143,7 +143,7 @@ test('V2 due-state rows fail closed for disabled or ambiguous meter dimensions',
   }).map(row => row.definition_id), ['calendar', 'mileage', 'cycles'])
 })
 
-test('disabled mileage and hours schedules stay visible but cannot be completed', () => {
+test('legacy schedule behavior stays compatible in the model while native schedule fields are removed', () => {
   const schedules = [
     { id: 'mileage-history', tracking_type: 'mileage', next_due_value: 5000 },
     { id: 'hours-history', tracking_type: 'hours', next_due_value: 100 },
@@ -163,7 +163,8 @@ test('disabled mileage and hours schedules stay visible but cannot be completed'
   assert.match(detail, /filterActiveDueStates\(result\.dueStates,result\.item\)/)
   assert.match(detail, /if\(!definitionValue\.enabled\|\|!canCompleteMaintenanceDefinition\(definitionValue,item\)\)return/)
   assert.match(detail, /canCompleteMaintenanceDefinition\(value,item\).*Complete Maintenance/s)
-  assert.match(detail, /schedules\.map\(value=>/)
+  assert.doesNotMatch(detail, /schedules\.map\(value=>/)
+  assert.match(detail, /schedules\.find\(value=>value\.id===log\.schedule_id\)/)
 })
 
 test('every exact SQL item type survives read-edit-write round trips', () => {
@@ -274,7 +275,7 @@ test('V2 client preserves V1 exports and uses exact owner-scoped reads and RPC c
   assert.match(client, /from\('my_stuff_readings'\)[\s\S]*?order\('created_at', \{ ascending: false \}\)\.order\('id', \{ ascending: false \}\)/)
 })
 
-test('native UI exposes rich identity, cycles, append/correction, archive and due summary safely', () => {
+test('native UI exposes rich identity, cycles, and append/correction without archive or duplicate due summary', () => {
   const create = source('src/screens/MyStuffCreateScreen.js')
   const detail = source('src/screens/MyStuffDetailScreen.js')
   const list = source('src/screens/MyStuffScreen.js')
@@ -288,8 +289,8 @@ test('native UI exposes rich identity, cycles, append/correction, archive and du
   assert.match(detail, /recordMyStuffReadingV2/)
   assert.match(detail, /correctsReadingId/)
   assert.match(detail, /Correction reason/)
-  assert.match(detail, /setMyStuffItemArchivedV2/)
-  assert.match(detail, /Due-state summary/)
+  assert.doesNotMatch(detail, /setMyStuffItemArchivedV2/)
+  assert.doesNotMatch(detail, /Due-state summary/)
   assert.match(detail, /getMaintenanceDefinitionAxes/)
   assert.doesNotMatch(detail, /current_mileage\s*:/)
   assert.match(list, /listMyStuffItemsV2/)
@@ -299,8 +300,7 @@ test('native UI exposes rich identity, cycles, append/correction, archive and du
     assert.match(sourceText, /mutationIdForPayload/)
     assert.match(sourceText, /InFlight/)
   }
-  assert.match(detail, /archiveMutationId\.current\|\|/)
-  assert.match(detail, /archiveMutationId\.current=null/)
+  assert.doesNotMatch(detail, /Archive Item|Restore Item/)
   assert.match(detail, /itemInFlight/)
   for (const screen of [create, detail]) {
     assert.match(screen, /keyboardShouldPersistTaps="handled"/)
@@ -339,7 +339,9 @@ test('detail uses checkbox semantics for multi-select usage axes and only displa
   assert.match(detail, /item\.currentUsage\[axis\]/)
   assert.doesNotMatch(detail, /<Reading label="Mileage" value=\{item\.effective_current_mileage/)
   assert.doesNotMatch(detail, />Usage readings</)
-  assert.match(detail, />Current usage</)
+  assert.doesNotMatch(detail, />Current usage</)
+  assert.doesNotMatch(detail, /Update mileage, hours, or cycles here/)
+  assert.match(detail, /Update current usage/)
   assert.match(detail, /logs\.map\(log=>/)
   assert.match(list, /item\.currentUsage\.miles/)
   assert.match(list, /item\.currentUsage\.hours/)

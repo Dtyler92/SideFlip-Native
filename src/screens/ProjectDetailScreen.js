@@ -66,12 +66,15 @@ export default function ProjectDetailScreen({ navigation, route }) {
   const [vehicleDetails, setVehicleDetails] = useState(EMPTY_VEHICLE_DETAILS)
   const [equipmentIdentifiers, setEquipmentIdentifiers] = useState({ modelNumber:'', serialNumber:'' })
   const [showVehicleDetails, setShowVehicleDetails] = useState(false)
+  const [showEquipmentIdentifiers, setShowEquipmentIdentifiers] = useState(false)
   const [savingVehicleDetails, setSavingVehicleDetails] = useState(false)
   const [projectNotes, setProjectNotes] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [showAssignGoal, setShowAssignGoal] = useState(false)
   const vehicleDetailsInFlight = useRef(false)
   const equipmentIdentifiersInFlight = useRef(false)
+  const equipmentIdentifierEditVersion = useRef(0)
+  const equipmentIdentifierSaveGeneration = useRef(0)
   const notesInFlight = useRef(false)
   const notesDirty = useRef(false)
   const notesEditVersion = useRef(0)
@@ -128,6 +131,9 @@ export default function ProjectDetailScreen({ navigation, route }) {
     notesInFlight.current = false
     notesEditVersion.current += 1
     notesSaveGeneration.current += 1
+    equipmentIdentifiersInFlight.current = false
+    equipmentIdentifierEditVersion.current += 1
+    equipmentIdentifierSaveGeneration.current += 1
     generationRequestRef.current += 1
     generationInFlightRef.current = false
     generationAbortRef.current?.abort()
@@ -138,6 +144,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
     setLoading(true)
     setProjectNotes('')
     setSavingNotes(false)
+    setSavingVehicleDetails(false)
     setSellerBrief('')
     setListingText('')
     setGeneratedPreview('')
@@ -149,6 +156,7 @@ export default function ProjectDetailScreen({ navigation, route }) {
     setVehicleDetails(EMPTY_VEHICLE_DETAILS)
     setEquipmentIdentifiers({ modelNumber:'', serialNumber:'' })
     setShowVehicleDetails(false)
+    setShowEquipmentIdentifiers(false)
   }, [projectId])
 
   useEffect(() => {
@@ -160,6 +168,9 @@ export default function ProjectDetailScreen({ navigation, route }) {
     generationRequestRef.current += 1
     generationInFlightRef.current = false
     generationAbortRef.current?.abort()
+    activeProjectId.current = null
+    equipmentIdentifierSaveGeneration.current += 1
+    equipmentIdentifiersInFlight.current = false
   }, [])
 
   const selectableGoals = accessibleActiveGoalsAfterProLoss(activeGoals, plan)
@@ -167,6 +178,9 @@ export default function ProjectDetailScreen({ navigation, route }) {
     ? [vehicleDetails.year, vehicleDetails.make, vehicleDetails.model].filter(Boolean).join(' ')
     : 'Add vehicle information'
   const vehicleVinSummary = vehicleDetails.vin ? maskVin(vehicleDetails.vin) : 'not set'
+  const equipmentIdentifierSummary = project?.model_number || project?.serial_number
+    ? 'Model and serial numbers saved'
+    : 'Add model and serial numbers'
 
   async function assignGoal(goalId, candidateGoals = activeGoals) {
     if (saving) return
@@ -273,19 +287,32 @@ export default function ProjectDetailScreen({ navigation, route }) {
     const modelNumber = equipmentIdentifiers.modelNumber.trim()
     const serialNumber = equipmentIdentifiers.serialNumber.trim()
     if (modelNumber.length > 200 || serialNumber.length > 200) return Alert.alert('Check identifiers', 'Model and serial numbers must be 200 characters or fewer.')
+    const targetProjectId = projectId
+    const submittedVersion = equipmentIdentifierEditVersion.current
+    const saveRequest = ++equipmentIdentifierSaveGeneration.current
     equipmentIdentifiersInFlight.current = true
     setSavingVehicleDetails(true)
     try {
       const values = { model_number: modelNumber || null, serial_number: serialNumber || null }
-      const { data, error } = await supabase.from('projects').update(values).eq('id',projectId).eq('user_id',user.id).select('*').single()
+      const { data, error } = await supabase.from('projects').update(values).eq('id',targetProjectId).eq('user_id',user.id).select('*').single()
       if (error) throw error
+      if (targetProjectId !== activeProjectId.current || saveRequest !== equipmentIdentifierSaveGeneration.current) return
       setProject(current => ({ ...current, ...data }))
-      Alert.alert('Identifiers saved', 'The model and serial numbers are saved with this Project.')
+      if (submittedVersion === equipmentIdentifierEditVersion.current) {
+        setShowEquipmentIdentifiers(false)
+        Alert.alert('Identifiers saved', 'The model and serial numbers are saved with this Project.')
+      } else {
+        Alert.alert('Earlier identifiers saved', 'Your newer edits are still open and have not been saved. Tap Save Identifiers again when you are ready.')
+      }
     } catch (error) {
-      Alert.alert('Could not save identifiers', error.message || 'Please try again.')
+      if (targetProjectId === activeProjectId.current && saveRequest === equipmentIdentifierSaveGeneration.current) {
+        Alert.alert('Could not save identifiers', error.message || 'Please try again.')
+      }
     } finally {
-      equipmentIdentifiersInFlight.current = false
-      setSavingVehicleDetails(false)
+      if (targetProjectId === activeProjectId.current && saveRequest === equipmentIdentifierSaveGeneration.current) {
+        equipmentIdentifiersInFlight.current = false
+        setSavingVehicleDetails(false)
+      }
     }
   }
 
@@ -786,12 +813,31 @@ export default function ProjectDetailScreen({ navigation, route }) {
 
         {!VIN_PROJECT_CATEGORIES.has(project.category)&&<><Text style={s.sectionTitle}>Model & serial identification</Text>
         <View style={s.card}>
-          <Text style={s.inputHint}>Use the manufacturer model and serial number to identify this equipment. VIN tools are reserved for VIN-equipped items.</Text>
-          <ProjectVehicleField label="Model number" value={equipmentIdentifiers.modelNumber} onChangeText={modelNumber=>setEquipmentIdentifiers(current=>({...current,modelNumber}))} maxLength={200}/>
-          <ProjectVehicleField label="Serial number" value={equipmentIdentifiers.serialNumber} onChangeText={serialNumber=>setEquipmentIdentifiers(current=>({...current,serialNumber}))} maxLength={200}/>
-          <TouchableOpacity style={[s.btn,{marginTop:12},savingVehicleDetails&&s.btnDisabled]} onPress={saveEquipmentIdentifiers} disabled={savingVehicleDetails} accessibilityRole="button" accessibilityLabel="Save model and serial numbers" accessibilityState={{disabled:savingVehicleDetails,busy:savingVehicleDetails}}>
-            {savingVehicleDetails?<ActivityIndicator color="#fff" size="small"/>:<Text style={s.btnText}>Save Identifiers</Text>}
+          <TouchableOpacity
+            style={s.vehicleDetailsHeader}
+            onPress={() => setShowEquipmentIdentifiers(current => !current)}
+            accessibilityRole="button"
+            accessibilityLabel={`Model and serial identification, ${equipmentIdentifierSummary}`}
+            accessibilityHint={showEquipmentIdentifiers ? 'Collapses the model and serial number form' : 'Expands the model and serial number form'}
+            accessibilityState={{ expanded: showEquipmentIdentifiers }}
+          >
+            <View style={s.vehicleDetailsSummary}>
+              <Text style={s.vehicleDetailsTitle}>{equipmentIdentifierSummary}</Text>
+            </View>
+            <Text style={s.vehicleDetailsToggle}>{showEquipmentIdentifiers ? 'Hide' : 'Show'} {showEquipmentIdentifiers ? '▲' : '▼'}</Text>
           </TouchableOpacity>
+          <View
+            style={[s.vehicleDetailsBody, !showEquipmentIdentifiers && s.vehicleDetailsBodyHidden]}
+            accessibilityElementsHidden={!showEquipmentIdentifiers}
+            importantForAccessibility={showEquipmentIdentifiers ? 'auto' : 'no-hide-descendants'}
+          >
+            <Text style={s.inputHint}>Use the manufacturer model and serial number to identify this equipment. VIN tools are reserved for VIN-equipped items.</Text>
+            <ProjectVehicleField label="Model number" value={equipmentIdentifiers.modelNumber} onChangeText={modelNumber=>{equipmentIdentifierEditVersion.current+=1;setEquipmentIdentifiers(current=>({...current,modelNumber}))}} maxLength={200}/>
+            <ProjectVehicleField label="Serial number" value={equipmentIdentifiers.serialNumber} onChangeText={serialNumber=>{equipmentIdentifierEditVersion.current+=1;setEquipmentIdentifiers(current=>({...current,serialNumber}))}} maxLength={200}/>
+            <TouchableOpacity style={[s.btn,{marginTop:12},savingVehicleDetails&&s.btnDisabled]} onPress={saveEquipmentIdentifiers} disabled={savingVehicleDetails} accessibilityRole="button" accessibilityLabel="Save model and serial numbers" accessibilityState={{disabled:savingVehicleDetails,busy:savingVehicleDetails}}>
+              {savingVehicleDetails?<ActivityIndicator color="#fff" size="small"/>:<Text style={s.btnText}>Save Identifiers</Text>}
+            </TouchableOpacity>
+          </View>
         </View></>}
 
         <Text style={s.sectionTitle}>Shareable report</Text>

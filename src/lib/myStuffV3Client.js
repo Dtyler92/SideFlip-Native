@@ -9,13 +9,20 @@ function compactObject(value) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== '' && entry != null))
 }
 
+function canonicalVin(value) {
+  return String(value ?? '').trim().toUpperCase().replace(/[ -]/g, '')
+}
+
 function vehicleIdentityPayload(identity = {}) {
   return compactObject({
+    vin: canonicalVin(identity.vin),
     model_year: identity.year ?? identity.model_year,
     manufacturer: identity.manufacturer,
     make: identity.make,
     model: identity.model,
+    series: identity.series,
     trim: identity.trim,
+    engine: identity.engine,
     engine_model: identity.engineModel ?? identity.engine_model,
     engine_displacement_liters: identity.engineDisplacementLiters ?? identity.engine_displacement_liters,
     engine_cylinders: identity.engineCylinders ?? identity.engine_cylinders,

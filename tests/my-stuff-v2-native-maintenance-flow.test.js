@@ -114,7 +114,7 @@ test('service payload only emits configured readings and rejects disabled-meter 
   }).p_service, { completed_at: '2026-09-03T12:00:00.000Z', mileage: 1234 })
 })
 
-test('native maintenance UI separates managed legacy schedules from all new V2 mutations', () => {
+test('native maintenance UI removes legacy schedule controls while retaining read-only legacy history', () => {
   const detail = source('src/screens/MyStuffDetailScreen.js')
   for (const symbol of [
     'createMyStuffMaintenanceDefinitionV2', 'updateMyStuffMaintenanceDefinitionV2',
@@ -122,15 +122,12 @@ test('native maintenance UI separates managed legacy schedules from all new V2 m
     'buildRecordServiceOccurrenceV2WirePayload',
   ]) assert.match(detail, new RegExp(symbol))
   assert.doesNotMatch(detail, /await createMyStuffSchedule\(/)
-  assert.match(detail, /mutate:\(\)=>completeMyStuffMaintenance\(legacyPayload\)/)
-  assert.match(detail, /mutate:\(\)=>deleteMyStuffSchedule\(value\.id,user\.id\)/)
-  assert.match(detail, /canCompleteMaintenanceSchedule\(value,item\)/)
-  assert.match(detail, /legacyCompletionMutationAttempt=useRef\(createMutationAttemptState\(\)\)/)
-  assert.match(detail, /if\(legacyCompletionInFlight\.current\)return/)
-  assert.match(detail, /mutationIdForPayload\(legacyCompletionMutationAttempt\.current,canonicalPayload\)/)
+  assert.doesNotMatch(detail, /mutate:\(\)=>completeMyStuffMaintenance\(legacyPayload\)/)
+  assert.doesNotMatch(detail, /mutate:\(\)=>deleteMyStuffSchedule\(value\.id,user\.id\)/)
+  assert.doesNotMatch(detail, /canCompleteMaintenanceSchedule\(value,item\)/)
+  assert.doesNotMatch(detail, /legacyCompletionMutationAttempt/)
   assert.match(detail, /occurrences\.map\(/)
-  assert.match(detail, /Legacy schedules/)
-  assert.doesNotMatch(detail, /Legacy schedules \(read-only\)/)
+  assert.doesNotMatch(detail, /Legacy schedules/)
   assert.match(detail, /Legacy service history \(read-only\)/)
   assert.match(detail, /mutationIdForPayload\(definitionMutationAttempt\.current,wirePayload\)/)
   assert.match(detail, /mutationIdForPayload\(serviceMutationAttempt\.current,wirePayload\)/)
