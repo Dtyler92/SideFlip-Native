@@ -176,6 +176,22 @@ export default function SettingsScreen({ navigation }) {
         <Switch disabled={analyticsSaving} value={analyticsEnabled} onValueChange={handleAnalyticsPreference} trackColor={{ false: '#D7D2CB', true: '#E7AAA1' }} thumbColor={analyticsEnabled ? ACCENT : '#fff'} />
       </View>
 
+      {Platform.OS === 'android' && <>
+        <Text style={s.sectionTitle}>Help</Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Replay Tutorial"
+          style={s.replayButton}
+          onPress={() => navigation.navigate('Tutorial', { mode: 'replay' })}
+        >
+          <View style={s.replayCopy}>
+            <Text style={s.replayTitle}>Replay Tutorial</Text>
+            <Text style={s.replayNote}>Review the six-step SideFlip guide.</Text>
+          </View>
+          <Text style={s.replayArrow} accessibilityElementsHidden>›</Text>
+        </TouchableOpacity>
+      </>}
+
       {/* Sign Out */}
       <TouchableOpacity style={s.signOutBtn} onPress={confirmSignOut}>
         <Text style={s.signOutText}>Sign Out</Text>
@@ -207,6 +223,11 @@ const s = StyleSheet.create({
   analyticsCopy: { flex: 1 },
   analyticsTitle: { fontSize: 15, color: '#1A1917', fontWeight: '700', marginBottom: 5 },
   analyticsNote: { fontSize: 12, color: '#8C8880', lineHeight: 18 },
+  replayButton: { minHeight: 58, backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E8E4DE' },
+  replayCopy: { flex: 1 },
+  replayTitle: { fontSize: 15, color: '#1A1917', fontWeight: '700', marginBottom: 3 },
+  replayNote: { fontSize: 12, color: '#8C8880' },
+  replayArrow: { color: ACCENT, fontSize: 26, fontWeight: '500', marginLeft: 12 },
   planBadge: { fontSize: 10, color: '#716D66', backgroundColor: '#F0EDE8', borderRadius: 6, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4, fontWeight: '800', letterSpacing: 0.5 },
   planBadgeActive: { color: '#23613F', backgroundColor: '#E8F5EE' },
   proButton: { minHeight: 46, borderRadius: 11, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },

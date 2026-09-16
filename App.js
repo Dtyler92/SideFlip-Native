@@ -2,7 +2,7 @@ import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar } from 'expo-status-bar'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, Platform, View, Text } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
@@ -24,8 +24,10 @@ import SettingsScreen from './src/screens/SettingsScreen'
 import ProScreen from './src/screens/ProScreen'
 import DeleteAccountScreen from './src/screens/DeleteAccountScreen'
 import OnboardingScreen from './src/screens/OnboardingScreen'
+import TutorialScreen from './src/screens/TutorialScreen'
 import { captureEvent, flushAnalytics, isAnalyticsReady } from './src/lib/analytics'
 import { normalizeScreenName } from './src/lib/analyticsModel'
+import { hasCompletedTutorial } from './src/lib/tutorialStorage'
 
 const Stack = createNativeStackNavigator()
 const Tab = createBottomTabNavigator()
@@ -87,6 +89,27 @@ function HomeTabs() {
 
 function RootNavigator() {
   const { user, loading, needsOnboarding, refreshProfile } = useAuth()
+  const [tutorialState, setTutorialState] = useState('checking')
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      setTutorialState('complete')
+      return undefined
+    }
+    if (!user || loading || needsOnboarding) {
+      setTutorialState('checking')
+      return undefined
+    }
+    if (needsOnboarding == null) {
+      setTutorialState('complete')
+      return undefined
+    }
+    let active = true
+    hasCompletedTutorial()
+      .then(completed => { if (active) setTutorialState(completed ? 'complete' : 'pending') })
+      .catch(() => { if (active) setTutorialState('complete') })
+    return () => { active = false }
+  }, [loading, needsOnboarding, user?.id])
 
   if (loading) return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFAF7' }}>
@@ -108,6 +131,16 @@ function RootNavigator() {
     <OnboardingScreen onComplete={refreshProfile} />
   )
 
+  if (needsOnboarding === false && tutorialState === 'checking') return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFAF7' }}>
+      <ActivityIndicator size="large" color="#C8402F" />
+    </View>
+  )
+
+  if (needsOnboarding === false && tutorialState === 'pending') return (
+    <TutorialScreen mode="firstRun" onComplete={() => setTutorialState('complete')} />
+  )
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Main" component={HomeTabs} />
@@ -118,6 +151,7 @@ function RootNavigator() {
       <Stack.Screen name="MyStuffCreate" component={MyStuffCreateScreen} />
       <Stack.Screen name="MyStuffDetail" component={MyStuffDetailScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="Tutorial" component={TutorialScreen} />
       <Stack.Screen name="Pro" component={ProScreen} options={{ headerShown: true, title: 'SideFlip Pro', headerTintColor: '#C8402F', headerStyle: { backgroundColor: '#FAFAF7' } }} />
       <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
@@ -130,6 +164,7 @@ export default function App() {
   function trackScreen() {
     if (!isAnalyticsReady()) return
     const routeName = navigationRef.current?.getCurrentRoute()?.name
+    if (routeName === 'Tutorial') return
     const screen = normalizeScreenName(routeName)
     if (screen === lastScreenRef.current) return
     lastScreenRef.current = screen
