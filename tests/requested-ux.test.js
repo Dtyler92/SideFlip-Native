@@ -1,7 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { progressColor } from '../src/screens/tradeUpGoalModel.js'
+import {
+  accessibleActiveGoalsAfterProLoss,
+  canCompleteGoal,
+  isGoalLockedAfterProLoss,
+  progressColor,
+} from '../src/screens/tradeUpGoalModel.js'
 
 const source = relative => readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8')
 
@@ -49,4 +54,62 @@ test('goal detail has completion celebration, requested stats, and collapsed amo
   assert.match(goals, /Flipped/)
   assert.match(goals, /showAdjustment/)
   assert.match(goals, /progressColor/)
+})
+
+test('goal completion requires a positive fully funded target', () => {
+  assert.equal(canCompleteGoal({ target_amount: 0 }, { progressValue: 500 }), false)
+  assert.equal(canCompleteGoal({ target_amount: 500 }, { progressValue: 499.99 }), false)
+  assert.equal(canCompleteGoal({ target_amount: 500 }, { progressValue: 500 }), true)
+
+  const goals = source('src/screens/TradeUpGoalsScreen.js')
+  assert.match(goals, /const canMarkComplete = canCompleteGoal\(selected, summary\)/)
+  assert.match(goals, /if \(status === 'completed' && !canCompleteGoal/)
+  assert.match(goals, /Save Target Amount/)
+})
+
+test('expired Pro retains only the oldest active goal as accessible', () => {
+  const goals = [
+    { id: 'new', status: 'active', created_at: '2026-02-01T00:00:00Z' },
+    { id: 'old', status: 'active', created_at: '2026-01-01T00:00:00Z' },
+    { id: 'done', status: 'completed', created_at: '2025-01-01T00:00:00Z' },
+  ]
+  assert.equal(isGoalLockedAfterProLoss(goals[0], goals, 'free'), true)
+  assert.equal(isGoalLockedAfterProLoss(goals[1], goals, 'free'), false)
+  assert.deepEqual(accessibleActiveGoalsAfterProLoss(goals, 'free').map(goal => goal.id), ['old'])
+  assert.deepEqual(accessibleActiveGoalsAfterProLoss(goals, 'pro').map(goal => goal.id), ['new', 'old'])
+})
+
+test('goal mutations and project pickers recheck entitlement after plan changes', () => {
+  const goals = source('src/screens/TradeUpGoalsScreen.js')
+  const createProject = source('src/screens/NewProjectScreen.js')
+  const projectDetail = source('src/screens/ProjectDetailScreen.js')
+  assert.match(goals, /function getCurrentlyAccessibleGoal\(goalId\)/)
+  assert.match(goals, /isGoalLockedAfterProLoss\(goal, currentGoals\.current, currentPlan\.current\)/)
+  for (const mutation of ['saveStatus', 'adjustBalance', 'updateTargetAmount', 'deleteGoal']) {
+    assert.match(goals, new RegExp(`async function ${mutation}\\([^)]*goalId = selected\\?\\.id[^)]*\\) \\{[\\s\\S]*?getCurrentlyAccessibleGoal\\(goalId\\)`))
+  }
+  assert.match(createProject, /const goalLoadGeneration = useRef\(0\)/)
+  assert.match(createProject, /if \(request !== goalLoadGeneration\.current\) return/)
+  assert.match(createProject, /if \(selectedGoalId && !selectedGoal\)/)
+  assert.match(projectDetail, /const projectLoadGeneration = useRef\(0\)/)
+  assert.match(projectDetail, /if \(request !== projectLoadGeneration\.current\) return/)
+  assert.match(projectDetail, /accessibleActiveGoalsAfterProLoss\(candidateGoals, currentPlan\.current\)/)
+})
+
+test('goal-linked projects and Settings are visible from Home', () => {
+  const home = source('src/screens/HomeScreen.js')
+  const settings = source('src/screens/SettingsScreen.js')
+  assert.match(home, /p\.goal_id/)
+  assert.match(home, />Goal<\/Text>/)
+  assert.match(home, /navigation\.navigate\('Settings'\)/)
+  assert.match(home, /accessibilityLabel="Account menu"/)
+  assert.match(home, /useFocusEffect\(useCallback\(\(\) => \{ load\(\) \}, \[load\]\)\)/)
+  assert.match(settings, /navigation\.goBack\(\)/)
+})
+
+test('iOS goal upsells retain Apple wording and no alternate purchase path', () => {
+  const goals = source('src/screens/TradeUpGoalsScreen.js')
+  assert.match(goals, /Upgrade in the App Store/)
+  assert.match(goals, /Upgrade with Apple in the app/)
+  assert.doesNotMatch(goals, /Google Play|Stripe/)
 })

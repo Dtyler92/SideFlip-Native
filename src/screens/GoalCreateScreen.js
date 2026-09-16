@@ -45,8 +45,10 @@ export default function GoalCreateScreen({ navigation, route }) {
     const startingAmount = Number(form.startingAmount || 0)
     if (!name) return Alert.alert('Goal name required', 'Give your Trade-Up Goal a name.')
     if (form.goalType === 'item' && !form.targetItem.trim()) return Alert.alert('Target item required', 'Enter the item you are working toward.')
-    if (form.goalType === 'amount' && targetAmount <= 0) return Alert.alert('Target amount required', 'Enter an amount greater than zero.')
-    if (!Number.isFinite(targetAmount) || !Number.isFinite(startingAmount) || targetAmount < 0 || startingAmount < 0) return Alert.alert('Check amounts', 'Goal amounts must be valid positive numbers.')
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) return Alert.alert('Target amount required', form.goalType === 'item'
+      ? 'Enter an estimated target amount greater than zero.'
+      : 'Enter an amount greater than zero.')
+    if (!Number.isFinite(startingAmount) || startingAmount < 0) return Alert.alert('Check amount', 'Starting amount must be zero or a valid positive number.')
 
     setSaving(true)
     try {
@@ -60,8 +62,15 @@ export default function GoalCreateScreen({ navigation, route }) {
         p_mutation_id: mutationId,
       })
       if (error) throw error
+      const { data: createdGoal, error: createdGoalError } = await supabase
+        .from('trade_up_goals')
+        .select('id,name,status,created_at')
+        .eq('id', goalId)
+        .eq('user_id', user.id)
+        .single()
+      if (createdGoalError) throw createdGoalError
       captureEvent('goal_created', { goal_type: form.goalType })
-      await onCreated?.({ id: goalId, name, status: 'active', available: startingAmount })
+      await onCreated?.({ ...createdGoal, available: startingAmount })
       navigation.goBack()
     } catch (error) {
       Alert.alert('Could not create goal', error.message || 'Please try again.')
@@ -99,7 +108,7 @@ export default function GoalCreateScreen({ navigation, route }) {
           <TextInput style={s.input} value={form.targetItem} onChangeText={value => update('targetItem', value)} placeholder="What are you working toward?" placeholderTextColor="#A8A49E" />
         </>}
 
-        <Text style={s.label}>{form.goalType === 'amount' ? 'Target amount *' : 'Estimated target amount (optional)'}</Text>
+        <Text style={s.label}>{form.goalType === 'amount' ? 'Target amount *' : 'Estimated target amount *'}</Text>
         <TextInput style={s.input} value={form.targetAmount} onChangeText={value => update('targetAmount', value)} placeholder="0.00" placeholderTextColor="#A8A49E" keyboardType="decimal-pad" />
 
         <Text style={s.label}>Starting amount (optional)</Text>

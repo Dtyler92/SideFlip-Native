@@ -40,6 +40,11 @@ export function calculateGoalSummary(goal, projects = [], ledger = goal?.goal_le
   }
 }
 
+export function canCompleteGoal(goal, summary) {
+  const targetAmount = number(goal?.target_amount)
+  return targetAmount > 0 && number(summary?.progressValue) >= targetAmount
+}
+
 export function progressColor(percent) {
   const progress = Math.max(0, Math.min(100, number(percent))) / 100
   const start = [0xC8, 0x40, 0x2F]
@@ -50,4 +55,23 @@ export function progressColor(percent) {
 
 export function canCreateAnotherGoal(plan, goals = []) {
   return plan === 'pro' || !goals.some(goal => goal?.status === 'active')
+}
+
+export function isGoalLockedAfterProLoss(goal, goals = [], plan) {
+  if (plan === 'pro' || goal?.status !== 'active') return false
+  const oldestActive = goals
+    .filter(candidate => candidate?.status === 'active')
+    .slice()
+    .sort((left, right) => {
+      const leftTime = Date.parse(left?.created_at)
+      const rightTime = Date.parse(right?.created_at)
+      const safeLeftTime = Number.isFinite(leftTime) ? leftTime : Number.POSITIVE_INFINITY
+      const safeRightTime = Number.isFinite(rightTime) ? rightTime : Number.POSITIVE_INFINITY
+      return safeLeftTime - safeRightTime || String(left?.id || '').localeCompare(String(right?.id || ''))
+    })[0]
+  return Boolean(oldestActive && goal?.id !== oldestActive.id)
+}
+
+export function accessibleActiveGoalsAfterProLoss(goals = [], plan) {
+  return goals.filter(goal => goal?.status === 'active' && !isGoalLockedAfterProLoss(goal, goals, plan))
 }

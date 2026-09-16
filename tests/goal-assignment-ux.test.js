@@ -30,9 +30,14 @@ test('additional goal creation sends Free users to Pro while Pro can continue', 
 
 test('goal creation screen uses the server-enforced goal RPC and is registered in navigation', () => {
   const screen = source('src/screens/GoalCreateScreen.js')
+  const goals = source('src/screens/TradeUpGoalsScreen.js')
   const app = source('App.js')
   assert.match(screen, /rpc\('create_trade_up_goal'/)
   assert.match(screen, /canCreateAnotherGoal\(plan, activeGoals\)/)
+  assert.match(screen, /!Number\.isFinite\(targetAmount\) \|\| targetAmount <= 0/)
+  assert.match(goals, /!Number\.isFinite\(targetAmount\) \|\| targetAmount <= 0/)
+  assert.doesNotMatch(screen, /Estimated target amount \(optional\)/)
+  assert.doesNotMatch(goals, /Estimated target value \(optional\)/)
   assert.match(app, /name="GoalCreate" component=\{GoalCreateScreen\}/)
 })
 
