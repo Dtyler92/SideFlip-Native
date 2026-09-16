@@ -7,8 +7,9 @@ const source = relative => readFileSync(new URL(`../${relative}`, import.meta.ur
 
 test('project actions use requested copy and sold projects can be undone', () => {
   const detail = source('src/screens/ProjectDetailScreen.js')
-  assert.match(detail, />Generate Sales Listing</)
-  assert.doesNotMatch(detail, /Generate FB Listing|✨ Generate|🔒 AI Listing|💰 Mark as Sold|📋 Share/)
+  assert.match(detail, />Create Sales Listing</)
+  assert.match(detail, />✨ Generate Description</)
+  assert.doesNotMatch(detail, /Generate FB Listing|🔒 AI Listing|💰 Mark as Sold|📋 Share/)
   assert.match(detail, /rpc\('undo_goal_project_outcome'/)
   assert.match(detail, /await onReturn\?\.\(\)/)
   assert.match(detail, />Undo Sale</)

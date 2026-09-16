@@ -1,12 +1,13 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, TextInput, Alert, Image } from 'react-native'
+import { useFocusEffect } from '@react-navigation/native'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 
 const ACCENT = '#C8402F'
 const getTotalInvested = p => (p.expenses||[]).reduce((s,e)=>s+Number(e.amount),0) + (Number(p.purchase_price)||0)
 const getProfit = p => p.sale_price ? Number(p.sale_price) - getTotalInvested(p) : null
-const ICONS = {mower:'🚜',car:'🚗',motorcycle:'🏍️',atv:'🏎️',boat:'⛵',bicycle:'🚲',watch:'⌚',electronics:'📱',gaming:'🎮',tool:'🔧',exercise:'💪',instrument:'🎸',furniture:'🪑',house:'🏠',other:'📦'}
+const ICONS = {mower:'🚜',car:'🚗',motorcycle:'🏍️',atv:'🏎️',boat:'⛵',airplane:'✈️',bicycle:'🚲',watch:'⌚',electronics:'📱',gaming:'🎮',tool:'🔧',exercise:'💪',instrument:'🎸',furniture:'🪑',house:'🏠',other:'📦'}
 
 export default function HomeScreen({ navigation }) {
   const { user, signOut, isPro, formatMoney } = useAuth()
@@ -21,7 +22,7 @@ export default function HomeScreen({ navigation }) {
     setRefreshing(false)
   }, [user])
 
-  useEffect(() => { load() }, [load])
+  useFocusEffect(useCallback(() => { load() }, [load]))
 
   const active = projects.filter(p => p.status === 'active')
   const sold = projects.filter(p => p.status === 'sold')
@@ -34,7 +35,16 @@ export default function HomeScreen({ navigation }) {
     <View style={s.root}>
       <View style={s.header}>
         <Text style={s.logo}><Text style={s.logoSide}>Side</Text><Text style={s.logoFlip}>Flip</Text></Text>
-        <TouchableOpacity onPress={() => Alert.alert('Account', user?.email, [{text:'Sign Out',style:'destructive',onPress:signOut},{text:'Cancel',style:'cancel'}])} style={s.avatar}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Account menu"
+          onPress={() => Alert.alert('Account', user?.email, [
+            { text: 'Settings', onPress: () => navigation.navigate('Settings') },
+            { text: 'Sign Out', style: 'destructive', onPress: signOut },
+            { text: 'Cancel', style: 'cancel' },
+          ])}
+          style={s.avatar}
+        >
           <Text style={s.avatarText}>{user?.email?.[0]?.toUpperCase()}</Text>
         </TouchableOpacity>
       </View>
@@ -47,7 +57,7 @@ export default function HomeScreen({ navigation }) {
         <TouchableOpacity accessibilityRole="button" style={s.proBanner} onPress={() => navigation.navigate('Pro')}>
           <View style={s.proBannerCopy}>
             <Text style={s.proBannerTitle}>Upgrade to SideFlip Pro</Text>
-            <Text style={s.proBannerText}>Unlock Analytics, AI listings, multiple goals, and more photos.</Text>
+            <Text style={s.proBannerText}>Unlock Analytics, sales listing tools, multiple goals, and more photos.</Text>
           </View>
           <Text style={s.proBannerButton}>View Pro</Text>
         </TouchableOpacity>
@@ -83,6 +93,7 @@ export default function HomeScreen({ navigation }) {
                 <Text style={s.cardTitle} numberOfLines={1}>{p.title}</Text>
                 <View style={s.cardMeta}>
                   <Text style={s.cardInvested}>{formatMoney(getTotalInvested(p))} in</Text>
+                  {p.goal_id && <Text style={s.goalBadge}>Goal</Text>}
                   {p.status==='sold' && profit!==null && <Text style={[s.badge, profit<0 && s.badgeLoss]}>{profit>=0?'+':''}{formatMoney(profit)}</Text>}
                 </View>
               </View>
@@ -132,6 +143,7 @@ const s = StyleSheet.create({
   cardMeta:{flexDirection:'row',alignItems:'center',gap:8},cardInvested:{fontSize:13,color:'#8C8880'},
   badge:{backgroundColor:'#E8F5EE',color:'#2D7A4F',fontSize:12,fontWeight:'700',paddingHorizontal:8,paddingVertical:2,borderRadius:6},
   badgeLoss:{backgroundColor:'#FDECEA',color:'#C8402F'},
+  goalBadge:{backgroundColor:'#FFF1EC',color:ACCENT,fontSize:11,fontWeight:'800',paddingHorizontal:7,paddingVertical:2,borderRadius:6},
   chevron:{fontSize:22,color:'#D4CDC1',paddingLeft:8},
   emptyContainer:{flex:1,justifyContent:'center'},
   empty:{alignItems:'center',padding:40},emptyIcon:{fontSize:48,marginBottom:16},
