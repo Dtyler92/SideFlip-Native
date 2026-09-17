@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
 import VinDecodePanel from '../components/VinDecodePanel'
+import MaintenanceResearchUnavailable from '../components/MaintenanceResearchUnavailable'
 import ReportPanel from '../components/ReportPanel'
 import MyStuffV3Experience from '../components/MyStuffV3Experience'
 
@@ -417,6 +418,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         <TouchableOpacity style={s.deleteItem} onPress={confirmDeleteItem} disabled={saving} accessibilityRole="button" accessibilityLabel="Delete My Stuff item" accessibilityState={{disabled:saving}}><Text style={s.deleteItemText}>Delete Item Permanently</Text></TouchableOpacity>
       </View>}
 
+      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&<MaintenanceResearchUnavailable/>}
       <MyStuffV3Experience
         item={item}
         definitions={definitions}
