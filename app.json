@@ -109,6 +109,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withLocalOnlyNotifications",
       "expo-secure-store",
       "expo-asset",
       "expo-iap",
