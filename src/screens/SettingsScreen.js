@@ -1,12 +1,15 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Switch, Platform } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Linking, Switch, Platform } from 'react-native'
 import { useEffect, useState } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { isAnalyticsEnabled, setAnalyticsEnabled } from '../lib/analytics'
+import { buildFeedbackMailto } from '../lib/feedback'
 import * as Application from 'expo-application'
+import appConfig from '../../app.json'
 
 const ACCENT = '#C8402F'
+const APP_VERSION = Application.nativeApplicationVersion || appConfig.expo.version || 'unknown'
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$', label: 'US Dollar' },
@@ -91,6 +94,14 @@ export default function SettingsScreen({ navigation }) {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign Out', style: 'destructive', onPress: signOut },
     ])
+  }
+
+  async function openFeedback(kind) {
+    try {
+      await Linking.openURL(buildFeedbackMailto(kind, Platform.OS, APP_VERSION))
+    } catch {
+      Alert.alert('Could not open your email app', 'Email tyler@tourbillionenergy.com to send your feedback.')
+    }
   }
 
   return (
@@ -189,6 +200,30 @@ export default function SettingsScreen({ navigation }) {
         </View>
         <Text style={s.replayArrow} accessibilityElementsHidden>›</Text>
       </TouchableOpacity>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Report a Bug"
+        style={s.replayButton}
+        onPress={() => openFeedback('bug')}
+      >
+        <View style={s.replayCopy}>
+          <Text style={s.replayTitle}>Report a Bug</Text>
+          <Text style={s.replayNote}>Tell us what went wrong.</Text>
+        </View>
+        <Text style={s.replayArrow} accessibilityElementsHidden>›</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Leave a Suggestion"
+        style={s.replayButton}
+        onPress={() => openFeedback('suggestion')}
+      >
+        <View style={s.replayCopy}>
+          <Text style={s.replayTitle}>Leave a Suggestion</Text>
+          <Text style={s.replayNote}>Share an idea for improving SideFlip.</Text>
+        </View>
+        <Text style={s.replayArrow} accessibilityElementsHidden>›</Text>
+      </TouchableOpacity>
 
       {/* Sign Out */}
       <TouchableOpacity style={s.signOutBtn} onPress={confirmSignOut}>
@@ -199,7 +234,7 @@ export default function SettingsScreen({ navigation }) {
       </TouchableOpacity>
 
       {/* Version */}
-      <Text style={s.version}>SideFlip - Project Ledger v{Application.nativeApplicationVersion || '1.1.0'}</Text>
+      <Text style={s.version}>SideFlip - Project Ledger v{APP_VERSION}</Text>
     </ScrollView>
   )
 }
