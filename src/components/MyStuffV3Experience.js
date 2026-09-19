@@ -17,6 +17,7 @@ import {
   classifyDueOccurrences,
   EXPENSE_CATEGORIES,
   expenseRevision,
+  groupMaintenanceOccurrences,
   linkedOccurrenceId,
   reviseExpenseByLinkage,
   serviceCompletionDefaults,
@@ -79,17 +80,7 @@ export default function MyStuffV3Experience({ item, definitions = [], plannedOcc
   const localSummary = useMemo(() => buildFinancialSummary({ purchasePrice:item.purchase_price,expenses }), [item.purchase_price,expenses])
   const summary = serverSummary || localSummary
   const dueGroups = useMemo(() => classifyDueOccurrences(plannedOccurrences), [plannedOccurrences])
-  const definitionById = useMemo(() => new Map(definitions.map(definition => [definition.id,definition])), [definitions])
-  const scheduleGroups = useMemo(() => {
-    const groups = { Mileage:[],Time:[],Manufacturer:[] }
-    for (const occurrence of plannedOccurrences) {
-      const definition = definitionById.get(occurrence.definition_id) || {}
-      if (definition.provenance_type === 'manufacturer') groups.Manufacturer.push(occurrence)
-      else if (definition.normal_interval_miles != null) groups.Mileage.push(occurrence)
-      else groups.Time.push(occurrence)
-    }
-    return groups
-  }, [definitionById,plannedOccurrences])
+  const scheduleGroups = useMemo(() => groupMaintenanceOccurrences(plannedOccurrences,definitions), [definitions,plannedOccurrences])
 
   function beginItemOperation() {
     if (operationLock?.current) return false

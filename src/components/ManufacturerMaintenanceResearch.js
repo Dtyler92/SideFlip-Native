@@ -260,7 +260,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
   return <View style={s.card}>
     <Text style={s.title}>Manufacturer maintenance research</Text>
     <Text style={s.copy}>Grok uses real web search for this research. Completed citation text and maintenance intervals must be checked against the official source links before approval because SideFlip has not independently verified them. Research results are suggestions, not service or safety advice.</Text>
-    <Text style={s.copy}>Starting sends the vehicle/item type and available confirmed year, make, model, trim, engine, transmission, drivetrain, fuel, and market details to xAI for Grok to search manufacturer or authorized-dealer sources. VIN, notes, costs, and expenses are never sent.</Text>
+    <Text style={s.copy}>Starting sends only the confirmed year, make, model, engine size, and transmission type (when available) to xAI for Grok to search manufacturer or authorized-dealer sources. VIN, notes, costs, and expenses are never sent.</Text>
     <Text style={s.manual}>Manual schedule entry stays available if research is unavailable or inconclusive.</Text>
     {!!error&&<View style={s.errorBox}><Text style={s.error}>{error}</Text><TouchableOpacity onPress={()=>load()} disabled={disabled} accessibilityRole="button" accessibilityLabel="Retry research status" accessibilityState={{disabled}}><Text style={s.link}>Retry status</Text></TouchableOpacity></View>}
     {loading&&!status?<ActivityIndicator color={ACCENT}/>:null}

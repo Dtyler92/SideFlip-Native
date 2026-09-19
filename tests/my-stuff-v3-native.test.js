@@ -7,6 +7,7 @@ import {
   buildServicePayload,
   buildServiceExpenseRequest,
   classifyDueOccurrences,
+  groupMaintenanceOccurrences,
   hasVehicleIdentityChanged,
   linkedOccurrenceId,
   normalizeExpenseRows,
@@ -262,6 +263,15 @@ test('V3 planned and due RPC rows retain planned occurrence identity', () => {
   const schedule=[{id:'plan-1',definition_id:'def-1',status:'not_completed',due_at:'2026-10-01'}]
   const due=[{occurrence:{id:'plan-1',definition_id:'def-1',status:'not_completed',due_at:'2026-10-01'},view:'due_soon'}]
   assert.deepEqual(normalizePlannedOccurrences(schedule,due,[{id:'def-1',name:'Oil change'}]), [{id:'plan-1',planned_occurrence_id:'plan-1',definition_id:'def-1',status:'not_completed',due_at:'2026-10-01',name:'Oil change',due_status:'due_soon'}])
+})
+
+test('applied AI research schedules render in the Manufacturer group', () => {
+  const groups=groupMaintenanceOccurrences(
+    [{planned_occurrence_id:'ai-plan',definition_id:'ai-def'},{planned_occurrence_id:'manual-plan',definition_id:'manual-def'}],
+    [{id:'ai-def',provenance_type:'ai_research',normal_interval_miles:7500},{id:'manual-def',provenance_type:'manual',normal_interval_miles:5000}],
+  )
+  assert.deepEqual(groups.Manufacturer.map(row=>row.planned_occurrence_id),['ai-plan'])
+  assert.deepEqual(groups.Mileage.map(row=>row.planned_occurrence_id),['manual-plan'])
 })
 
 test('service form builds only the exact structured backend service contract', () => {
