@@ -317,7 +317,7 @@ test('Free decode can update every supported field and points to separately auth
   const vin = source('src/components/VinDecodePanel.js')
   assert.doesNotMatch(vin, /if \(!isPro\) return onUpgrade\(\)/)
   assert.match(vin, /Basic NHTSA decode/)
-  assert.match(vin, /Update All Fields/)
+  assert.match(vin, /Confirm vehicle for research/)
   assert.match(vin, /Unconfirmed/)
   assert.match(vin, /Verified/)
   assert.match(vin, /confirmMyStuffVehicleIdentityV3/)

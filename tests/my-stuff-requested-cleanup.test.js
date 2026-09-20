@@ -25,7 +25,7 @@ test('Item Settings shows the complete saved VIN and every supported decoded ide
 test('VIN review saves all supported fields and then exposes the separate research action', () => {
   const panel = source('src/components/VinDecodePanel.js')
   const detail = source('src/screens/MyStuffDetailScreen.js')
-  assert.match(panel, /Update All Fields/)
+  assert.match(panel, /Confirm vehicle for research/)
   assert.match(panel, /buildVehicleConfirmationSnapshot\(valuesRef\.current,preview\.fields\)/)
   assert.match(panel, /Research manufacturer schedule/)
   assert.doesNotMatch(panel, /Research is not available yet|queues zero research jobs/)
@@ -36,6 +36,19 @@ test('VIN review saves all supported fields and then exposes the separate resear
   assert.match(detail, /label="Series" value=\{item\.series\}/)
   assert.match(detail, /!item\.vin_confirmation_fingerprint/)
   assert.ok(detail.indexOf('<ManufacturerMaintenanceResearch') < detail.indexOf('<MyStuffV3Experience'), 'research CTA should be near the top of Maintenance after identity confirmation')
+})
+
+test('VIN research review opens a focused expanded decoder instead of duplicate vehicle fields', () => {
+  const create = source('src/screens/MyStuffCreateScreen.js')
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  assert.match(detail, /const \[vinReviewRequested,setVinReviewRequested\]=useState\(false\)/)
+  assert.match(detail, /setVinReviewRequested\(true\);setShowItemSettings\(true\);setEditing\(true\)/)
+  assert.match(detail, /initiallyExpanded=\{vinReviewRequested\|\|!item\.vin_confirmation_fingerprint\}/)
+  assert.match(detail, /supportsVinDecoder\(edit\.itemType\)&&<><VinDecodePanel/)
+  assert.match(detail, /\(!supportsVinDecoder\(edit\.itemType\)\|\|showManualVehicleFields\)&&<>/)
+  assert.match(create, /\(!supportsVinDecoder\(draft\.itemType\)\|\|showManualVehicleFields\) && <>/)
+  assert.match(create, /Enter vehicle details manually/)
+  assert.match(detail, /Enter vehicle details manually/)
 })
 
 test('requested My Stuff maintenance cleanup removes duplicate and legacy controls without deleting history', () => {

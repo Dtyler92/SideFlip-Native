@@ -144,7 +144,7 @@ test('VIN decoder starts expanded only on applicable My Stuff creation', () => {
   assert.match(panel, /useState\(initiallyExpanded\)/)
   assert.match(create, /<VinDecodePanel[\s\S]*initiallyExpanded/)
   assert.doesNotMatch(newProject, /<VinDecodePanel[\s\S]{0,500}initiallyExpanded/)
-  assert.doesNotMatch(detail, /<VinDecodePanel[^\n]*initiallyExpanded/)
+  assert.match(detail, /<VinDecodePanel[^\n]*initiallyExpanded=\{vinReviewRequested\|\|!item\.vin_confirmation_fingerprint\}/)
 })
 
 test('New Project offers pre-save Pro VIN decoding for vehicle details', () => {
