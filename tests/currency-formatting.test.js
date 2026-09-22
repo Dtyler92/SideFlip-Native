@@ -27,9 +27,9 @@ test('sale guidance uses the selected currency symbol instead of hardcoded dolla
   assert.doesNotMatch(source, /greater than \$0|between \$0|Leave \$0/)
 })
 
-test('release metadata identifies iOS 1.1.0 build 20', () => {
+test('release metadata identifies iOS 1.1.0 build 21', () => {
   const app = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'))
   assert.equal(app.expo.version, '1.1.0')
   assert.equal(app.expo.ios.bundleIdentifier, 'com.sideflip.app')
-  assert.equal(app.expo.ios.buildNumber, '20')
+  assert.equal(app.expo.ios.buildNumber, '21')
 })

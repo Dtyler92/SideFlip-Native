@@ -103,7 +103,7 @@ test('supported item-type changes require a fresh identity confirmation', () => 
   assert.equal(requiresResearchIdentityReconfirmation('mower','truck'),false)
 })
 
-test('build 20 hides inactive manufacturer research controls without replacing manual entry', () => {
+test('build 21 hides inactive manufacturer research controls without replacing manual entry', () => {
   const detail=source('src/screens/MyStuffDetailScreen.js')
   assert.doesNotMatch(detail,/<ManufacturerMaintenanceResearch/)
   assert.doesNotMatch(detail,/Confirm vehicle identity for manufacturer research/)
