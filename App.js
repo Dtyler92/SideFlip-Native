@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar'
 import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, Platform, View, Text } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
 import LoginScreen from './src/screens/LoginScreen'
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen'
@@ -174,12 +174,14 @@ export default function App() {
     trackScreen()
   }
   return (
-    <NavigationContainer ref={navigationRef} onReady={trackScreen} onStateChange={trackScreen}>
-      <AuthProvider>
-        <AnalyticsLifecycle onReady={trackFirstReadyScreen} />
-        <StatusBar style="dark" />
-        <RootNavigator />
-      </AuthProvider>
-    </NavigationContainer>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <NavigationContainer ref={navigationRef} onReady={trackScreen} onStateChange={trackScreen}>
+        <AuthProvider>
+          <AnalyticsLifecycle onReady={trackFirstReadyScreen} />
+          <StatusBar style="dark" />
+          <RootNavigator />
+        </AuthProvider>
+      </NavigationContainer>
+    </SafeAreaProvider>
   )
 }
