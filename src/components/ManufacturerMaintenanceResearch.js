@@ -18,14 +18,29 @@ import {
 
 const ACCENT='#C8402F'
 const POLL_MS=5000
+const IDENTITY_CODES=['IDENTITY_UNCONFIRMED','IDENTITY_INCOMPLETE','IDENTITY_CHANGED']
+const NONRETRYABLE_BUDGET_CODES=['BUDGET_RESERVATION_MISSING','BUDGET_EXCEEDED']
+
+function errorCodeOf(error) {
+  return `${error?.code||''} ${error?.message||''}`.trim().toUpperCase()
+}
+
+function containsCode(value,codes) {
+  return codes.some(code=>String(value||'').includes(code))
+}
 
 function messageForError(error) {
-  const value=String(error?.message||error?.code||'').toUpperCase()
+  const value=errorCodeOf(error)
   if(value.includes('PRO_REQUIRED'))return 'SideFlip Pro is required at every research, approval, and apply step.'
-  if(value.includes('IDENTITY_UNCONFIRMED'))return 'Confirm the vehicle identity again before researching its schedule.'
+  if(['IDENTITY_UNCONFIRMED','IDENTITY_INCOMPLETE','IDENTITY_CHANGED'].some(code=>value.includes(code)))return 'Review the required vehicle details and confirm its identity again before researching its schedule.'
   if(value.includes('RESEARCH_DISABLED')||value.includes('PROVIDER_DISABLED'))return 'Manufacturer research is not available right now. Manual schedule entry still works.'
-  if(value.includes('BUDGET')||value.includes('RATE'))return 'The research limit has been reached. Try again later or add schedules manually.'
-  return error?.message||'Manufacturer research could not be loaded. Manual schedule entry still works.'
+  if(value.includes('RATE'))return 'Too many research requests were started recently. Try again later or add schedules manually.'
+  if(value.includes('BUDGET_MONTH_ROLLOVER'))return 'The research budget period changed while this job was waiting. Start the research again.'
+  if(value.includes('BUDGET_POLICY_CHANGED'))return 'The research limits changed while this job was waiting. Start the research again.'
+  if(value.includes('BUDGET_RESERVATION_MISSING'))return 'This research job could not verify its spending reservation. Nothing was applied. Try again later or add schedules manually.'
+  if(value.includes('BUDGET'))return 'The current research budget is used or unavailable. Try again later or add schedules manually.'
+  if(['EVIDENCE','CITATION','SOURCE','CANDIDATE'].some(code=>value.includes(code)))return 'The sources could not be verified well enough to use. Nothing was applied. You can try the research again.'
+  return 'Manufacturer research could not be completed. Nothing was applied, and manual schedule entry still works.'
 }
 
 export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,onApplied,operationLock,parentBusy=false}) {
@@ -37,7 +52,13 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
   const [loading,setLoading]=useState(false)
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
+  const [errorCode,setErrorCode]=useState('')
+  const [identityBlockKey,setIdentityBlockKey]=useState('')
+  const [actionBlockCode,setActionBlockCode]=useState('')
+  const identityStateKey=[item?.vin_confirmation_fingerprint,item?.model_year,item?.make,item?.manufacturer,item?.model,item?.engine_displacement_liters,item?.transmission].map(value=>String(value??'')).join('|')
+  const confirmedIdentityReady=Boolean(item?.vin_confirmation_fingerprint&&Number.isInteger(Number(item?.model_year))&&String(item?.make||item?.manufacturer||'').trim()&&String(item?.model||'').trim()&&Number(item?.engine_displacement_liters)>0)
   const requestGate=useRef(null)
+  const actionGateRef=useRef({blocked:true})
   if(!requestGate.current)requestGate.current=createResearchRequestGate()
   const renderedScope=useRef(null)
   renderedScope.current={itemId:item?.id||null,active:Boolean(isFocused&&isPro&&item?.id)}
@@ -69,7 +90,10 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
     try{
       const next=normalizeResearchStatus(await getMyStuffResearchStatus(snapshot.itemId))
       if(request!==loadGeneration.current||!isCurrentRequest(snapshot))return null
-      setStatus(next);setError('')
+      const nextCode=errorCodeOf({code:next?.errorCode})
+      if(containsCode(nextCode,IDENTITY_CODES)){setIdentityBlockKey(current=>current||identityStateKey);setActionBlockCode(nextCode)}
+      if(containsCode(nextCode,NONRETRYABLE_BUDGET_CODES))setActionBlockCode(nextCode)
+      setStatus(next);setError('');setErrorCode('')
       if(next?.jobId&&['awaiting_review','approved','applied'].includes(next.status)){
         const nextReview=normalizeResearchReview(await getMyStuffResearchReview(next.jobId))
         if(request!==loadGeneration.current||!isCurrentRequest(snapshot))return null
@@ -82,21 +106,37 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
       }else if(!researchCanPoll(next?.status))setReview(null)
       return next
     }catch(nextError){
-      if(request===loadGeneration.current&&isCurrentRequest(snapshot))setError(messageForError(nextError))
+      if(request===loadGeneration.current&&isCurrentRequest(snapshot)){
+        const nextCode=errorCodeOf(nextError)
+        setError(messageForError(nextError));setErrorCode(nextCode)
+        if(containsCode(nextCode,IDENTITY_CODES)){setIdentityBlockKey(current=>current||identityStateKey);setActionBlockCode(nextCode)}
+        if(containsCode(nextCode,NONRETRYABLE_BUDGET_CODES))setActionBlockCode(nextCode)
+      }
       return null
     }finally{
       if(request===loadGeneration.current&&isCurrentRequest(snapshot))setLoading(false)
     }
-  },[isFocused,isPro,item?.id,isCurrentRequest])
+  },[isFocused,isPro,item?.id,isCurrentRequest,identityStateKey])
 
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
 
   useEffect(()=>{
     requestGate.current.invalidate();loadGeneration.current+=1
-    setStatus(null);setReview(null);setSelected(new Set());setSourcesVerified(false);setError('');setLoading(false);setBusy(false)
+    setStatus(null);setReview(null);setSelected(new Set());setSourcesVerified(false);setError('');setErrorCode('');setIdentityBlockKey('');setActionBlockCode('');setLoading(false);setBusy(false)
     selectionJobId.current=null
     resetMutationAttemptState(enqueueAttempt.current);resetMutationAttemptState(approveAttempt.current);resetMutationAttemptState(applyAttempt.current);resetMutationAttemptState(cancelAttempt.current)
   },[item?.id])
+
+  const identityResolved=Boolean(identityBlockKey&&identityBlockKey!==identityStateKey&&confirmedIdentityReady)
+  const statusCode=String(status?.errorCode||'').toUpperCase()
+  const identityActionRequired=(Boolean(identityBlockKey||containsCode(errorCode,IDENTITY_CODES))||containsCode(statusCode,IDENTITY_CODES))&&!identityResolved
+  const nonretryableActionBlocked=containsCode(actionBlockCode,NONRETRYABLE_BUDGET_CODES)||containsCode(statusCode,NONRETRYABLE_BUDGET_CODES)
+  const statusNeedsIdentity=containsCode(statusCode,IDENTITY_CODES)&&!identityResolved
+  const statusHasNonretryableBudget=containsCode(statusCode,NONRETRYABLE_BUDGET_CODES)
+  const actionsBlocked=identityActionRequired||nonretryableActionBlocked
+  const canRetryTerminal=!statusNeedsIdentity&&!statusHasNonretryableBudget&&!nonretryableActionBlocked
+  actionGateRef.current={blocked:actionsBlocked}
+  useEffect(()=>{if(identityResolved){setError('');setErrorCode('')}},[identityResolved])
 
   useEffect(()=>{
     if(!isFocused||!isPro||!item?.id){
@@ -133,21 +173,29 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
 
   function publishFailure(snapshot,nextError,fallbackCode){
     if(!isCurrentRequest(snapshot))return
+    const nextCode=errorCodeOf(nextError)||String(fallbackCode).toUpperCase()
     setError(messageForError(nextError))
+    setErrorCode(nextCode)
+    if(containsCode(nextCode,IDENTITY_CODES)){setIdentityBlockKey(current=>current||identityStateKey);setActionBlockCode(nextCode)}
+    if(containsCode(nextCode,NONRETRYABLE_BUDGET_CODES))setActionBlockCode(nextCode)
     captureEvent('my_stuff_research_failed',{item_category:item.category,source_class:'manufacturer',result:'failed',error_type:String(nextError?.code||fallbackCode).slice(0,80)})
   }
 
   async function startResearch(){
-    if(busy)return
+    if(busy||actionGateRef.current.blocked)return
     if(!isPro)return onUpgrade?.()
     const fingerprint=item.vin_confirmation_fingerprint
     if(!fingerprint)return Alert.alert('Confirm identity first','Confirm the decoded vehicle identity in Item settings before starting manufacturer research.')
     const snapshot=requestGate.current.snapshot(item.id)
     if(!isCurrentRequest(snapshot))return
+    if(identityResolved){
+      setIdentityBlockKey('')
+      setActionBlockCode(current=>containsCode(current,IDENTITY_CODES)?'':current)
+    }
     const token=beginOperation()
     if(!token)return Alert.alert('Finish the current change','Wait for the current item update to finish.')
     const mutationId=mutationIdForPayload(enqueueAttempt.current,{itemId:snapshot.itemId,fingerprint})
-    setBusy(true);setError('')
+    setBusy(true);setError('');setErrorCode('')
     try{
       await enqueueMyStuffResearch(snapshot.itemId,fingerprint,mutationId)
       if(!isCurrentRequest(snapshot))return
@@ -159,11 +207,13 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
   }
 
   function toggleCandidate(id){
+    if(actionGateRef.current.blocked)return
     setSourcesVerified(false)
     setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})
   }
 
   function confirmApproval(){
+    if(actionGateRef.current.blocked)return
     if(selected.size===0)return Alert.alert('Choose at least one task','Select each cited task you want in the approved snapshot.')
     if(!sourcesVerified)return Alert.alert('Verify official sources','Open the official source links, check the citation text and selected maintenance intervals, then acknowledge that review.')
     Alert.alert('Approve selected research?','This seals an evidence snapshot. It does not change your maintenance schedules until you separately apply it.',[
@@ -173,7 +223,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
   }
 
   async function approveSelected(){
-    if(busy||!status?.jobId||selected.size===0||!sourcesVerified)return
+    if(busy||actionGateRef.current.blocked||!status?.jobId||selected.size===0||!sourcesVerified)return
     if(!isPro)return onUpgrade?.()
     const snapshot=currentSnapshot()
     if(!snapshot)return
@@ -182,7 +232,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
     const jobId=status.jobId
     const candidateIds=[...selected].sort()
     const mutationId=mutationIdForPayload(approveAttempt.current,{jobId,candidateIds,sourcesVerified:true})
-    setBusy(true);setError('')
+    setBusy(true);setError('');setErrorCode('')
     try{
       await approveMyStuffResearch(jobId,candidateIds,true,mutationId)
       if(!isCurrentRequest(snapshot))return
@@ -193,6 +243,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
   }
 
   function confirmApply(){
+    if(actionGateRef.current.blocked)return
     Alert.alert('Apply approved schedules?','This creates manufacturer-backed schedules from the sealed snapshot. Existing manual schedules and edits will not be silently overwritten.',[
       {text:'Cancel',style:'cancel'},
       {text:'Apply schedules',onPress:applyApproved},
@@ -200,7 +251,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
   }
 
   async function applyApproved(){
-    if(busy||!status?.approvalId)return
+    if(busy||actionGateRef.current.blocked||!status?.approvalId)return
     if(!isPro)return onUpgrade?.()
     const snapshot=currentSnapshot()
     if(!snapshot)return
@@ -208,7 +259,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
     if(!token)return Alert.alert('Finish the current change','Wait for the current item update to finish.')
     const approvalId=status.approvalId
     const mutationId=mutationIdForPayload(applyAttempt.current,{approvalId})
-    setBusy(true);setError('')
+    setBusy(true);setError('');setErrorCode('')
     try{
       await applyMyStuffResearch(approvalId,mutationId)
       if(!isCurrentRequest(snapshot))return
@@ -221,6 +272,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
   }
 
   function confirmCancel(){
+    if(actionGateRef.current.blocked)return
     Alert.alert('Cancel research?','No research suggestions from this job will be applied. Manual schedules remain unchanged.',[
       {text:'Keep research',style:'cancel'},
       {text:'Cancel research',style:'destructive',onPress:cancelResearch},
@@ -228,7 +280,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
   }
 
   async function cancelResearch(){
-    if(busy||!status?.jobId)return
+    if(busy||actionGateRef.current.blocked||!status?.jobId)return
     if(!isPro)return onUpgrade?.()
     const snapshot=currentSnapshot()
     if(!snapshot)return
@@ -236,7 +288,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
     if(!token)return Alert.alert('Finish the current change','Wait for the current item update to finish.')
     const jobId=status.jobId
     const mutationId=mutationIdForPayload(cancelAttempt.current,{jobId})
-    setBusy(true);setError('')
+    setBusy(true);setError('');setErrorCode('')
     try{
       await cancelMyStuffResearch(jobId,mutationId)
       if(!isCurrentRequest(snapshot))return
@@ -251,7 +303,7 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
     try{await Linking.openURL(url)}catch{Alert.alert('Could not open source','Copying source links is not available in this version. Please try again later.')}
   }
 
-  const disabled=busy||parentBusy||operationLock?.current
+  const disabled=busy||parentBusy||operationLock?.current||actionsBlocked
   const approvalDisabled=disabled||selected.size===0||!sourcesVerified
   if(!isPro)return <View style={s.card}><Text style={s.title}>Manufacturer maintenance research</Text><Text style={s.copy}>Pro can research cited manufacturer guidance for a confirmed vehicle. You review every suggestion before anything is applied.</Text><Text style={s.manual}>Manual schedule entry stays available for everyone.</Text><TouchableOpacity style={s.secondary} onPress={onUpgrade} accessibilityRole="button" accessibilityLabel="Upgrade for manufacturer maintenance research"><Text style={s.secondaryText}>View Pro</Text></TouchableOpacity></View>
 
@@ -259,18 +311,18 @@ export default function ManufacturerMaintenanceResearch({item,isPro,onUpgrade,on
 
   return <View style={s.card}>
     <Text style={s.title}>Manufacturer maintenance research</Text>
-    <Text style={s.copy}>Grok uses real web search for this research. Completed citation text and maintenance intervals must be checked against the official source links before approval because SideFlip has not independently verified them. Research results are suggestions, not service or safety advice.</Text>
-    <Text style={s.copy}>Starting sends only the confirmed year, make, model, engine size, and transmission type (when available) to xAI for Grok to search manufacturer or authorized-dealer sources. VIN, notes, costs, and expenses are never sent.</Text>
+    <Text style={s.copy}>SideFlip uses secure web research for this feature. Completed citation text and maintenance intervals must be checked against the official source links before approval because SideFlip has not independently verified them. Research results are suggestions, not service or safety advice.</Text>
+    <Text style={s.copy}>Starting sends only the confirmed year, make, model, engine size, and transmission type (when available) to a research service to search manufacturer or authorized-dealer sources. VIN, notes, costs, and expenses are never sent.</Text>
     <Text style={s.manual}>Manual schedule entry stays available if research is unavailable or inconclusive.</Text>
-    {!!error&&<View style={s.errorBox}><Text style={s.error}>{error}</Text><TouchableOpacity onPress={()=>load()} disabled={disabled} accessibilityRole="button" accessibilityLabel="Retry research status" accessibilityState={{disabled}}><Text style={s.link}>Retry status</Text></TouchableOpacity></View>}
+    {!!error&&<View style={s.errorBox}><Text style={s.error}>{error}</Text>{!actionsBlocked&&<TouchableOpacity onPress={()=>load()} disabled={disabled} accessibilityRole="button" accessibilityLabel="Retry research status" accessibilityState={{disabled}}><Text style={s.link}>Retry status</Text></TouchableOpacity>}</View>}
     {loading&&!status?<ActivityIndicator color={ACCENT}/>:null}
-    {!status&&!loading&&<TouchableOpacity style={[s.primary,disabled&&s.disabled]} onPress={startResearch} disabled={disabled} accessibilityRole="button" accessibilityLabel="Research manufacturer schedule" accessibilityState={{disabled}}><Text style={s.primaryText}>{busy?'Starting…':'Research manufacturer schedule'}</Text></TouchableOpacity>}
+    {!status&&!loading&&!actionsBlocked&&<TouchableOpacity style={[s.primary,disabled&&s.disabled]} onPress={startResearch} disabled={disabled} accessibilityRole="button" accessibilityLabel="Research manufacturer schedule" accessibilityState={{disabled}}><Text style={s.primaryText}>{busy?'Starting…':'Research manufacturer schedule'}</Text></TouchableOpacity>}
     {researchCanPoll(status?.status)&&<View style={s.progress}><ActivityIndicator color={ACCENT}/><View style={s.flex}><Text style={s.rowTitle}>{status.status==='queued'?'Research queued':'Researching manufacturer sources'}</Text><Text style={s.copy}>You can leave this screen. Results must still be reviewed and applied manually.</Text></View></View>}
     {!!status?.jobId&&['queued','running','awaiting_review','approved'].includes(status.status)&&<TouchableOpacity style={[s.secondary,disabled&&s.disabled]} onPress={confirmCancel} disabled={disabled} accessibilityRole="button" accessibilityLabel="Cancel manufacturer maintenance research" accessibilityState={{disabled}}><Text style={s.secondaryText}>Cancel research</Text></TouchableOpacity>}
-    {status?.status==='failed'&&<><Text style={s.error}>Research ended without an applicable result{status.errorCode?` (${status.errorCode})`:'.'}</Text>{retryButton('Research again')}</>}
-    {status?.status==='cancelled'&&<><Text style={s.copy}>This research job was cancelled. No suggestions were applied.</Text>{retryButton('Research again')}</>}
-    {['superseded','deleted'].includes(status?.status)&&<><Text style={s.copy}>This research result is no longer current and nothing was applied.</Text>{retryButton('Research again')}</>}
-    {status?.status==='awaiting_review'&&review&&<View><Text style={s.heading}>Review suggestions</Text>{review.candidates.map(candidate=><View key={candidate.id} style={s.candidate}><TouchableOpacity style={s.choice} onPress={()=>toggleCandidate(candidate.id)} accessibilityRole="checkbox" accessibilityState={{checked:selected.has(candidate.id)}} accessibilityLabel={`Include ${candidate.name}`}><Text style={s.check}>{selected.has(candidate.id)?'☑':'☐'}</Text><View style={s.flex}><Text style={s.rowTitle}>{candidate.name}</Text><Text style={s.interval}>{formatResearchInterval(candidate)}</Text><Text style={s.meta}>Action: {candidate.action} · {candidate.profile==='severe'?'Severe use':'Normal use'} · {candidate.uncertainty} uncertainty</Text></View></TouchableOpacity>{evidenceForCandidate(candidate,review.evidence).map(source=><View key={source.key} style={s.source}><Text style={s.sourceClass}>{researchSourceClassLabel(source.sourceClass)}</Text><Text style={s.sourceTitle}>{source.title}</Text><Text style={s.excerpt}>“{source.exactExcerpt}”</Text><Text style={s.meta}>{researchEvidenceVerificationLabel(source)} · provider citation requires confirmation · accessed {String(source.accessedOn).slice(0,10)} · {source.applicability}</Text><TouchableOpacity onPress={()=>openSource(source.canonicalUrl)} accessibilityRole="link" accessibilityLabel={`Open ${researchSourceAccessibilityLabel(source)} for ${candidate.name}`}><Text style={s.link}>Open source</Text></TouchableOpacity></View>)}</View>)}{review.candidates.length===0&&<Text style={s.copy}>No cited maintenance tasks were found. Add a manual schedule instead.</Text>}{review.unresolved.map((row,index)=><View key={`unresolved-${index}`} style={s.unresolved}><Text style={s.rowTitle}>{row.name||'Unresolved guidance'}</Text><Text style={s.copy}>{row.reason||row.message||'The sources did not support one clear interval.'}</Text></View>)}{review.candidates.length>0&&<><TouchableOpacity style={[s.acknowledgement,disabled&&s.disabled]} onPress={()=>setSourcesVerified(current=>!current)} disabled={disabled} accessibilityRole="checkbox" accessibilityLabel="I checked the official source links and verified the selected maintenance intervals" accessibilityState={{checked:sourcesVerified,disabled}}><Text style={s.check}>{sourcesVerified?'☑':'☐'}</Text><Text style={s.acknowledgementText}>I checked the official source links and verified the citation text and selected maintenance intervals.</Text></TouchableOpacity><TouchableOpacity style={[s.primary,approvalDisabled&&s.disabled]} onPress={confirmApproval} disabled={approvalDisabled} accessibilityRole="button" accessibilityLabel="Approve cited research suggestions" accessibilityState={{disabled:approvalDisabled}}><Text style={s.primaryText}>{busy?'Approving…':'Approve cited suggestions'}</Text></TouchableOpacity></>}</View>}
+    {status?.status==='failed'&&<><Text style={s.error}>{messageForError({code:status.errorCode})}</Text>{canRetryTerminal&&retryButton('Research again')}</>}
+    {status?.status==='cancelled'&&<><Text style={s.copy}>{status.errorCode?messageForError({code:status.errorCode}):'This research job was cancelled. No suggestions were applied.'}</Text>{canRetryTerminal&&retryButton('Research again')}</>}
+    {['superseded','deleted'].includes(status?.status)&&<><Text style={s.copy}>This research result is no longer current and nothing was applied.</Text>{!actionsBlocked&&retryButton('Research again')}</>}
+    {status?.status==='awaiting_review'&&review&&<View><Text style={s.heading}>Review suggestions</Text>{review.candidates.map(candidate=><View key={candidate.id} style={s.candidate}><TouchableOpacity style={[s.choice,disabled&&s.disabled]} onPress={()=>toggleCandidate(candidate.id)} disabled={disabled} accessibilityRole="checkbox" accessibilityState={{checked:selected.has(candidate.id),disabled}} accessibilityLabel={`Include ${candidate.name}`}><Text style={s.check}>{selected.has(candidate.id)?'☑':'☐'}</Text><View style={s.flex}><Text style={s.rowTitle}>{candidate.name}</Text><Text style={s.interval}>{formatResearchInterval(candidate)}</Text><Text style={s.meta}>Action: {candidate.action} · {candidate.profile==='severe'?'Severe use':'Normal use'} · {candidate.uncertainty} uncertainty</Text></View></TouchableOpacity>{evidenceForCandidate(candidate,review.evidence).map(source=><View key={source.key} style={s.source}><Text style={s.sourceClass}>{researchSourceClassLabel(source.sourceClass)}</Text><Text style={s.sourceTitle}>{source.title}</Text><Text style={s.excerpt}>“{source.exactExcerpt}”</Text><Text style={s.meta}>{researchEvidenceVerificationLabel(source)} · citation requires confirmation · accessed {String(source.accessedOn).slice(0,10)} · {source.applicability}</Text><TouchableOpacity onPress={()=>openSource(source.canonicalUrl)} accessibilityRole="link" accessibilityLabel={`Open ${researchSourceAccessibilityLabel(source)} for ${candidate.name}`}><Text style={s.link}>Open source</Text></TouchableOpacity></View>)}</View>)}{review.candidates.length===0&&<Text style={s.copy}>No cited maintenance tasks were found. Add a manual schedule instead.</Text>}{review.unresolved.map((row,index)=><View key={`unresolved-${index}`} style={s.unresolved}><Text style={s.rowTitle}>{row.name||'Unresolved guidance'}</Text><Text style={s.copy}>{row.reason||row.message||'The sources did not support one clear interval.'}</Text></View>)}{review.candidates.length>0&&<><TouchableOpacity style={[s.acknowledgement,disabled&&s.disabled]} onPress={()=>setSourcesVerified(current=>!current)} disabled={disabled} accessibilityRole="checkbox" accessibilityLabel="I checked the official source links and verified the selected maintenance intervals" accessibilityState={{checked:sourcesVerified,disabled}}><Text style={s.check}>{sourcesVerified?'☑':'☐'}</Text><Text style={s.acknowledgementText}>I checked the official source links and verified the citation text and selected maintenance intervals.</Text></TouchableOpacity><TouchableOpacity style={[s.primary,approvalDisabled&&s.disabled]} onPress={confirmApproval} disabled={approvalDisabled} accessibilityRole="button" accessibilityLabel="Approve cited research suggestions" accessibilityState={{disabled:approvalDisabled}}><Text style={s.primaryText}>{busy?'Approving…':'Approve cited suggestions'}</Text></TouchableOpacity></>}</View>}
     {status?.status==='approved'&&<View><Text style={s.heading}>Research approved</Text><Text style={s.copy}>The cited snapshot is sealed. Apply is a separate step and rechecks ownership and Pro access.</Text><TouchableOpacity style={[s.primary,disabled&&s.disabled]} onPress={confirmApply} disabled={disabled} accessibilityRole="button" accessibilityLabel="Apply approved schedules" accessibilityState={{disabled}}><Text style={s.primaryText}>{busy?'Applying…':'Apply approved schedules'}</Text></TouchableOpacity></View>}
     {status?.status==='applied'&&<View style={s.success}><Text style={s.rowTitle}>Manufacturer schedules applied</Text><Text style={s.copy}>The approved citation snapshot is preserved with the schedules. Manual schedules were not overwritten.</Text><TouchableOpacity onPress={startResearch} disabled={disabled} accessibilityRole="button" accessibilityLabel="Research updated manufacturer guidance" accessibilityState={{disabled}}><Text style={s.link}>Research updated guidance</Text></TouchableOpacity></View>}
   </View>
