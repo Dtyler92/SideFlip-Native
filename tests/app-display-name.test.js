@@ -8,5 +8,5 @@ test('iOS update displays SideFlip beneath the installed app icon', () => {
   assert.equal(expo.ios.infoPlist.CFBundleDisplayName ?? expo.name, 'SideFlip')
   assert.equal(expo.ios.bundleIdentifier, 'com.sideflip.app')
   assert.equal(expo.version, '1.1.0')
-  assert.equal(expo.ios.buildNumber, '22')
+  assert.equal(expo.ios.buildNumber, '23')
 })

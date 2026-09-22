@@ -190,13 +190,13 @@ export default function SettingsScreen({ navigation }) {
           <Text style={s.sectionTitle}>Help</Text>
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Replay Tutorial"
+            accessibilityLabel="Replay Walkthrough"
             style={s.replayButton}
-            onPress={() => navigation.navigate('Tutorial', { mode: 'replay' })}
+            onPress={() => navigation.popTo('Main', { tutorialMode: 'replay', tutorialSession: Date.now() })}
           >
             <View style={s.replayCopy}>
-              <Text style={s.replayTitle}>Replay Tutorial</Text>
-              <Text style={s.replayNote}>Review the SideFlip basics anytime.</Text>
+              <Text style={s.replayTitle}>Replay Walkthrough</Text>
+              <Text style={s.replayNote}>Visit each SideFlip tab with guided instructions.</Text>
             </View>
             <Text style={s.replayChevron} accessibilityElementsHidden>›</Text>
           </TouchableOpacity>

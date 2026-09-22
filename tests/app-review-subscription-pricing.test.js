@@ -44,9 +44,9 @@ test('purchase screen links SideFlip policies and the standard Apple EULA', () =
   assert.match(pro, /legalLinks: \{[^\n]*flexWrap: 'wrap'/)
 })
 
-test('pricing-first App Review behavior remains in version 1.1.0 build 22', () => {
+test('pricing-first App Review behavior remains in version 1.1.0 build 23', () => {
   const app = JSON.parse(source('app.json'))
   assert.equal(app.expo.version, '1.1.0')
   assert.equal(app.expo.ios.bundleIdentifier, 'com.sideflip.app')
-  assert.equal(app.expo.ios.buildNumber, '22')
+  assert.equal(app.expo.ios.buildNumber, '23')
 })

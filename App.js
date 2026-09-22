@@ -2,8 +2,8 @@ import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { StatusBar } from 'expo-status-bar'
-import { useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, AppState, Platform, View, Text } from 'react-native'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { AccessibilityInfo, ActivityIndicator, Alert, AppState, Platform, View, Text } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
@@ -25,14 +25,16 @@ import SettingsScreen from './src/screens/SettingsScreen'
 import ProScreen from './src/screens/ProScreen'
 import DeleteAccountScreen from './src/screens/DeleteAccountScreen'
 import OnboardingScreen from './src/screens/OnboardingScreen'
-import TutorialScreen from './src/screens/TutorialScreen'
+import TutorialOverlay from './src/components/TutorialOverlay'
 import { captureEvent, flushAnalytics, isAnalyticsReady } from './src/lib/analytics'
 import { normalizeScreenName } from './src/lib/analyticsModel'
-import { hasCompletedTutorial } from './src/lib/tutorialModel'
+import { advanceTutorial, getTutorialPrompt, hasCompletedTutorial, markTutorialCompleted } from './src/lib/tutorialModel'
+import { getTutorialContentAccessibilityProps } from './src/lib/tutorialAccessibility'
 
 const Stack = createNativeStackNavigator()
 const Tab = createBottomTabNavigator()
 const ANDROID_NAV_COMFORT = 10
+const TutorialModeContext = createContext(false)
 
 function AnalyticsLifecycle({ onReady }) {
   const { analyticsReady } = useAuth()
@@ -55,36 +57,116 @@ function TabIcon({ emoji, focused }) {
   return <Text style={{ fontSize: focused ? 22 : 20, opacity: focused ? 1 : 0.5 }}>{emoji}</Text>
 }
 
-function HomeTabs() {
+function TutorialScreenContent({ children }) {
+  const tutorialActive = useContext(TutorialModeContext)
+  const { accessibilityElementsHidden, importantForAccessibility } = getTutorialContentAccessibilityProps(tutorialActive)
+  return (
+    <View
+      style={{ flex: 1 }}
+      accessibilityElementsHidden={accessibilityElementsHidden}
+      importantForAccessibility={importantForAccessibility}
+    >
+      {children}
+    </View>
+  )
+}
+
+function tutorialScreenLayout({ children }) {
+  return <TutorialScreenContent>{children}</TutorialScreenContent>
+}
+
+function HomeTabs({ navigation, route, tutorialMode, onTutorialComplete }) {
   const insets = useSafeAreaInsets()
   const navComfort = Platform.OS === 'android' ? ANDROID_NAV_COMFORT : 0
+  const tabBarHeight = 56 + insets.bottom + navComfort
+  const mode = tutorialMode || route?.params?.tutorialMode || null
+  const tutorialSession = route?.params?.tutorialSession
+  const [tutorialStep, setTutorialStep] = useState(0)
+  const [tutorialSaving, setTutorialSaving] = useState(false)
+
+  useEffect(() => {
+    if (mode) setTutorialStep(0)
+  }, [mode, tutorialSession])
+
+  function handleTutorialTabPress(routeName, event) {
+    if (!mode) return
+    const result = advanceTutorial(tutorialStep, routeName)
+    if (!result.accepted) {
+      event.preventDefault()
+      const expected = getTutorialPrompt(tutorialStep).expected
+      if (expected) AccessibilityInfo.announceForAccessibility(`Continue the walkthrough with the ${expected.label} tab.`)
+      return
+    }
+    setTutorialStep(result.nextStepIndex)
+  }
+
+  async function closeTutorial() {
+    if (tutorialSaving) return
+    if (mode === 'replay') {
+      navigation.setParams({ tutorialMode: undefined, tutorialSession: undefined })
+      return
+    }
+    if (mode !== 'first-run') return
+    setTutorialSaving(true)
+    try {
+      await markTutorialCompleted(AsyncStorage)
+      onTutorialComplete?.()
+    } catch {
+      Alert.alert('Could not finish the walkthrough', 'SideFlip could not save your progress. Please try again.')
+      setTutorialSaving(false)
+    }
+  }
+
+  const tabAccessibilityLabel = label => mode
+    ? `${label} tab. ${getTutorialPrompt(tutorialStep).expected?.label === label ? 'Next walkthrough step.' : 'Follow the walkthrough instruction.'}`
+    : `${label} tab`
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopColor: '#E8E4DE',
-          height: 56 + insets.bottom + navComfort,
-          paddingBottom: insets.bottom + navComfort,
-          paddingTop: 10,
-        },
-        tabBarActiveTintColor: '#C8402F',
-        tabBarInactiveTintColor: '#A8A49E',
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-      }}
-    >
-      <Tab.Screen name="Projects" component={HomeScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🔧" focused={focused} />, tabBarLabel: 'Projects' }} />
-      <Tab.Screen name="Analyze" component={AnalyzeScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="📈" focused={focused} />, tabBarLabel: 'Analyze' }} />
-      <Tab.Screen name="Goals" component={TradeUpGoalsScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🎯" focused={focused} />, tabBarLabel: 'Goals' }} />
-      <Tab.Screen name="Analytics" component={AnalyticsScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />, tabBarLabel: 'Analytics' }} />
-      <Tab.Screen name="MyStuff" component={MyStuffScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🧰" focused={focused} />, tabBarLabel: 'My Stuff' }} />
-    </Tab.Navigator>
+    <View style={{ flex: 1 }}>
+      <TutorialModeContext.Provider value={Boolean(mode)}>
+        <Tab.Navigator
+          screenLayout={tutorialScreenLayout}
+          screenOptions={{
+            headerShown: false,
+            tabBarStyle: {
+              backgroundColor: '#fff',
+              borderTopColor: '#E8E4DE',
+              height: tabBarHeight,
+              paddingBottom: insets.bottom + navComfort,
+              paddingTop: 10,
+            },
+            tabBarActiveTintColor: '#C8402F',
+            tabBarInactiveTintColor: '#A8A49E',
+            tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+          }}
+        >
+          <Tab.Screen name="Projects" component={HomeScreen}
+            listeners={{ tabPress: event => handleTutorialTabPress('Projects', event) }}
+            options={{ tabBarAccessibilityLabel: tabAccessibilityLabel('Projects'), tabBarIcon: ({ focused }) => <TabIcon emoji="🔧" focused={focused} />, tabBarLabel: 'Projects' }} />
+          <Tab.Screen name="Analyze" component={AnalyzeScreen}
+            listeners={{ tabPress: event => handleTutorialTabPress('Analyze', event) }}
+            options={{ tabBarAccessibilityLabel: tabAccessibilityLabel('Analyze'), tabBarIcon: ({ focused }) => <TabIcon emoji="📈" focused={focused} />, tabBarLabel: 'Analyze' }} />
+          <Tab.Screen name="Goals" component={TradeUpGoalsScreen}
+            listeners={{ tabPress: event => handleTutorialTabPress('Goals', event) }}
+            options={{ tabBarAccessibilityLabel: tabAccessibilityLabel('Goals'), tabBarIcon: ({ focused }) => <TabIcon emoji="🎯" focused={focused} />, tabBarLabel: 'Goals' }} />
+          <Tab.Screen name="Analytics" component={AnalyticsScreen}
+            listeners={{ tabPress: event => handleTutorialTabPress('Analytics', event) }}
+            options={{ tabBarAccessibilityLabel: tabAccessibilityLabel('Analytics'), tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />, tabBarLabel: 'Analytics' }} />
+          <Tab.Screen name="MyStuff" component={MyStuffScreen}
+            listeners={{ tabPress: event => handleTutorialTabPress('MyStuff', event) }}
+            options={{ tabBarAccessibilityLabel: tabAccessibilityLabel('My Stuff'), tabBarIcon: ({ focused }) => <TabIcon emoji="🧰" focused={focused} />, tabBarLabel: 'My Stuff' }} />
+        </Tab.Navigator>
+      </TutorialModeContext.Provider>
+      {mode && (
+        <TutorialOverlay
+          bottom={tabBarHeight}
+          stepIndex={tutorialStep}
+          saving={tutorialSaving}
+          onSkip={closeTutorial}
+          onFinish={closeTutorial}
+        />
+      )}
+    </View>
   )
 }
 
@@ -137,7 +219,10 @@ function RootNavigator() {
   )
 
   if (tutorialState === 'pending') return (
-    <TutorialScreen onComplete={() => setTutorialCheck({ userId: user.id, status: 'complete' })} />
+    <HomeTabs
+      tutorialMode="first-run"
+      onTutorialComplete={() => setTutorialCheck({ userId: user.id, status: 'complete' })}
+    />
   )
 
   return (
@@ -150,7 +235,6 @@ function RootNavigator() {
       <Stack.Screen name="MyStuffCreate" component={MyStuffCreateScreen} />
       <Stack.Screen name="MyStuffDetail" component={MyStuffDetailScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen name="Tutorial" component={TutorialScreen} />
       <Stack.Screen name="Pro" component={ProScreen} options={{ headerShown: true, title: 'SideFlip Pro', headerTintColor: '#C8402F', headerStyle: { backgroundColor: '#FAFAF7' } }} />
       <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
