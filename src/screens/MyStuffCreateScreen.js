@@ -19,11 +19,12 @@ export default function MyStuffCreateScreen({ navigation }) {
   const [draft, setDraft] = useState({ itemType: '', category: '', measurements: [], usageProfile: 'normal' })
   const [validationErrors, setValidationErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const [showManualVehicleFields, setShowManualVehicleFields] = useState(false)
   const mutationAttempt = useRef(createMutationAttemptState())
   const saveInFlight = useRef(false)
 
   function setValue(key, value) { setValidationErrors({}); setDraft(current => ({ ...current, [key]: value })) }
-  function setExactType(value) { setValidationErrors({}); setDraft(current => selectItemType(current, value)) }
+  function setExactType(value) { setValidationErrors({}); setShowManualVehicleFields(false); setDraft(current => selectItemType(current, value)) }
   function applyVinValues(values) {
     setValidationErrors({})
     setDraft(current => values.itemType !== current.itemType ? selectItemType(values, values.itemType) : values)
@@ -80,19 +81,22 @@ export default function MyStuffCreateScreen({ navigation }) {
       {supportsVinDecoder(draft.itemType) && <Text style={s.help}>Add the item to save and confirm its decoded vehicle identity. No research runs before the item exists.</Text>}
       <Field label="Item name *" value={draft.name || ''} onChangeText={value => setValue('name', value)} placeholder="e.g. Work Truck" maxLength={200} />
       <MyStuffItemTypePicker value={draft.itemType} onChange={setExactType} error={validationErrors.itemType || validationErrors.category} />
-      <View style={s.twoColumn}>
-        <View style={s.flex}><Field label="Model year" value={draft.year || ''} onChangeText={value => setValue('year', value)} keyboardType="number-pad" /></View>
-        <View style={s.flex}><Field label="Make" value={draft.make || ''} onChangeText={value => setValue('make', value)} /></View>
-      </View>
-      <Field label="Model" value={draft.model || ''} onChangeText={value => setValue('model', value)} />
-      <Field label="Trim / version" value={draft.trim || ''} onChangeText={value => setValue('trim', value)} />
-      <Field label="Model number" value={draft.modelNumber || ''} onChangeText={value => setValue('modelNumber', value)} />
-      <Field label="Serial number" value={draft.serialNumber || ''} onChangeText={value => setValue('serialNumber', value)} autoCapitalize="characters" />
-      {!supportsVinDecoder(draft.itemType) && <Text style={s.help}>Use the manufacturer model and serial numbers for equipment identity. Automatic model/serial lookup is not available yet.</Text>}
-      <Field label="Engine / power system" value={draft.engine || ''} onChangeText={value => setValue('engine', value)} />
-      <Field label="Transmission" value={draft.transmission || ''} onChangeText={value => setValue('transmission', value)} />
-      <Field label="Drivetrain" value={draft.drivetrain || ''} onChangeText={value => setValue('drivetrain', value)} />
-      <Field label="Fuel / power type" value={draft.fuelType || ''} onChangeText={value => setValue('fuelType', value)} />
+      {supportsVinDecoder(draft.itemType)&&<TouchableOpacity style={s.manualButton} onPress={()=>setShowManualVehicleFields(value=>!value)} accessibilityRole="button"><Text style={s.manualButtonText}>{showManualVehicleFields?'Hide manual vehicle fields':'Enter vehicle details manually'}</Text></TouchableOpacity>}
+      {(!supportsVinDecoder(draft.itemType)||showManualVehicleFields) && <>
+        <View style={s.twoColumn}>
+          <View style={s.flex}><Field label="Model year" value={draft.year || ''} onChangeText={value => setValue('year', value)} keyboardType="number-pad" /></View>
+          <View style={s.flex}><Field label="Make" value={draft.make || ''} onChangeText={value => setValue('make', value)} /></View>
+        </View>
+        <Field label="Model" value={draft.model || ''} onChangeText={value => setValue('model', value)} />
+        <Field label="Trim / version" value={draft.trim || ''} onChangeText={value => setValue('trim', value)} />
+        <Field label="Model number" value={draft.modelNumber || ''} onChangeText={value => setValue('modelNumber', value)} />
+        <Field label="Serial number" value={draft.serialNumber || ''} onChangeText={value => setValue('serialNumber', value)} autoCapitalize="characters" />
+        <Text style={s.help}>Use the manufacturer model and serial numbers for equipment identity. Automatic model/serial lookup is not available yet.</Text>
+        <Field label="Engine / power system" value={draft.engine || ''} onChangeText={value => setValue('engine', value)} />
+        <Field label="Transmission" value={draft.transmission || ''} onChangeText={value => setValue('transmission', value)} />
+        <Field label="Drivetrain" value={draft.drivetrain || ''} onChangeText={value => setValue('drivetrain', value)} />
+        <Field label="Fuel / power type" value={draft.fuelType || ''} onChangeText={value => setValue('fuelType', value)} />
+      </>}
       <Field label="Acquired on" value={draft.acquiredOn || ''} onChangeText={value => setValue('acquiredOn', value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" autoCapitalize="none" />
 
       <Text style={s.section}>Usage tracking *</Text>
@@ -116,5 +120,5 @@ function Field({ label, multiline, ...props }) { return <View><Text style={s.lab
 function Choice({ label, selected, onPress, exclusive = false }) { return <TouchableOpacity style={[s.choice, selected && s.choiceActive]} onPress={onPress} accessibilityRole={exclusive ? 'radio' : 'checkbox'} accessibilityLabel={label} accessibilityState={exclusive ? { selected } : { checked: selected }}><Text style={[s.choiceText, selected && s.choiceTextActive]}>{label}</Text></TouchableOpacity> }
 
 const s = StyleSheet.create({
-  root:{flex:1,backgroundColor:'#FAFAF7'},header:{paddingBottom:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E8E4DE'},headerSide:{width:75},back:{color:ACCENT,fontWeight:'700',fontSize:15},headerTitle:{fontWeight:'800',fontSize:17,color:'#1A1917'},content:{padding:20,paddingBottom:120},section:{fontSize:18,fontWeight:'800',color:'#1A1917',marginTop:14,marginBottom:2},help:{fontSize:13,color:'#6B665E',lineHeight:19,marginBottom:10},label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:15,marginBottom:6},input:{backgroundColor:'#fff',borderWidth:1,borderColor:'#D7D2CB',borderRadius:10,padding:14,fontSize:15,color:'#1A1917'},textarea:{minHeight:110,textAlignVertical:'top'},choices:{flexDirection:'row',flexWrap:'wrap',gap:8},choice:{borderWidth:1,borderColor:'#D7D2CB',backgroundColor:'#fff',paddingHorizontal:12,paddingVertical:10,borderRadius:10},choiceActive:{borderColor:ACCENT,backgroundColor:'#FFF2EE'},choiceText:{color:'#5C5850',fontWeight:'600'},choiceTextActive:{color:ACCENT},twoColumn:{flexDirection:'row',gap:10},flex:{flex:1},button:{marginTop:26,backgroundColor:ACCENT,borderRadius:11,padding:16,alignItems:'center'},buttonText:{color:'#fff',fontWeight:'800',fontSize:16},disabled:{opacity:.6},
+  root:{flex:1,backgroundColor:'#FAFAF7'},header:{paddingBottom:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E8E4DE'},headerSide:{width:75},back:{color:ACCENT,fontWeight:'700',fontSize:15},headerTitle:{fontWeight:'800',fontSize:17,color:'#1A1917'},content:{padding:20,paddingBottom:120},section:{fontSize:18,fontWeight:'800',color:'#1A1917',marginTop:14,marginBottom:2},help:{fontSize:13,color:'#6B665E',lineHeight:19,marginBottom:10},label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:15,marginBottom:6},input:{backgroundColor:'#fff',borderWidth:1,borderColor:'#D7D2CB',borderRadius:10,padding:14,fontSize:15,color:'#1A1917'},textarea:{minHeight:110,textAlignVertical:'top'},choices:{flexDirection:'row',flexWrap:'wrap',gap:8},choice:{borderWidth:1,borderColor:'#D7D2CB',backgroundColor:'#fff',paddingHorizontal:12,paddingVertical:10,borderRadius:10},choiceActive:{borderColor:ACCENT,backgroundColor:'#FFF2EE'},choiceText:{color:'#5C5850',fontWeight:'600'},choiceTextActive:{color:ACCENT},twoColumn:{flexDirection:'row',gap:10},flex:{flex:1},manualButton:{alignSelf:'flex-start',marginTop:12,paddingVertical:8},manualButtonText:{color:ACCENT,fontWeight:'700'},button:{marginTop:26,backgroundColor:ACCENT,borderRadius:11,padding:16,alignItems:'center'},buttonText:{color:'#fff',fontWeight:'800',fontSize:16},disabled:{opacity:.6},
 })

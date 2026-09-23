@@ -7,6 +7,7 @@ import {
   buildServicePayload,
   buildServiceExpenseRequest,
   classifyDueOccurrences,
+  groupMaintenanceOccurrences,
   hasVehicleIdentityChanged,
   linkedOccurrenceId,
   normalizeExpenseRows,
@@ -271,6 +272,15 @@ test('V3 planned and due RPC rows retain planned occurrence identity', () => {
   assert.deepEqual(normalizePlannedOccurrences(schedule,due,[{id:'def-1',name:'Oil change'}]), [{id:'plan-1',planned_occurrence_id:'plan-1',definition_id:'def-1',status:'not_completed',due_at:'2026-10-01',name:'Oil change',due_status:'due_soon'}])
 })
 
+test('applied AI research schedules render in the Manufacturer group', () => {
+  const groups=groupMaintenanceOccurrences(
+    [{planned_occurrence_id:'ai-plan',definition_id:'ai-def'},{planned_occurrence_id:'manual-plan',definition_id:'manual-def'}],
+    [{id:'ai-def',provenance_type:'ai_research',normal_interval_miles:7500},{id:'manual-def',provenance_type:'manual',normal_interval_miles:5000}],
+  )
+  assert.deepEqual(groups.Manufacturer.map(row=>row.planned_occurrence_id),['ai-plan'])
+  assert.deepEqual(groups.Mileage.map(row=>row.planned_occurrence_id),['manual-plan'])
+})
+
 test('service form builds only the exact structured backend service contract', () => {
   assert.deepEqual(buildServicePayload({
     occurrence:{name:'Oil change',service_category:'maintenance',service_action:'replace'},actualServiceDate:'2026-09-05',
@@ -314,14 +324,15 @@ test('Free decode can update every supported field and points to separately auth
   const vin = source('src/components/VinDecodePanel.js')
   assert.doesNotMatch(vin, /if \(!isPro\) return onUpgrade\(\)/)
   assert.match(vin, /Basic NHTSA decode/)
-  assert.match(vin, /Update All Fields/)
+  assert.match(vin, /Confirm vehicle for research/)
   assert.match(vin, /Unconfirmed/)
   assert.match(vin, /Verified/)
   assert.match(vin, /confirmMyStuffVehicleIdentityV3/)
   assert.match(vin, /ALWAYS_EDITABLE_REVIEW_FIELDS[^]*transmission/)
   assert.match(vin, /Transmission type/)
   assert.doesNotMatch(vin, /enqueueMyStuffResearchV3|enqueue_my_stuff_research_v3|Confirm Vehicle & Research/)
-  assert.doesNotMatch(vin, /Research manufacturer schedule|never starts automatically/)
+  assert.match(vin, /Research manufacturer schedule/)
+  assert.doesNotMatch(vin, /Research is not available yet|queues zero research jobs/)
 })
 
 test('V3 detail loads planned schedules and due views without duplicate V2/history rendering', () => {

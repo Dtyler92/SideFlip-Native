@@ -41,6 +41,18 @@ export function normalizePlannedOccurrences(scheduleRows = [], dueViews = [], de
   })
 }
 
+export function groupMaintenanceOccurrences(plannedOccurrences = [], definitions = []) {
+  const groups = { Mileage:[],Time:[],Manufacturer:[] }
+  const definitionById = new Map(definitions.map(definition => [definition.id,definition]))
+  for (const occurrence of plannedOccurrences) {
+    const definition = definitionById.get(occurrence.definition_id) || {}
+    if (['manufacturer','ai_research'].includes(definition.provenance_type)) groups.Manufacturer.push(occurrence)
+    else if (definition.normal_interval_miles != null) groups.Mileage.push(occurrence)
+    else groups.Time.push(occurrence)
+  }
+  return groups
+}
+
 export function buildExpenseDraft(values = {}) {
   const amount = optionalNumber(values.amount, 'Expense amount')
   if (amount == null) throw new Error('Expense amount is required.')

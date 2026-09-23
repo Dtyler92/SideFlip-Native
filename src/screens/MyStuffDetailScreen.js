@@ -5,13 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffItemTypePicker'
 import VinDecodePanel from '../components/VinDecodePanel'
-import MaintenanceResearchUnavailable from '../components/MaintenanceResearchUnavailable'
 import ReportPanel from '../components/ReportPanel'
 import MyStuffV3Experience from '../components/MyStuffV3Experience'
-
+import ManufacturerMaintenanceResearch from '../components/ManufacturerMaintenanceResearch'
 import FocusAwareScrollView from '../components/FocusAwareScrollView'
 import { normalizePlannedOccurrences } from '../domain/myStuff/v3Model'
-import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, selectItemType, supportsVinDecoder, validateItemDraft } from '../domain/myStuff/itemModel'
+import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, requiresResearchIdentityReconfirmation, selectItemType, supportsVinDecoder, validateItemDraft } from '../domain/myStuff/itemModel'
 import {
   createMyStuffMaintenanceDefinitionV2,
   deleteMyStuffItem,
@@ -70,7 +69,9 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [refreshing,setRefreshing]=useState(false)
   const [saving,setSaving]=useState(false)
   const [vinConfirmationBusy,setVinConfirmationBusy]=useState(false)
-
+  const [researchConfirmationInvalidated,setResearchConfirmationInvalidated]=useState(false)
+  const [vinReviewRequested,setVinReviewRequested]=useState(false)
+  const [showManualVehicleFields,setShowManualVehicleFields]=useState(false)
   const [error,setError]=useState('')
   const [editing,setEditing]=useState(false)
   const [edit,setEdit]=useState({})
@@ -128,6 +129,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     return()=>{requestGeneration.current+=1;completionInFlight.current=false}
   },[load]))
 
+  useEffect(()=>{setResearchConfirmationInvalidated(false);setVinReviewRequested(false);setShowManualVehicleFields(false)},[itemId])
 
   useEffect(()=>{
     if(!item)return
@@ -168,11 +170,12 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       const {itemType,...editable}=validatedEdit
       const payload={...editable,itemId:item.id,acquiredOn:edit.acquiredOn.trim()||null,notes:edit.notes.trim()||null}
       if(itemType!==item.itemType)payload.itemType=itemType
+      const invalidatesResearchIdentity=requiresResearchIdentityReconfirmation(item.itemType,itemType)
       const wirePayload=buildUpdateMyStuffItemV2WirePayload(payload)
       const mutationId=mutationIdForPayload(itemMutationAttempt.current,wirePayload)
       await runMutationThenRefresh({
         mutate:()=>updateMyStuffItemV2(wirePayload,mutationId),
-        onMutationSuccess:()=>{resetMutationAttemptState(itemMutationAttempt.current);setEditing(false)},
+        onMutationSuccess:()=>{resetMutationAttemptState(itemMutationAttempt.current);if(invalidatesResearchIdentity)setResearchConfirmationInvalidated(true);setEditing(false)},
         refresh:()=>load({quiet:true,throwOnError:true}),
         onMutationError:nextError=>Alert.alert('Could not update item',nextError.message||'Please try again.'),
         onRefreshError:nextError=>reportSavedRefreshFailure('Item details saved, but refresh failed',nextError),
@@ -355,34 +358,35 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     <Header title={item.name} onBack={()=>navigation.goBack()}/>
     <FocusAwareScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS==='ios'?'interactive':'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load({quiet:true})}} tintColor={ACCENT}/>}>
       {!!error&&<Text style={s.errorText}>{error}</Text>}
-      {detailTab==='Maintenance'&&<TouchableOpacity style={s.settingsButton} onPress={()=>setShowItemSettings(value=>!value)} accessibilityRole="button" accessibilityLabel="Item settings" accessibilityState={{expanded:showItemSettings}}><Text style={s.settingsButtonText}>{showItemSettings?'Hide item settings':'Item settings'}</Text></TouchableOpacity>}
+      {detailTab==='Maintenance'&&<TouchableOpacity style={s.settingsButton} onPress={()=>{setVinReviewRequested(false);setShowItemSettings(value=>!value)}} accessibilityRole="button" accessibilityLabel="Item settings" accessibilityState={{expanded:showItemSettings}}><Text style={s.settingsButtonText}>{showItemSettings?'Hide item settings':'Item settings'}</Text></TouchableOpacity>}
       {detailTab==='Maintenance'&&showItemSettings&&<View style={s.card}>
-        <View style={s.between}><Text style={s.sectionTitle}>Item details</Text><TouchableOpacity onPress={()=>setEditing(value=>!value)} accessibilityRole="button" accessibilityLabel={editing?'Cancel editing item':'Edit item'}><Text style={s.link}>{editing?'Cancel':'Edit'}</Text></TouchableOpacity></View>
+        <View style={s.between}><Text style={s.sectionTitle}>Item details</Text><TouchableOpacity onPress={()=>{setVinReviewRequested(false);setEditing(value=>!value)}} accessibilityRole="button" accessibilityLabel={editing?'Cancel editing item':'Edit item'}><Text style={s.link}>{editing?'Cancel':'Edit'}</Text></TouchableOpacity></View>
         {editing?<>
           <Field label="Item name *" value={edit.name} onChangeText={value=>setEditValue('name',value)}/>
           <MyStuffItemTypePicker value={edit.itemType} onChange={setExactType} error={validationErrors.itemType||validationErrors.category}/>
-          <Field label="Model year" value={edit.year} onChangeText={value=>setEditValue('year',value)} keyboardType="number-pad"/>
-          <Field label="Manufacturer" value={edit.manufacturer} onChangeText={value=>setEditValue('manufacturer',value)}/>
-          <Field label="Make" value={edit.make} onChangeText={value=>setEditValue('make',value)}/>
-          <Field label="Model" value={edit.model} onChangeText={value=>setEditValue('model',value)}/>
-          <Field label="Series" value={edit.series} onChangeText={value=>setEditValue('series',value)}/>
-          <Field label="Trim / version" value={edit.trim} onChangeText={value=>setEditValue('trim',value)}/>
-          <Field label="Model number" value={edit.modelNumber} onChangeText={value=>setEditValue('modelNumber',value)}/>
-          <Field label="Serial number" value={edit.serialNumber} onChangeText={value=>setEditValue('serialNumber',value)}/>
-          {!supportsVinDecoder(edit.itemType)&&<Text style={s.muted}>Use the manufacturer model and serial numbers for equipment identity. Automatic model/serial lookup is not available yet.</Text>}
-          <Field label="Vehicle type" value={edit.vehicleType} onChangeText={value=>setEditValue('vehicleType',value)}/>
-          <Field label="Body style" value={edit.bodyStyle} onChangeText={value=>setEditValue('bodyStyle',value)}/>
-          <Field label="Engine / power system" value={edit.engine} onChangeText={value=>setEditValue('engine',value)}/>
-          <Field label="Engine model" value={edit.engineModel} onChangeText={value=>setEditValue('engineModel',value)}/>
-          <Field label="Engine displacement (liters)" value={edit.engineDisplacementLiters} onChangeText={value=>setEditValue('engineDisplacementLiters',value)} keyboardType="decimal-pad"/>
-          <Field label="Engine cylinders" value={edit.engineCylinders} onChangeText={value=>setEditValue('engineCylinders',value)} keyboardType="number-pad"/>
-          <Field label="Transmission" value={edit.transmission} onChangeText={value=>setEditValue('transmission',value)}/>
-          <Field label="Drivetrain" value={edit.drivetrain} onChangeText={value=>setEditValue('drivetrain',value)}/>
-          <Field label="Fuel / power type" value={edit.fuelType} onChangeText={value=>setEditValue('fuelType',value)}/>
-          <Field label="Vehicle market" value={edit.vehicleMarket} onChangeText={value=>setEditValue('vehicleMarket',value)}/>
-          <Field label="Plant name" value={edit.plantName} onChangeText={value=>setEditValue('plantName',value)}/>
-          <Field label="Plant country" value={edit.plantCountry} onChangeText={value=>setEditValue('plantCountry',value)}/>
-          {supportsVinDecoder(edit.itemType)&&<VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} confirmationPersistsIdentity operationLock={itemOperationInFlight} onOperationLockChange={setVinConfirmationBusy} onIdentityConfirmed={async()=>{setEditing(false);try{await load({quiet:true,throwOnError:true});setShowItemSettings(false);Alert.alert('Vehicle details updated','All supported VIN fields were saved.')}catch(nextError){reportSavedRefreshFailure('Vehicle confirmed, but refresh failed',nextError)}}} fieldLabels={{transmission:'Transmission type'}} suggestionFields={['year','make','model','series','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','engine','transmission','drivetrain']}/>}
+          {supportsVinDecoder(edit.itemType)&&<><VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} confirmationPersistsIdentity initiallyExpanded={vinReviewRequested||!item.vin_confirmation_fingerprint} operationLock={itemOperationInFlight} onOperationLockChange={setVinConfirmationBusy} onIdentityConfirmed={async()=>{setResearchConfirmationInvalidated(false);setVinReviewRequested(false);setShowManualVehicleFields(false);setEditing(false);try{await load({quiet:true,throwOnError:true});setShowItemSettings(false);Alert.alert('Vehicle confirmed','The research button is now available in Maintenance. Research starts only when you tap it.')}catch(nextError){reportSavedRefreshFailure('Vehicle confirmed, but refresh failed',nextError)}}} fieldLabels={{transmission:'Transmission type'}} suggestionFields={['year','make','model','series','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','engine','transmission','drivetrain']}/><TouchableOpacity style={s.settingsButton} onPress={()=>setShowManualVehicleFields(value=>!value)} accessibilityRole="button"><Text style={s.link}>{showManualVehicleFields?'Hide manual vehicle fields':'Enter vehicle details manually'}</Text></TouchableOpacity></>}
+          {(!supportsVinDecoder(edit.itemType)||showManualVehicleFields)&&<>
+            <Field label="Model year" value={edit.year} onChangeText={value=>setEditValue('year',value)} keyboardType="number-pad"/>
+            <Field label="Manufacturer" value={edit.manufacturer} onChangeText={value=>setEditValue('manufacturer',value)}/>
+            <Field label="Make" value={edit.make} onChangeText={value=>setEditValue('make',value)}/>
+            <Field label="Model" value={edit.model} onChangeText={value=>setEditValue('model',value)}/>
+            <Field label="Trim / version" value={edit.trim} onChangeText={value=>setEditValue('trim',value)}/>
+            <Field label="Model number" value={edit.modelNumber} onChangeText={value=>setEditValue('modelNumber',value)}/>
+            <Field label="Serial number" value={edit.serialNumber} onChangeText={value=>setEditValue('serialNumber',value)}/>
+            <Text style={s.muted}>Use the manufacturer model and serial numbers for equipment identity. Automatic model/serial lookup is not available yet.</Text>
+            <Field label="Vehicle type" value={edit.vehicleType} onChangeText={value=>setEditValue('vehicleType',value)}/>
+            <Field label="Body style" value={edit.bodyStyle} onChangeText={value=>setEditValue('bodyStyle',value)}/>
+            <Field label="Engine / power system" value={edit.engine} onChangeText={value=>setEditValue('engine',value)}/>
+            <Field label="Engine model" value={edit.engineModel} onChangeText={value=>setEditValue('engineModel',value)}/>
+            <Field label="Engine displacement (liters)" value={edit.engineDisplacementLiters} onChangeText={value=>setEditValue('engineDisplacementLiters',value)} keyboardType="decimal-pad"/>
+            <Field label="Engine cylinders" value={edit.engineCylinders} onChangeText={value=>setEditValue('engineCylinders',value)} keyboardType="number-pad"/>
+            <Field label="Transmission" value={edit.transmission} onChangeText={value=>setEditValue('transmission',value)}/>
+            <Field label="Drivetrain" value={edit.drivetrain} onChangeText={value=>setEditValue('drivetrain',value)}/>
+            <Field label="Fuel / power type" value={edit.fuelType} onChangeText={value=>setEditValue('fuelType',value)}/>
+            <Field label="Vehicle market" value={edit.vehicleMarket} onChangeText={value=>setEditValue('vehicleMarket',value)}/>
+            <Field label="Plant name" value={edit.plantName} onChangeText={value=>setEditValue('plantName',value)}/>
+            <Field label="Plant country" value={edit.plantCountry} onChangeText={value=>setEditValue('plantCountry',value)}/>
+          </>}
           <Field label="Acquired on" value={edit.acquiredOn} onChangeText={value=>setEditValue('acquiredOn',value)} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"/>
           <Text style={s.label}>Usage measurements</Text><View style={s.modeRow} accessibilityRole="group" accessibilityLabel="Usage measurements">{AXES.filter(axis=>getItemCategoryContract(edit.category).measurements.includes(axis.key)).map(axis=><Choice key={axis.key} label={axis.label} selected={edit.measurements.includes(axis.key)} onPress={()=>toggleEditMeasurement(axis.key)} multiple={true}/>)}</View>
           <Text style={s.label}>Usage profile</Text><View style={s.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Usage profile">{['normal','severe'].map(value=><Choice key={value} label={value==='normal'?'Normal use':'Severe use'} selected={edit.usageProfile===value} onPress={()=>setEditValue('usageProfile',value)}/>)}</View>
@@ -417,8 +421,9 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         </>}
         <TouchableOpacity style={s.deleteItem} onPress={confirmDeleteItem} disabled={saving} accessibilityRole="button" accessibilityLabel="Delete My Stuff item" accessibilityState={{disabled:saving}}><Text style={s.deleteItemText}>Delete Item Permanently</Text></TouchableOpacity>
       </View>}
-
-      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&<MaintenanceResearchUnavailable/>}
+      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&!item.vin_confirmation_fingerprint&&!researchConfirmationInvalidated&&<View style={s.card}><Text style={s.sectionTitle}>Confirm vehicle identity for manufacturer research</Text><Text style={s.muted}>Tap below, decode the VIN, then confirm the returned vehicle details. The separate research button appears here after confirmation and never starts automatically.</Text><TouchableOpacity style={s.settingsButton} onPress={()=>{setVinReviewRequested(true);setShowItemSettings(true);setEditing(true)}} accessibilityRole="button" accessibilityLabel="Decode and confirm VIN for manufacturer research"><Text style={s.settingsButtonText}>Decode and confirm VIN</Text></TouchableOpacity></View>}
+      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&researchConfirmationInvalidated&&<View style={s.card}><Text style={s.sectionTitle}>Confirm the current vehicle identity again</Text><Text style={s.muted}>The item type changed, so the previous confirmation cannot authorize manufacturer research. Decode and confirm the current identity before researching.</Text><TouchableOpacity style={s.settingsButton} onPress={()=>{setVinReviewRequested(true);setShowItemSettings(true);setEditing(true)}} accessibilityRole="button" accessibilityLabel="Reconfirm current vehicle identity"><Text style={s.settingsButtonText}>Decode and confirm VIN</Text></TouchableOpacity></View>}
+      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&item.vin_confirmation_fingerprint&&!researchConfirmationInvalidated&&<ManufacturerMaintenanceResearch item={item} isPro={hasPro} onUpgrade={()=>navigation.navigate('Pro')} onApplied={()=>load({quiet:true,throwOnError:true})} operationLock={itemOperationInFlight} parentBusy={saving||vinConfirmationBusy}/>}
       <MyStuffV3Experience
         item={item}
         definitions={definitions}

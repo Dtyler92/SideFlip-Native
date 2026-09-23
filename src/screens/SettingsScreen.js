@@ -137,6 +137,48 @@ export default function SettingsScreen({ navigation }) {
         )}
       </View>
 
+      {Platform.OS === 'ios' && (
+        <>
+          <Text style={s.sectionTitle}>Help</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Replay Walkthrough"
+            style={s.replayButton}
+            onPress={() => navigation.popTo('Main', { tutorialMode: 'replay', tutorialSession: Date.now() })}
+          >
+            <View style={s.replayCopy}>
+              <Text style={s.replayTitle}>Replay Walkthrough</Text>
+              <Text style={s.replayNote}>Visit each SideFlip tab with guided instructions.</Text>
+            </View>
+            <Text style={s.replayChevron} accessibilityElementsHidden>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Report a Bug"
+            style={s.replayButton}
+            onPress={() => openFeedback('bug')}
+          >
+            <View style={s.replayCopy}>
+              <Text style={s.replayTitle}>Report a Bug</Text>
+              <Text style={s.replayNote}>Tell us what went wrong.</Text>
+            </View>
+            <Text style={s.replayChevron} accessibilityElementsHidden>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Leave a Suggestion"
+            style={s.replayButton}
+            onPress={() => openFeedback('suggestion')}
+          >
+            <View style={s.replayCopy}>
+              <Text style={s.replayTitle}>Leave a Suggestion</Text>
+              <Text style={s.replayNote}>Share an idea for improving SideFlip.</Text>
+            </View>
+            <Text style={s.replayChevron} accessibilityElementsHidden>›</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
       {/* Currency */}
       <Text style={s.sectionTitle}>Currency</Text>
       <Text style={s.currencyNote}>Your selection controls project amounts after you tap Save Changes. Apple subscription prices use your App Store storefront currency.</Text>
@@ -184,48 +226,6 @@ export default function SettingsScreen({ navigation }) {
         </View>
         <Switch disabled={analyticsSaving} value={analyticsEnabled} onValueChange={handleAnalyticsPreference} trackColor={{ false: '#D7D2CB', true: '#E7AAA1' }} thumbColor={analyticsEnabled ? ACCENT : '#fff'} />
       </View>
-
-      {Platform.OS === 'ios' && (
-        <>
-          <Text style={s.sectionTitle}>Help</Text>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Replay Walkthrough"
-            style={s.replayButton}
-            onPress={() => navigation.popTo('Main', { tutorialMode: 'replay', tutorialSession: Date.now() })}
-          >
-            <View style={s.replayCopy}>
-              <Text style={s.replayTitle}>Replay Walkthrough</Text>
-              <Text style={s.replayNote}>Visit each SideFlip tab with guided instructions.</Text>
-            </View>
-            <Text style={s.replayChevron} accessibilityElementsHidden>›</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Report a Bug"
-            style={s.replayButton}
-            onPress={() => openFeedback('bug')}
-          >
-            <View style={s.replayCopy}>
-              <Text style={s.replayTitle}>Report a Bug</Text>
-              <Text style={s.replayNote}>Tell us what went wrong.</Text>
-            </View>
-            <Text style={s.replayChevron} accessibilityElementsHidden>›</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Leave a Suggestion"
-            style={s.replayButton}
-            onPress={() => openFeedback('suggestion')}
-          >
-            <View style={s.replayCopy}>
-              <Text style={s.replayTitle}>Leave a Suggestion</Text>
-              <Text style={s.replayNote}>Share an idea for improving SideFlip.</Text>
-            </View>
-            <Text style={s.replayChevron} accessibilityElementsHidden>›</Text>
-          </TouchableOpacity>
-        </>
-      )}
 
       {/* Sign Out */}
       <TouchableOpacity style={s.signOutBtn} onPress={confirmSignOut}>

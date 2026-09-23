@@ -42,3 +42,15 @@ test('Settings exposes accessible bug and suggestion actions on every build', ()
   assert.match(settings, /Could not open your email app/)
   assert.equal(packageJson.scripts.test, 'node --test tests/*.test.js')
 })
+
+test('iOS Settings places the complete Help section below Account and above Currency', () => {
+  const settings = source('src/screens/SettingsScreen.js')
+  const account = settings.indexOf('<Text style={s.sectionTitle}>Account</Text>')
+  const help = settings.indexOf('<Text style={s.sectionTitle}>Help</Text>')
+  const currency = settings.indexOf('<Text style={s.sectionTitle}>Currency</Text>')
+
+  assert.ok(account >= 0 && help >= 0 && currency >= 0)
+  assert.ok(account < help, 'Help should follow Account')
+  assert.ok(help < currency, 'Help should precede Currency')
+  assert.match(settings.slice(help, currency), /Replay Walkthrough[\s\S]*Report a Bug[\s\S]*Leave a Suggestion/)
+})
