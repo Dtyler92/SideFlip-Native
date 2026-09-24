@@ -1,7 +1,7 @@
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 export const EXPENSE_CATEGORIES = Object.freeze(['maintenance','repair','parts','labor','fuel','registration','insurance','upgrade','accessory','transportation','other'])
 const EXPENSE_CATEGORY_SET = new Set(EXPENSE_CATEGORIES)
-export const RESEARCH_IDENTITY_FIELDS = Object.freeze(['vin','year','manufacturer','make','model','trim','engine','engineModel','engineDisplacementLiters','engineCylinders','transmission','drivetrain','fuelType','vehicleType','bodyStyle','plantName','plantCountry','vehicleMarket'])
+export const VEHICLE_IDENTITY_FIELDS = Object.freeze(['vin','year','manufacturer','make','model','trim','engine','engineModel','engineDisplacementLiters','engineCylinders','transmission','drivetrain','fuelType','vehicleType','bodyStyle','plantName','plantCountry','vehicleMarket'])
 export const OCCURRENCE_STATUSES = Object.freeze(['not_completed','completed','not_applicable','skipped','history_unknown'])
 
 function text(value, max = 2000) {
@@ -151,7 +151,7 @@ export function buildServiceExpenseRequest({ itemId, plannedOccurrenceId=null, d
 }
 
 export function hasVehicleIdentityChanged(confirmed = {}, current = {}) {
-  return RESEARCH_IDENTITY_FIELDS.some(field => String(confirmed[field] ?? '').trim() !== String(current[field] ?? '').trim())
+  return VEHICLE_IDENTITY_FIELDS.some(field => String(confirmed[field] ?? '').trim() !== String(current[field] ?? '').trim())
 }
 
 export async function persistThenConfirmVehicleIdentity({ snapshot, persist, confirm, isCurrent }) {

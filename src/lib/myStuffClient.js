@@ -2,12 +2,10 @@ import { supabase } from './supabase'
 import { adaptSqlItem } from './myStuffAdapters'
 import { createMyStuffMaintenanceApi } from './myStuffMaintenanceApi'
 import { createMyStuffV3Client } from './myStuffV3Client'
-import { createMaintenanceResearchClient } from './maintenanceResearchClient'
 import { createMyStuffListClient } from './myStuffListClient'
 import { excludeTransferredItems } from '../domain/myStuff/transferVisibility'
 
 const maintenanceApi = createMyStuffMaintenanceApi(supabase)
-const maintenanceResearchApi = createMaintenanceResearchClient(supabase)
 const myStuffListApi = createMyStuffListClient(supabase)
 
 export async function listMyStuffItems(userId) {
@@ -214,13 +212,6 @@ export const recordMyStuffServiceWithExpenseV3 = (...args) => v3Api.recordServic
 export const reviseMyStuffServiceExpenseV3 = (...args) => v3Api.reviseServiceExpense(...args)
 export const setMyStuffOccurrenceStatusV3 = (...args) => v3Api.transitionOccurrenceStatus(...args)
 export const confirmMyStuffVehicleIdentityV3 = (...args) => v3Api.confirmVehicleIdentity(...args)
-
-export const enqueueMyStuffResearch = (...args) => maintenanceResearchApi.enqueue(...args)
-export const getMyStuffResearchStatus = (...args) => maintenanceResearchApi.getStatus(...args)
-export const getMyStuffResearchReview = (...args) => maintenanceResearchApi.getReview(...args)
-export const approveMyStuffResearch = (...args) => maintenanceResearchApi.approve(...args)
-export const applyMyStuffResearch = (...args) => maintenanceResearchApi.apply(...args)
-export const cancelMyStuffResearch = (...args) => maintenanceResearchApi.cancel(...args)
 
 export const transferProjectToMyStuffV3 = (...args) => v3Api.transferProject(...args)
 export const transferMyStuffToProjectV1 = (...args) => v3Api.transferItemToProject(...args)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -7,10 +7,13 @@ import MyStuffItemTypePicker, { ValidationErrors } from '../components/MyStuffIt
 import VinDecodePanel from '../components/VinDecodePanel'
 import ReportPanel from '../components/ReportPanel'
 import MyStuffV3Experience from '../components/MyStuffV3Experience'
-import ManufacturerMaintenanceResearch from '../components/ManufacturerMaintenanceResearch'
+import MaintenanceReminderPanel from '../components/MaintenanceReminderPanel'
 import FocusAwareScrollView from '../components/FocusAwareScrollView'
+import { activeDefinitionMatchesPreset, buildCommonMaintenanceDraft, COMMON_MAINTENANCE_DISCLAIMER, COMMON_MAINTENANCE_PRESETS } from '../domain/myStuff/commonMaintenancePresets'
 import { normalizePlannedOccurrences } from '../domain/myStuff/v3Model'
-import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, requiresResearchIdentityReconfirmation, selectItemType, supportsVinDecoder, validateItemDraft } from '../domain/myStuff/itemModel'
+import { deriveItemCategory, getItemCategoryContract, getItemTypeOption, selectItemType, supportsVinDecoder, validateItemDraft } from '../domain/myStuff/itemModel'
+import { addCommonMaintenancePresets } from '../lib/commonMaintenancePresetWorkflow'
+import { buildV2MaintenanceReminderSchedules } from '../lib/maintenanceReminderProjection'
 import {
   createMyStuffMaintenanceDefinitionV2,
   deleteMyStuffItem,
@@ -61,6 +64,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [readings,setReadings]=useState([])
   const [definitions,setDefinitions]=useState([])
   const [dueStates,setDueStates]=useState([])
+  const [reminderDueStates,setReminderDueStates]=useState([])
   const [plannedOccurrences,setPlannedOccurrences]=useState([])
   const [v3MaintenanceActive,setV3MaintenanceActive]=useState(false)
   const [usage,setUsage]=useState(EMPTY_USAGE)
@@ -69,8 +73,6 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [refreshing,setRefreshing]=useState(false)
   const [saving,setSaving]=useState(false)
   const [vinConfirmationBusy,setVinConfirmationBusy]=useState(false)
-  const [researchConfirmationInvalidated,setResearchConfirmationInvalidated]=useState(false)
-  const [vinReviewRequested,setVinReviewRequested]=useState(false)
   const [showManualVehicleFields,setShowManualVehicleFields]=useState(false)
   const [error,setError]=useState('')
   const [editing,setEditing]=useState(false)
@@ -84,10 +86,13 @@ export default function MyStuffDetailScreen({ navigation, route }) {
   const [completingId,setCompletingId]=useState(null)
   const [completion,setCompletion]=useState(EMPTY_COMPLETION)
   const [completionCelebration,setCompletionCelebration]=useState(null)
+  const [selectedPresetIds,setSelectedPresetIds]=useState(new Set())
+  const [addingPresets,setAddingPresets]=useState(false)
   const requestGeneration=useRef(0)
   const serviceMutationAttempt=useRef(createMutationAttemptState())
   const completionInFlight=useRef(false)
   const definitionMutationAttempt=useRef(createMutationAttemptState())
+  const presetMutationAttempts=useRef(new Map())
   const definitionInFlight=useRef(false)
   const itemMutationAttempt=useRef(createMutationAttemptState())
   const itemInFlight=useRef(false)
@@ -115,7 +120,7 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         const type=result.item.measurements[0]||'miles'
         return {...EMPTY_USAGE,type,recordedOn:todayDateInput()}
       })
-      setReadings(result.readings);setDefinitions(result.definitions);setOccurrences(result.occurrences);setDueStates(filterActiveDueStates(result.dueStates,result.item))
+      setReadings(result.readings);setDefinitions(result.definitions);setOccurrences(result.occurrences);setDueStates(filterActiveDueStates(result.dueStates,result.item));setReminderDueStates(result.dueStates)
       setV3MaintenanceActive(v3.available)
       setPlannedOccurrences(normalizePlannedOccurrences(v3.schedule,v3.due,result.definitions))
     }catch(nextError){
@@ -129,12 +134,16 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     return()=>{requestGeneration.current+=1;completionInFlight.current=false}
   },[load]))
 
-  useEffect(()=>{setResearchConfirmationInvalidated(false);setVinReviewRequested(false);setShowManualVehicleFields(false)},[itemId])
+  useEffect(()=>{setSelectedPresetIds(new Set());presetMutationAttempts.current.clear();setShowManualVehicleFields(false)},[itemId])
 
   useEffect(()=>{
     if(!item)return
     setEdit({name:item.name||'',category:item.category||'other',itemType:item.itemType,year:item.model_year==null?'':String(item.model_year),make:item.make||'',model:item.model||'',trim:item.trim||'',series:item.series||'',manufacturer:item.manufacturer||'',vehicleType:item.vehicle_type||'',bodyStyle:item.body_style||'',plantName:item.plant_name||'',plantCountry:item.plant_country||'',vehicleMarket:item.vehicle_market||'',modelNumber:item.model_number||'',serialNumber:item.serial_number||'',vin:item.vin||'',engine:item.engine||'',engineModel:item.engine_model||'',engineDisplacementLiters:item.engine_displacement_liters==null?'':String(item.engine_displacement_liters),engineCylinders:item.engine_cylinders==null?'':String(item.engine_cylinders),transmission:item.transmission||'',drivetrain:item.drivetrain||'',fuelType:item.fuel_power_type||'',acquiredOn:item.acquired_on||'',notes:item.notes||'',usageProfile:item.usage_profile||'normal',measurements:item.measurements||[]})
   },[item?.id,item?.updated_at])
+
+  const reminderSchedules=useMemo(()=>buildV2MaintenanceReminderSchedules({
+    definitions,dueStates:reminderDueStates,plannedOccurrences,item:item||{},
+  }),[definitions,reminderDueStates,plannedOccurrences,item])
 
   function setEditValue(key,value){setValidationErrors({});setEdit(current=>({...current,[key]:value}))}
   function setExactType(value){setValidationErrors({});setEdit(current=>selectItemType(current,value))}
@@ -170,12 +179,11 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       const {itemType,...editable}=validatedEdit
       const payload={...editable,itemId:item.id,acquiredOn:edit.acquiredOn.trim()||null,notes:edit.notes.trim()||null}
       if(itemType!==item.itemType)payload.itemType=itemType
-      const invalidatesResearchIdentity=requiresResearchIdentityReconfirmation(item.itemType,itemType)
       const wirePayload=buildUpdateMyStuffItemV2WirePayload(payload)
       const mutationId=mutationIdForPayload(itemMutationAttempt.current,wirePayload)
       await runMutationThenRefresh({
         mutate:()=>updateMyStuffItemV2(wirePayload,mutationId),
-        onMutationSuccess:()=>{resetMutationAttemptState(itemMutationAttempt.current);if(invalidatesResearchIdentity)setResearchConfirmationInvalidated(true);setEditing(false)},
+        onMutationSuccess:()=>{resetMutationAttemptState(itemMutationAttempt.current);setEditing(false)},
         refresh:()=>load({quiet:true,throwOnError:true}),
         onMutationError:nextError=>Alert.alert('Could not update item',nextError.message||'Please try again.'),
         onRefreshError:nextError=>reportSavedRefreshFailure('Item details saved, but refresh failed',nextError),
@@ -243,6 +251,60 @@ export default function MyStuffDetailScreen({ navigation, route }) {
       })
     }
     finally{definitionInFlight.current=false;endItemOperation();setSaving(false)}
+  }
+
+  function presetWirePayload(preset) {
+    return buildCreateMaintenanceDefinitionV2WirePayload({
+      itemId:item.id,
+      ...buildCommonMaintenanceDraft(preset,item),
+    })
+  }
+
+  function presetMutationId(preset) {
+    let attempt=presetMutationAttempts.current.get(preset.id)
+    if(!attempt){attempt=createMutationAttemptState();presetMutationAttempts.current.set(preset.id,attempt)}
+    return mutationIdForPayload(attempt,presetWirePayload(preset))
+  }
+
+  function togglePreset(presetId) {
+    setSelectedPresetIds(current=>{
+      const next=new Set(current)
+      if(next.has(presetId))next.delete(presetId);else next.add(presetId)
+      return next
+    })
+  }
+
+  async function addPresetSchedules(presetIds) {
+    if(addingPresets||definitionInFlight.current)return
+    const requested=COMMON_MAINTENANCE_PRESETS.filter(preset=>presetIds.includes(preset.id))
+    if(requested.length===0)return Alert.alert('Choose a schedule','Select at least one common maintenance schedule to add.')
+    if(!beginItemOperation())return Alert.alert('Finish the current change','Wait for it to finish before adding maintenance schedules.')
+    definitionInFlight.current=true;setAddingPresets(true);setSaving(true)
+    try{
+      const result=await addCommonMaintenancePresets({
+        presets:requested,
+        readDefinitions:async()=>{
+          const latest=await getMyStuffItemV2(item.id,user.id)
+          return latest.definitions
+        },
+        mutationIdForPreset:presetMutationId,
+        createDefinition:(preset,mutationId)=>createMyStuffMaintenanceDefinitionV2(presetWirePayload(preset),mutationId),
+        onConfirmed:preset=>{
+          const attempt=presetMutationAttempts.current.get(preset.id)
+          if(attempt)resetMutationAttemptState(attempt)
+          presetMutationAttempts.current.delete(preset.id)
+        },
+      })
+      await load({quiet:true,throwOnError:true})
+      setSelectedPresetIds(current=>new Set([...current].filter(id=>!presetIds.includes(id))))
+      if(result.created.length>0)Alert.alert('Schedules added','Review and edit each interval for your vehicle and owner’s manual.')
+      else Alert.alert('Already added','Each selected schedule already has an active matching name and action.')
+    }catch(nextError){
+      try{await load({quiet:true,throwOnError:true})}catch{}
+      Alert.alert('Could not add all schedules',`${nextError.message||'Please try again.'}\n\nKeep the same selection when retrying; SideFlip will reuse the request and skip schedules already confirmed.`)
+    }finally{
+      definitionInFlight.current=false;endItemOperation();setAddingPresets(false);setSaving(false)
+    }
   }
 
   function archiveDefinition(value){
@@ -358,13 +420,13 @@ export default function MyStuffDetailScreen({ navigation, route }) {
     <Header title={item.name} onBack={()=>navigation.goBack()}/>
     <FocusAwareScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS==='ios'?'interactive':'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load({quiet:true})}} tintColor={ACCENT}/>}>
       {!!error&&<Text style={s.errorText}>{error}</Text>}
-      {detailTab==='Maintenance'&&<TouchableOpacity style={s.settingsButton} onPress={()=>{setVinReviewRequested(false);setShowItemSettings(value=>!value)}} accessibilityRole="button" accessibilityLabel="Item settings" accessibilityState={{expanded:showItemSettings}}><Text style={s.settingsButtonText}>{showItemSettings?'Hide item settings':'Item settings'}</Text></TouchableOpacity>}
+      {detailTab==='Maintenance'&&<TouchableOpacity style={s.settingsButton} onPress={()=>setShowItemSettings(value=>!value)} accessibilityRole="button" accessibilityLabel="Item settings" accessibilityState={{expanded:showItemSettings}}><Text style={s.settingsButtonText}>{showItemSettings?'Hide item settings':'Item settings'}</Text></TouchableOpacity>}
       {detailTab==='Maintenance'&&showItemSettings&&<View style={s.card}>
-        <View style={s.between}><Text style={s.sectionTitle}>Item details</Text><TouchableOpacity onPress={()=>{setVinReviewRequested(false);setEditing(value=>!value)}} accessibilityRole="button" accessibilityLabel={editing?'Cancel editing item':'Edit item'}><Text style={s.link}>{editing?'Cancel':'Edit'}</Text></TouchableOpacity></View>
+        <View style={s.between}><Text style={s.sectionTitle}>Item details</Text><TouchableOpacity onPress={()=>setEditing(value=>!value)} accessibilityRole="button" accessibilityLabel={editing?'Cancel editing item':'Edit item'}><Text style={s.link}>{editing?'Cancel':'Edit'}</Text></TouchableOpacity></View>
         {editing?<>
           <Field label="Item name *" value={edit.name} onChangeText={value=>setEditValue('name',value)}/>
           <MyStuffItemTypePicker value={edit.itemType} onChange={setExactType} error={validationErrors.itemType||validationErrors.category}/>
-          {supportsVinDecoder(edit.itemType)&&<><VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} confirmationPersistsIdentity initiallyExpanded={vinReviewRequested||!item.vin_confirmation_fingerprint} operationLock={itemOperationInFlight} onOperationLockChange={setVinConfirmationBusy} onIdentityConfirmed={async()=>{setResearchConfirmationInvalidated(false);setVinReviewRequested(false);setShowManualVehicleFields(false);setEditing(false);try{await load({quiet:true,throwOnError:true});setShowItemSettings(false);Alert.alert('Vehicle confirmed','The research button is now available in Maintenance. Research starts only when you tap it.')}catch(nextError){reportSavedRefreshFailure('Vehicle confirmed, but refresh failed',nextError)}}} fieldLabels={{transmission:'Transmission type'}} suggestionFields={['year','make','model','series','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','engine','transmission','drivetrain']}/><TouchableOpacity style={s.settingsButton} onPress={()=>setShowManualVehicleFields(value=>!value)} accessibilityRole="button"><Text style={s.link}>{showManualVehicleFields?'Hide manual vehicle fields':'Enter vehicle details manually'}</Text></TouchableOpacity></>}
+          {supportsVinDecoder(edit.itemType)&&<><VinDecodePanel subjectType="my_stuff_item" subjectId={item.id} values={edit} onChange={value=>{setValidationErrors({});setEdit(value)}} confirmationPersistsIdentity initiallyExpanded={!item.vin_confirmation_fingerprint} operationLock={itemOperationInFlight} onOperationLockChange={setVinConfirmationBusy} onIdentityConfirmed={async()=>{setShowManualVehicleFields(false);setEditing(false);try{await load({quiet:true,throwOnError:true});setShowItemSettings(false);Alert.alert('Vehicle details saved','The decoded and reviewed vehicle fields were saved.')}catch(nextError){reportSavedRefreshFailure('Vehicle details saved, but refresh failed',nextError)}}} fieldLabels={{transmission:'Transmission type'}} suggestionFields={['year','make','model','series','trim','bodyStyle','vehicleType','manufacturer','plantName','plantCountry','vehicleMarket','fuelType','engineCylinders','engineDisplacementLiters','engineModel','engine','transmission','drivetrain']}/><TouchableOpacity style={s.settingsButton} onPress={()=>setShowManualVehicleFields(value=>!value)} accessibilityRole="button"><Text style={s.link}>{showManualVehicleFields?'Hide manual vehicle fields':'Enter vehicle details manually'}</Text></TouchableOpacity></>}
           {(!supportsVinDecoder(edit.itemType)||showManualVehicleFields)&&<>
             <Field label="Model year" value={edit.year} onChangeText={value=>setEditValue('year',value)} keyboardType="number-pad"/>
             <Field label="Manufacturer" value={edit.manufacturer} onChangeText={value=>setEditValue('manufacturer',value)}/>
@@ -421,9 +483,6 @@ export default function MyStuffDetailScreen({ navigation, route }) {
         </>}
         <TouchableOpacity style={s.deleteItem} onPress={confirmDeleteItem} disabled={saving} accessibilityRole="button" accessibilityLabel="Delete My Stuff item" accessibilityState={{disabled:saving}}><Text style={s.deleteItemText}>Delete Item Permanently</Text></TouchableOpacity>
       </View>}
-      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&!item.vin_confirmation_fingerprint&&!researchConfirmationInvalidated&&<View style={s.card}><Text style={s.sectionTitle}>Confirm vehicle identity for manufacturer research</Text><Text style={s.muted}>Tap below, decode the VIN, then confirm the returned vehicle details. The separate research button appears here after confirmation and never starts automatically.</Text><TouchableOpacity style={s.settingsButton} onPress={()=>{setVinReviewRequested(true);setShowItemSettings(true);setEditing(true)}} accessibilityRole="button" accessibilityLabel="Decode and confirm VIN for manufacturer research"><Text style={s.settingsButtonText}>Decode and confirm VIN</Text></TouchableOpacity></View>}
-      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&researchConfirmationInvalidated&&<View style={s.card}><Text style={s.sectionTitle}>Confirm the current vehicle identity again</Text><Text style={s.muted}>The item type changed, so the previous confirmation cannot authorize manufacturer research. Decode and confirm the current identity before researching.</Text><TouchableOpacity style={s.settingsButton} onPress={()=>{setVinReviewRequested(true);setShowItemSettings(true);setEditing(true)}} accessibilityRole="button" accessibilityLabel="Reconfirm current vehicle identity"><Text style={s.settingsButtonText}>Decode and confirm VIN</Text></TouchableOpacity></View>}
-      {detailTab==='Maintenance'&&supportsVinDecoder(item.itemType)&&item.vin_confirmation_fingerprint&&!researchConfirmationInvalidated&&<ManufacturerMaintenanceResearch item={item} isPro={hasPro} onUpgrade={()=>navigation.navigate('Pro')} onApplied={()=>load({quiet:true,throwOnError:true})} operationLock={itemOperationInFlight} parentBusy={saving||vinConfirmationBusy}/>}
       <MyStuffV3Experience
         item={item}
         definitions={definitions}
@@ -454,6 +513,23 @@ export default function MyStuffDetailScreen({ navigation, route }) {
 
       {detailTab==='Maintenance'&&<>
       {v3MaintenanceActive&&<Text style={s.muted}>Complete maintenance through V3 Due Items above. Legacy service history remains available in History.</Text>}
+      {supportsVinDecoder(item.itemType)&&<View style={s.card}>
+        <Text style={s.sectionTitle}>Common maintenance schedules</Text>
+        <Text style={s.warning}>{COMMON_MAINTENANCE_DISCLAIMER}</Text>
+        <Text style={s.muted}>These generic presets are not vehicle-specific recommendations. Select several or add one, then edit the saved intervals below.</Text>
+        {COMMON_MAINTENANCE_PRESETS.map(preset=>{
+          const alreadyAdded=definitions.some(value=>activeDefinitionMatchesPreset(value,preset))
+          const selected=selectedPresetIds.has(preset.id)
+          const intervals=[item.measurements.includes('miles')&&preset.miles?`${preset.miles.toLocaleString()} mi`:null,preset.months?`${preset.months} months`:null].filter(Boolean).join(' or ')
+          return <View key={preset.id} style={s.presetRow}>
+            <TouchableOpacity style={s.presetChoice} onPress={()=>togglePreset(preset.id)} disabled={alreadyAdded||addingPresets} accessibilityRole="checkbox" accessibilityState={{checked:selected,disabled:alreadyAdded||addingPresets}} accessibilityLabel={`Select ${preset.name}`}>
+              <Text style={s.presetCheck}>{alreadyAdded?'✓':selected?'✓':'○'}</Text><View style={s.flex}><Text style={s.scheduleName}>{preset.name}</Text><Text style={s.muted}>{preset.catalogAction[0].toUpperCase()+preset.catalogAction.slice(1)} · {intervals} · editable after adding{alreadyAdded?' · already added':''}</Text></View>
+            </TouchableOpacity>
+            {!alreadyAdded&&<TouchableOpacity onPress={()=>addPresetSchedules([preset.id])} disabled={addingPresets||saving} accessibilityRole="button" accessibilityLabel={`Add this schedule: ${preset.name}`} accessibilityState={{disabled:addingPresets||saving}}><Text style={s.link}>Add</Text></TouchableOpacity>}
+          </View>
+        })}
+        <Button label={addingPresets?'Adding…':'Add selected'} onPress={()=>addPresetSchedules([...selectedPresetIds])} disabled={addingPresets||saving||selectedPresetIds.size===0}/>
+      </View>}
       <View style={s.between}><Text style={s.pageSection}>Maintenance schedules</Text><TouchableOpacity onPress={()=>showDefinition?cancelDefinitionEditor():openDefinitionEditor()} accessibilityRole="button" accessibilityLabel={showDefinition?'Cancel maintenance task':'Add maintenance task'}><Text style={s.link}>{showDefinition?'Cancel':'+ Add'}</Text></TouchableOpacity></View>
 
       {showDefinition&&<View style={s.card}>
@@ -487,6 +563,8 @@ export default function MyStuffDetailScreen({ navigation, route }) {
           </View>}
         </View>
       })}
+
+      <MaintenanceReminderPanel schedules={reminderSchedules} item={item}/>
 
       <ReportPanel subjectType="my_stuff_item" subjectId={item.id} isPro={hasPro} onUpgrade={()=>navigation.navigate('Pro')} />
       </>}
@@ -543,4 +621,4 @@ function Button({label,onPress,disabled}){return <TouchableOpacity style={[s.but
 function Reading({label,value,suffix}){return <View style={s.reading}><Text style={s.eyebrow}>{label}</Text><Text style={s.readingValue}>{value==null?'Not set':`${Number(value).toLocaleString()} ${suffix}`}</Text></View>}
 function IdentityLine({label,value}){if(value==null||String(value).trim()==='')return null;return <Text style={s.identityLine}><Text style={s.identityLabel}>{label}: </Text>{String(value)}</Text>}
 
-const s=StyleSheet.create({root:{flex:1,backgroundColor:'#FAFAF7'},center:{flex:1,justifyContent:'center',alignItems:'center',padding:30,backgroundColor:'#FAFAF7'},header:{paddingTop:0,paddingBottom:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E8E4DE'},headerSide:{width:70},back:{color:ACCENT,fontWeight:'700'},headerTitle:{flex:1,textAlign:'center',fontWeight:'800',fontSize:17,color:'#1A1917'},content:{padding:18,paddingBottom:100},settingsButton:{alignSelf:'flex-end',minHeight:44,justifyContent:'center',paddingHorizontal:12,borderRadius:10,borderWidth:1,borderColor:'#D7D2CB',backgroundColor:'#fff',marginBottom:6},settingsButtonText:{color:ACCENT,fontWeight:'800'},card:{backgroundColor:'#fff',borderRadius:14,padding:16,borderWidth:1,borderColor:'#E8E4DE',marginBottom:10},between:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},usageActionRow:{minHeight:44,flexDirection:'row',justifyContent:'flex-end',alignItems:'center'},flex:{flex:1},sectionTitle:{fontSize:17,fontWeight:'800',color:'#1A1917'},pageSection:{fontSize:18,fontWeight:'800',color:'#1A1917',marginTop:18,marginBottom:10},link:{color:ACCENT,fontWeight:'700'},itemName:{fontSize:23,fontWeight:'800',color:'#1A1917',marginTop:12},muted:{color:'#6B665E',lineHeight:20},identityLine:{color:'#444039',lineHeight:21,marginTop:4},identityLabel:{fontWeight:'700'},notes:{color:'#444039',lineHeight:20,marginTop:8},archiveBadge:{alignSelf:'flex-start',marginTop:10,color:'#6B4B16',backgroundColor:'#FFF1C9',paddingHorizontal:9,paddingVertical:5,borderRadius:10,fontWeight:'700'},readingRow:{flexDirection:'row',flexWrap:'wrap',gap:10,marginTop:4},reading:{minWidth:'29%',flex:1,backgroundColor:'#F3F1EC',borderRadius:10,padding:12},eyebrow:{fontSize:11,fontWeight:'700',color:'#79736A',textTransform:'uppercase'},readingValue:{fontWeight:'700',color:'#1A1917',marginTop:4},label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:14,marginBottom:5},input:{borderWidth:1,borderColor:'#D7D2CB',borderRadius:10,padding:12,fontSize:15,color:'#1A1917',backgroundColor:'#fff'},textarea:{minHeight:90,textAlignVertical:'top'},modeRow:{flexDirection:'row',gap:7},choice:{flex:1,borderWidth:1,borderColor:'#D7D2CB',borderRadius:9,paddingVertical:10,alignItems:'center'},choiceActive:{borderColor:ACCENT,backgroundColor:'#FFF2EE'},choiceText:{color:'#5C5850',fontWeight:'600',textTransform:'capitalize'},choiceTextActive:{color:ACCENT},button:{backgroundColor:ACCENT,borderRadius:10,padding:14,alignItems:'center',marginTop:18},buttonText:{color:'#fff',fontWeight:'800'},disabled:{opacity:.6},empty:{padding:18,borderRadius:12,backgroundColor:'#fff',borderWidth:1,borderColor:'#E8E4DE'},scheduleName:{fontSize:16,fontWeight:'800',color:'#1A1917'},pill:{paddingHorizontal:9,paddingVertical:6,borderRadius:12,backgroundColor:'#EDEAE5'},pill_due:{backgroundColor:'#FFF1C9'},pill_due_now:{backgroundColor:'#FFF1C9'},pill_due_soon:{backgroundColor:'#FFF1C9'},pill_needs_usage_update:{backgroundColor:'#EDEAE5'},pill_overdue:{backgroundColor:'#FDE0DB'},pill_upcoming:{backgroundColor:'#DFF1E8'},pillText:{fontSize:11,fontWeight:'800',color:'#443F38'},actions:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:14},smallButton:{backgroundColor:'#FFF2EE',borderRadius:9,paddingHorizontal:13,paddingVertical:10},smallButtonText:{color:ACCENT,fontWeight:'800'},deleteLink:{color:'#A33A2C',fontWeight:'600'},completionBox:{marginTop:8},cancelLink:{color:'#6B665E',fontWeight:'700',textAlign:'center',padding:12},historyRow:{backgroundColor:'#fff',borderRadius:12,padding:15,borderWidth:1,borderColor:'#E8E4DE',marginBottom:8,flexDirection:'row',gap:10},historyName:{fontWeight:'800',fontSize:15,color:'#1A1917'},cost:{fontWeight:'800',color:'#1A1917'},correctionToggle:{paddingVertical:13},warning:{color:'#8A5B13',fontSize:12,lineHeight:18,marginTop:6},deleteItem:{borderWidth:1,borderColor:'#D8A39B',borderRadius:10,padding:14,alignItems:'center',marginTop:10},deleteItemText:{color:'#A33A2C',fontWeight:'800'},nextDue:{color:'#5C5850',fontSize:12,lineHeight:18,marginTop:4},celebrationOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.42)',alignItems:'center',justifyContent:'center',padding:28},celebrationCard:{width:'100%',maxWidth:360,backgroundColor:'#fff',borderRadius:20,padding:24,alignItems:'center'},celebrationIcon:{fontSize:46},celebrationTitle:{fontSize:25,fontWeight:'900',color:'#1A1917',marginTop:8},celebrationText:{fontSize:15,color:'#5C5850',lineHeight:21,textAlign:'center',marginTop:8},celebrationButton:{alignSelf:'stretch',backgroundColor:ACCENT,borderRadius:11,padding:14,alignItems:'center',marginTop:20},celebrationButtonText:{color:'#fff',fontSize:16,fontWeight:'800'},errorText:{color:'#9A3023',marginBottom:10}})
+const s=StyleSheet.create({root:{flex:1,backgroundColor:'#FAFAF7'},center:{flex:1,justifyContent:'center',alignItems:'center',padding:30,backgroundColor:'#FAFAF7'},header:{paddingTop:0,paddingBottom:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',backgroundColor:'#fff',borderBottomWidth:1,borderBottomColor:'#E8E4DE'},headerSide:{width:70},back:{color:ACCENT,fontWeight:'700'},headerTitle:{flex:1,textAlign:'center',fontWeight:'800',fontSize:17,color:'#1A1917'},content:{padding:18,paddingBottom:100},settingsButton:{alignSelf:'flex-end',minHeight:44,justifyContent:'center',paddingHorizontal:12,borderRadius:10,borderWidth:1,borderColor:'#D7D2CB',backgroundColor:'#fff',marginBottom:6},settingsButtonText:{color:ACCENT,fontWeight:'800'},card:{backgroundColor:'#fff',borderRadius:14,padding:16,borderWidth:1,borderColor:'#E8E4DE',marginBottom:10},between:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},usageActionRow:{minHeight:44,flexDirection:'row',justifyContent:'flex-end',alignItems:'center'},flex:{flex:1},sectionTitle:{fontSize:17,fontWeight:'800',color:'#1A1917'},pageSection:{fontSize:18,fontWeight:'800',color:'#1A1917',marginTop:18,marginBottom:10},link:{color:ACCENT,fontWeight:'700'},itemName:{fontSize:23,fontWeight:'800',color:'#1A1917',marginTop:12},muted:{color:'#6B665E',lineHeight:20},identityLine:{color:'#444039',lineHeight:21,marginTop:4},identityLabel:{fontWeight:'700'},notes:{color:'#444039',lineHeight:20,marginTop:8},archiveBadge:{alignSelf:'flex-start',marginTop:10,color:'#6B4B16',backgroundColor:'#FFF1C9',paddingHorizontal:9,paddingVertical:5,borderRadius:10,fontWeight:'700'},readingRow:{flexDirection:'row',flexWrap:'wrap',gap:10,marginTop:4},reading:{minWidth:'29%',flex:1,backgroundColor:'#F3F1EC',borderRadius:10,padding:12},eyebrow:{fontSize:11,fontWeight:'700',color:'#79736A',textTransform:'uppercase'},readingValue:{fontWeight:'700',color:'#1A1917',marginTop:4},label:{fontSize:13,fontWeight:'700',color:'#5C5850',marginTop:14,marginBottom:5},input:{borderWidth:1,borderColor:'#D7D2CB',borderRadius:10,padding:12,fontSize:15,color:'#1A1917',backgroundColor:'#fff'},textarea:{minHeight:90,textAlignVertical:'top'},modeRow:{flexDirection:'row',gap:7},choice:{flex:1,borderWidth:1,borderColor:'#D7D2CB',borderRadius:9,paddingVertical:10,alignItems:'center'},choiceActive:{borderColor:ACCENT,backgroundColor:'#FFF2EE'},choiceText:{color:'#5C5850',fontWeight:'600',textTransform:'capitalize'},choiceTextActive:{color:ACCENT},button:{backgroundColor:ACCENT,borderRadius:10,padding:14,alignItems:'center',marginTop:18},buttonText:{color:'#fff',fontWeight:'800'},disabled:{opacity:.6},empty:{padding:18,borderRadius:12,backgroundColor:'#fff',borderWidth:1,borderColor:'#E8E4DE'},presetRow:{minHeight:58,flexDirection:'row',alignItems:'center',gap:10,borderBottomWidth:1,borderBottomColor:'#E8E4DE',paddingVertical:8},presetChoice:{flex:1,flexDirection:'row',alignItems:'center',gap:10,minHeight:44},presetCheck:{width:22,fontSize:20,color:ACCENT,fontWeight:'800'},scheduleName:{fontSize:16,fontWeight:'800',color:'#1A1917'},pill:{paddingHorizontal:9,paddingVertical:6,borderRadius:12,backgroundColor:'#EDEAE5'},pill_due:{backgroundColor:'#FFF1C9'},pill_due_now:{backgroundColor:'#FFF1C9'},pill_due_soon:{backgroundColor:'#FFF1C9'},pill_needs_usage_update:{backgroundColor:'#EDEAE5'},pill_overdue:{backgroundColor:'#FDE0DB'},pill_upcoming:{backgroundColor:'#DFF1E8'},pillText:{fontSize:11,fontWeight:'800',color:'#443F38'},actions:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:14},smallButton:{backgroundColor:'#FFF2EE',borderRadius:9,paddingHorizontal:13,paddingVertical:10},smallButtonText:{color:ACCENT,fontWeight:'800'},deleteLink:{color:'#A33A2C',fontWeight:'600'},completionBox:{marginTop:8},cancelLink:{color:'#6B665E',fontWeight:'700',textAlign:'center',padding:12},historyRow:{backgroundColor:'#fff',borderRadius:12,padding:15,borderWidth:1,borderColor:'#E8E4DE',marginBottom:8,flexDirection:'row',gap:10},historyName:{fontWeight:'800',fontSize:15,color:'#1A1917'},cost:{fontWeight:'800',color:'#1A1917'},correctionToggle:{paddingVertical:13},warning:{color:'#8A5B13',fontSize:12,lineHeight:18,marginTop:6},deleteItem:{borderWidth:1,borderColor:'#D8A39B',borderRadius:10,padding:14,alignItems:'center',marginTop:10},deleteItemText:{color:'#A33A2C',fontWeight:'800'},nextDue:{color:'#5C5850',fontSize:12,lineHeight:18,marginTop:4},celebrationOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.42)',alignItems:'center',justifyContent:'center',padding:28},celebrationCard:{width:'100%',maxWidth:360,backgroundColor:'#fff',borderRadius:20,padding:24,alignItems:'center'},celebrationIcon:{fontSize:46},celebrationTitle:{fontSize:25,fontWeight:'900',color:'#1A1917',marginTop:8},celebrationText:{fontSize:15,color:'#5C5850',lineHeight:21,textAlign:'center',marginTop:8},celebrationButton:{alignSelf:'stretch',backgroundColor:ACCENT,borderRadius:11,padding:14,alignItems:'center',marginTop:20},celebrationButtonText:{color:'#fff',fontSize:16,fontWeight:'800'},errorText:{color:'#9A3023',marginBottom:10}})

@@ -22,6 +22,10 @@ export function requestMaintenanceReminderPermission() {
   return maintenanceReminderRuntime.requestMaintenanceReminderPermission()
 }
 
+export function getMaintenanceReminderOptInStatus() {
+  return maintenanceReminderRuntime.getMaintenanceReminderOptInStatus()
+}
+
 export function createMaintenanceReminder(values) {
   return maintenanceReminderRuntime.createMaintenanceReminder(values)
 }

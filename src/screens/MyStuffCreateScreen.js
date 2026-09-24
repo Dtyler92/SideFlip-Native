@@ -78,7 +78,7 @@ export default function MyStuffCreateScreen({ navigation }) {
         autoFillBlanks
         initiallyExpanded
       />}
-      {supportsVinDecoder(draft.itemType) && <Text style={s.help}>Add the item to save and confirm its decoded vehicle identity. No research runs before the item exists.</Text>}
+      {supportsVinDecoder(draft.itemType) && <Text style={s.help}>Add the item to save its decoded vehicle details. You can review and update those details later in Item settings.</Text>}
       <Field label="Item name *" value={draft.name || ''} onChangeText={value => setValue('name', value)} placeholder="e.g. Work Truck" maxLength={200} />
       <MyStuffItemTypePicker value={draft.itemType} onChange={setExactType} error={validationErrors.itemType || validationErrors.category} />
       {supportsVinDecoder(draft.itemType)&&<TouchableOpacity style={s.manualButton} onPress={()=>setShowManualVehicleFields(value=>!value)} accessibilityRole="button"><Text style={s.manualButtonText}>{showManualVehicleFields?'Hide manual vehicle fields':'Enter vehicle details manually'}</Text></TouchableOpacity>}

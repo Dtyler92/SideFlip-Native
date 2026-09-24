@@ -68,7 +68,7 @@ test('generated and introspected iOS entitlements omit APNs while notifications 
     assert.ok(notifications.pods.some(pod => pod.podName === 'EXNotifications'))
     for (const module of ['PermissionsModule', 'SchedulerModule']) assert.ok(notifications.modules.includes(module))
     assert.equal(introspected.version, '1.1.0')
-    assert.equal(introspected.ios.buildNumber, '23')
+    assert.equal(introspected.ios.buildNumber, '24')
     assert.equal(introspected.ios.bundleIdentifier, 'com.sideflip.app')
     // Keep machine-readable evidence when requested by release preflight.
     if (process.env.LOCAL_NOTIFICATIONS_EVIDENCE_DIR) {

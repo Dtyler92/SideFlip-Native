@@ -189,7 +189,7 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
       if (!result.confirmed) return
       resetMutationAttemptState(confirmationAttempt.current)
       setConfirmed(true)
-      setMessage('All supported vehicle fields were saved. In Maintenance, tap Research manufacturer schedule to start separate Pro research.')
+      setMessage('All supported vehicle fields were saved.')
       await onIdentityConfirmed?.()
     } catch (error) {
       if (generation !== confirmationGeneration.current) return
@@ -245,8 +245,7 @@ export default function VinDecodePanel({ subjectType, subjectId, values, onChang
         {detail.status === 'conflicting' && <TouchableOpacity onPress={() => useSuggestion(field)} accessibilityRole="button" accessibilityLabel={`Use suggested ${fieldLabels[field] || defaultLabel(field)}`}><Text style={s.use}>Use suggestion</Text></TouchableOpacity>}
       </View>)}
       {hasBlankSuggestions && <TouchableOpacity style={s.fillButton} onPress={fillBlanks} accessibilityRole="button" accessibilityLabel="Fill Blank Fields"><Text style={s.fillText}>Fill Blank Fields</Text></TouchableOpacity>}
-      {((subjectType==='my_stuff_item'&&!!subjectId)||(subjectType==='project'&&typeof onConfirmDecoded==='function'))&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityLabel={subjectType==='my_stuff_item'?'Confirm vehicle for research':'Confirm vehicle'} accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{subjectType==='my_stuff_item'?(confirmed?'Vehicle Confirmed':'Confirm vehicle for research'):(confirmed?'Vehicle Confirmed':'Confirm Vehicle')}</Text></TouchableOpacity>}
-      {subjectType==='my_stuff_item'&&!!subjectId&&<Text style={s.hint}>After confirmation, return to Maintenance and tap the separate Research manufacturer schedule button. Confirmation itself never starts paid research.</Text>}
+      {((subjectType==='my_stuff_item'&&!!subjectId)||(subjectType==='project'&&typeof onConfirmDecoded==='function'))&&<TouchableOpacity style={[s.confirmButton,confirming&&s.disabled]} onPress={confirmVehicle} disabled={confirming} accessibilityRole="button" accessibilityLabel="Save reviewed vehicle details" accessibilityState={{disabled:confirming,busy:confirming}}><Text style={s.confirmText}>{confirmed?'Vehicle Details Saved':'Save Vehicle Details'}</Text></TouchableOpacity>}
     </View>}
     </>}
   </View>

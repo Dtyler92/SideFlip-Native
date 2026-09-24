@@ -38,15 +38,59 @@ function localReminderDate(value) {
   return date
 }
 
-function readingIsDue(schedule, item) {
+function currentReading(schedule, item) {
+  if (schedule?.tracking_type === 'mileage') return item?.currentUsage?.miles ?? item?.current_mileage
+  if (schedule?.tracking_type === 'hours') return item?.currentUsage?.hours ?? item?.current_hours
+  return null
+}
+
+function readingDueState(schedule, item) {
   const trackingType = schedule?.tracking_type
-  if (trackingType !== 'mileage' && trackingType !== 'hours') return false
+  if (trackingType !== 'mileage' && trackingType !== 'hours') return 'unknown'
   const dueRaw = schedule?.next_due_value
-  const currentRaw = trackingType === 'mileage' ? item?.current_mileage : item?.current_hours
-  if (dueRaw == null || currentRaw == null) return false
+  const currentRaw = currentReading(schedule,item)
+  if (dueRaw == null || currentRaw == null) return 'unknown'
   const due = Number(dueRaw)
   const current = Number(currentRaw)
-  return Number.isFinite(due) && Number.isFinite(current) && current >= due
+  if (!Number.isFinite(due) || !Number.isFinite(current)) return 'unknown'
+  if (current === due) return 'due'
+  return current > due ? 'overdue' : 'upcoming'
+}
+
+function concreteAuthoritativeAxes(schedule) {
+  const axes = new Set()
+  if (localReminderDate(schedule?.next_due_at)) axes.add('calendar')
+  for (const [field,axis] of [['next_due_mileage','miles'],['next_due_hours','hours'],['next_due_cycles','cycles']]) {
+    const value = schedule?.[field]
+    if (value != null && Number.isFinite(Number(value)) && Number(value) >= 0) axes.add(axis)
+  }
+  return axes
+}
+
+function authoritativeDueState(schedule) {
+  const status = schedule?.due_status
+  if (!['overdue','due_now','due_soon','upcoming'].includes(status)) return 'unknown'
+  const concreteAxes = concreteAuthoritativeAxes(schedule)
+  if (concreteAxes.size === 0) return 'unknown'
+  if (schedule?.due_semantics === 'all') {
+    const requiredAxes = Array.isArray(schedule.required_axes) ? schedule.required_axes : []
+    if (requiredAxes.length === 0 || !requiredAxes.every(axis=>concreteAxes.has(axis))) return 'unknown'
+  }
+  if (status === 'overdue') return 'overdue'
+  if (status === 'due_now') return 'due'
+  return 'upcoming'
+}
+
+export function classifyMaintenanceReminder(schedule, item = {}, now = new Date()) {
+  if (!schedule || schedule.enabled === false || schedule.deleted_at) return 'unknown'
+  if (schedule.due_status != null) return authoritativeDueState(schedule)
+  if (schedule.tracking_type !== 'calendar') return readingDueState(schedule,item)
+  const dueDate = localReminderDate(schedule.next_due_at)
+  if (!dueDate || !(now instanceof Date) || !Number.isFinite(now.getTime())) return 'unknown'
+  const dueDay = new Date(dueDate.getFullYear(),dueDate.getMonth(),dueDate.getDate()).getTime()
+  const today = new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime()
+  if (dueDay === today) return 'due'
+  return dueDay < today ? 'overdue' : 'upcoming'
 }
 
 export async function buildMaintenanceReminderRequest({
@@ -61,14 +105,25 @@ export async function buildMaintenanceReminderRequest({
   if (!identifier || schedule?.enabled === false || schedule?.deleted_at) return null
 
   let trigger
-  if (schedule?.tracking_type === 'calendar') {
+  if (schedule?.due_status != null) {
+    const dueState = authoritativeDueState(schedule)
+    if (dueState === 'unknown') return null
+    if (dueState === 'due' || dueState === 'overdue') trigger = null
+    else {
+      if (schedule.due_semantics === 'all') return null
+      const dueDate = localReminderDate(schedule.next_due_at)
+      if (!dueDate || dueDate.getTime() <= now.getTime()) return null
+      trigger = { type:'date',date:dueDate }
+    }
+  } else if (schedule?.tracking_type === 'calendar') {
     const dueDate = localReminderDate(schedule.next_due_at)
     if (!dueDate) return null
     trigger = dueDate.getTime() > now.getTime()
       ? { type: 'date', date: dueDate }
       : null
   } else {
-    if (!readingIsDue(schedule, item)) return null
+    const dueState = readingDueState(schedule,item)
+    if (dueState !== 'due' && dueState !== 'overdue') return null
     trigger = null
   }
 

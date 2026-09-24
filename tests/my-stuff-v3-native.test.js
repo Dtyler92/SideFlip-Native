@@ -243,7 +243,7 @@ test('owned-item update payload persists VIN and every typed confirmation identi
   })
 })
 
-test('VIN confirmation UI merges the decoded review before persistence and is not offered before item creation', () => {
+test('VIN confirmation UI merges the decoded review before persistence and stays item-scoped', () => {
   const panel = source('src/components/VinDecodePanel.js')
   const create = source('src/screens/MyStuffCreateScreen.js')
   assert.match(panel,/buildVehicleConfirmationSnapshot\(valuesRef\.current,preview\.fields\)/)
@@ -251,7 +251,7 @@ test('VIN confirmation UI merges the decoded review before persistence and is no
   assert.doesNotMatch(panel,/for \(const field of \['year','make','model'/)
   assert.ok(panel.indexOf('persist:persistIdentity') < panel.indexOf('confirm:value=>confirmMyStuffVehicleIdentityV3'))
   assert.match(panel,/subjectType==='my_stuff_item'&&!!subjectId/)
-  assert.match(create,/Add the item to save and confirm its decoded vehicle identity/)
+  assert.match(create,/Add the item to save its decoded vehicle details/)
 })
 
 test('linked service expense edits use only the atomic service-expense RPC and cannot fall through', async () => {
@@ -272,13 +272,26 @@ test('V3 planned and due RPC rows retain planned occurrence identity', () => {
   assert.deepEqual(normalizePlannedOccurrences(schedule,due,[{id:'def-1',name:'Oil change'}]), [{id:'plan-1',planned_occurrence_id:'plan-1',definition_id:'def-1',status:'not_completed',due_at:'2026-10-01',name:'Oil change',due_status:'due_soon'}])
 })
 
-test('applied AI research schedules render in the Manufacturer group', () => {
+test('manufacturer and historical AI research schedules render only in the Manufacturer group', () => {
   const groups=groupMaintenanceOccurrences(
-    [{planned_occurrence_id:'ai-plan',definition_id:'ai-def'},{planned_occurrence_id:'manual-plan',definition_id:'manual-def'}],
-    [{id:'ai-def',provenance_type:'ai_research',normal_interval_miles:7500},{id:'manual-def',provenance_type:'manual',normal_interval_miles:5000}],
+    [
+      {planned_occurrence_id:'manufacturer-plan',definition_id:'manufacturer-def'},
+      {planned_occurrence_id:'historical-ai-plan',definition_id:'historical-ai-def'},
+      {planned_occurrence_id:'manual-plan',definition_id:'manual-def'},
+      {planned_occurrence_id:'time-plan',definition_id:'time-def'},
+    ],
+    [
+      {id:'manufacturer-def',provenance_type:'manufacturer',normal_interval_miles:7500},
+      {id:'historical-ai-def',provenance_type:'ai_research',normal_interval_miles:6000},
+      {id:'manual-def',provenance_type:'manual',normal_interval_miles:5000},
+      {id:'time-def',provenance_type:'manual',normal_interval_days:180},
+    ],
   )
-  assert.deepEqual(groups.Manufacturer.map(row=>row.planned_occurrence_id),['ai-plan'])
+  assert.deepEqual(groups.Manufacturer.map(row=>row.planned_occurrence_id),['manufacturer-plan','historical-ai-plan'])
   assert.deepEqual(groups.Mileage.map(row=>row.planned_occurrence_id),['manual-plan'])
+  assert.deepEqual(groups.Time.map(row=>row.planned_occurrence_id),['time-plan'])
+  assert.ok(!groups.Mileage.includes(groups.Manufacturer[1]))
+  assert.ok(!groups.Time.includes(groups.Manufacturer[1]))
 })
 
 test('service form builds only the exact structured backend service contract', () => {
@@ -320,19 +333,17 @@ test('V3 native experience exposes tabs, forms, status controls, provenance, and
   assert.doesNotMatch(detail, /ImagePicker|Select receipt photo|Receipt \/ photo/)
 })
 
-test('Free decode can update every supported field and points to separately authorized Pro research', () => {
+test('Free decode can update every supported field without a maintenance research action', () => {
   const vin = source('src/components/VinDecodePanel.js')
   assert.doesNotMatch(vin, /if \(!isPro\) return onUpgrade\(\)/)
   assert.match(vin, /Basic NHTSA decode/)
-  assert.match(vin, /Confirm vehicle for research/)
+  assert.match(vin, /Save Vehicle Details/)
   assert.match(vin, /Unconfirmed/)
   assert.match(vin, /Verified/)
   assert.match(vin, /confirmMyStuffVehicleIdentityV3/)
   assert.match(vin, /ALWAYS_EDITABLE_REVIEW_FIELDS[^]*transmission/)
   assert.match(vin, /Transmission type/)
-  assert.doesNotMatch(vin, /enqueueMyStuffResearchV3|enqueue_my_stuff_research_v3|Confirm Vehicle & Research/)
-  assert.match(vin, /Research manufacturer schedule/)
-  assert.doesNotMatch(vin, /Research is not available yet|queues zero research jobs/)
+  assert.doesNotMatch(vin, /research|enqueueMyStuffResearchV3|enqueue_my_stuff_research_v3/i)
 })
 
 test('V3 detail loads planned schedules and due views without duplicate V2/history rendering', () => {

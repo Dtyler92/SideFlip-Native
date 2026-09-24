@@ -22,28 +22,24 @@ test('Item Settings shows the complete saved VIN and every supported decoded ide
   ]) assert.match(screen, new RegExp(label.replaceAll(' / ',' \\/ '), 'i'), label)
 })
 
-test('VIN review saves all supported fields and then exposes the separate research action', () => {
+test('VIN review saves all supported fields without exposing maintenance research', () => {
   const panel = source('src/components/VinDecodePanel.js')
   const detail = source('src/screens/MyStuffDetailScreen.js')
-  assert.match(panel, /Confirm vehicle for research/)
+  assert.match(panel, /Save reviewed vehicle details/)
   assert.match(panel, /buildVehicleConfirmationSnapshot\(valuesRef\.current,preview\.fields\)/)
-  assert.match(panel, /Research manufacturer schedule/)
-  assert.doesNotMatch(panel, /Research is not available yet|queues zero research jobs/)
-  assert.match(detail, /Confirm vehicle identity for manufacturer research/)
+  assert.doesNotMatch(panel, /manufacturer.*research|Research manufacturer schedule/i)
   assert.match(detail, /confirmationPersistsIdentity/)
   assert.doesNotMatch(detail, /persistIdentityForConfirmation/)
   assert.match(detail, /'series'/)
   assert.match(detail, /label="Series" value=\{item\.series\}/)
-  assert.match(detail, /!item\.vin_confirmation_fingerprint/)
-  assert.ok(detail.indexOf('<ManufacturerMaintenanceResearch') < detail.indexOf('<MyStuffV3Experience'), 'research CTA should be near the top of Maintenance after identity confirmation')
+  assert.match(detail, /Common maintenance schedules/)
+  assert.doesNotMatch(detail, /ManufacturerMaintenanceResearch|maintenanceResearchClient/)
 })
 
-test('VIN research review opens a focused expanded decoder instead of duplicate vehicle fields', () => {
+test('VIN detail review opens the decoder instead of duplicate vehicle fields', () => {
   const create = source('src/screens/MyStuffCreateScreen.js')
   const detail = source('src/screens/MyStuffDetailScreen.js')
-  assert.match(detail, /const \[vinReviewRequested,setVinReviewRequested\]=useState\(false\)/)
-  assert.match(detail, /setVinReviewRequested\(true\);setShowItemSettings\(true\);setEditing\(true\)/)
-  assert.match(detail, /initiallyExpanded=\{vinReviewRequested\|\|!item\.vin_confirmation_fingerprint\}/)
+  assert.match(detail, /initiallyExpanded=\{!item\.vin_confirmation_fingerprint\}/)
   assert.match(detail, /supportsVinDecoder\(edit\.itemType\)&&<><VinDecodePanel/)
   assert.match(detail, /\(!supportsVinDecoder\(edit\.itemType\)\|\|showManualVehicleFields\)&&<>/)
   assert.match(create, /\(!supportsVinDecoder\(draft\.itemType\)\|\|showManualVehicleFields\) && <>/)

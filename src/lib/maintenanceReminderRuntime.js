@@ -126,6 +126,7 @@ export function createMaintenanceReminderRuntime({
 
   return {
     requestMaintenanceReminderPermission,
+    getMaintenanceReminderOptInStatus: hasMaintenanceOptIn,
     createMaintenanceReminder: syncMaintenanceReminder,
     updateMaintenanceReminder: syncMaintenanceReminder,
     cancelMaintenanceReminder,
