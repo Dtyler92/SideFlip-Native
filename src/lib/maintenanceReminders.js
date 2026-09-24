@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Crypto from 'expo-crypto'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
+import { buildMaintenanceReminderValues } from './maintenanceReminderModel'
 import { createMaintenanceReminderRuntime } from './maintenanceReminderRuntime'
 
 const deriveDigest = value => Crypto.digestStringAsync(
@@ -20,6 +21,21 @@ const maintenanceReminderRuntime = createMaintenanceReminderRuntime({
 // Call only from an explicit user opt-in action.
 export function requestMaintenanceReminderPermission() {
   return maintenanceReminderRuntime.requestMaintenanceReminderPermission()
+}
+
+export function getMaintenanceReminderStatus() {
+  return maintenanceReminderRuntime.getMaintenanceReminderStatus()
+}
+
+export async function syncMaintenanceReminders({ definitions = [], dueStates = [], item = {} } = {}) {
+  const dueByDefinition = new Map(dueStates.map(value => [value.definition_id,value]))
+  const results = []
+  for (const definition of definitions) {
+    results.push(await maintenanceReminderRuntime.updateMaintenanceReminder(
+      buildMaintenanceReminderValues(definition,dueByDefinition.get(definition.id),item),
+    ))
+  }
+  return results
 }
 
 export function createMaintenanceReminder(values) {

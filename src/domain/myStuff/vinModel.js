@@ -204,7 +204,7 @@ export function decodedVehicleSuggestions(vehicle = {}) {
     engineDisplacementLiters: Number.isFinite(typedDisplacement) ? typedDisplacement : vehicle.displacementLiters,
     engineModel: vehicle.engineModel,
     // Keep the released Project/V2 compatibility projection while retaining
-    // each typed field independently for V3 confirmation and research.
+    // each typed field independently for V3 confirmation.
     engine: engineParts.length ? engineParts.join(' · ') : vehicle.engineModel,
     transmission: vehicle.transmissionStyle,
     drivetrain: vehicle.driveType,

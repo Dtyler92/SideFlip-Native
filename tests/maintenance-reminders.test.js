@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import {
   buildMaintenanceReminderRequest,
+  buildMaintenanceReminderValues,
+  listDueMaintenanceReminders,
   maintenanceReminderId,
 } from '../src/lib/maintenanceReminderModel.js'
 import {
@@ -135,6 +137,30 @@ test('reading reminders only become immediate when the reading reaches its due v
   assert.equal((await requestFor({ schedule, item: { current_mileage: 12000 } })).trigger, null)
 })
 
+test('V2 due-state reminders expose only due rows and map private scheduling values', async () => {
+  const definitions = [
+    { id:'oil', name:'Oil change', enabled:true },
+    { id:'brakes', name:'Brake inspection', enabled:true },
+    { id:'archived', name:'Archived task', enabled:false },
+  ]
+  const dueStates = [
+    { definition_id:'oil', due_status:'overdue', next_due_mileage:12000 },
+    { definition_id:'brakes', due_status:'upcoming', next_due_at:'2027-01-01' },
+    { definition_id:'archived', due_status:'due_now', next_due_hours:10 },
+  ]
+  assert.deepEqual(listDueMaintenanceReminders(definitions,dueStates), [
+    { id:'oil', name:'Oil change', status:'overdue', detail:'12,000 mi' },
+  ])
+  const values = buildMaintenanceReminderValues(definitions[0],dueStates[0],{currentUsage:{miles:12500}})
+  assert.deepEqual(values, {
+    schedule:{id:'oil',enabled:true,deleted_at:undefined,due_status:'overdue',next_due_at:undefined,next_due_mileage:12000,next_due_hours:undefined,next_due_cycles:undefined},
+    item:{current_mileage:12500,current_hours:undefined,current_cycles:undefined},
+  })
+  const request = await requestFor({...values,platform:'android',channelId:'maintenance-reminders'})
+  assert.deepEqual(request.trigger,{channelId:'maintenance-reminders'})
+  assert.equal(JSON.stringify(request).includes('Oil change'),false)
+})
+
 test('disabled, deleted, malformed, and incomplete schedules produce no reminder', async () => {
   assert.equal(await requestFor({ schedule: { ...calendarSchedule, enabled: false } }), null)
   assert.equal(await requestFor({ schedule: { ...calendarSchedule, deleted_at: '2026-09-03T00:00:00Z' } }), null)
@@ -169,6 +195,7 @@ test('persisted maintenance opt-in permits create and update without re-requesti
   assert.deepEqual(updated, created)
   assert.equal(created.reminderId.includes(calendarSchedule.id), false)
   assert.equal(notifications.calls.filter(call => call[0] === 'request').length, 0)
+  assert.equal(notifications.calls.filter(call => call[0] === 'channel').length, 2)
   const schedules = notifications.calls.filter(call => call[0] === 'schedule')
   assert.equal(schedules.length, 2)
   assert.equal(schedules[0][1].identifier, schedules[1][1].identifier)
@@ -181,6 +208,7 @@ test('permission denial, OS revocation, and storage failure fail closed', async 
   } })
   assert.deepEqual(await denied.runtime.requestMaintenanceReminderPermission(), { status: 'denied' })
   assert.equal(deniedStorage.values.get(MAINTENANCE_REMINDER_OPT_IN_KEY), 'denied')
+  assert.deepEqual(await denied.runtime.getMaintenanceReminderStatus(), { status: 'denied' })
   assert.equal((await denied.runtime.createMaintenanceReminder({ schedule: calendarSchedule })).status, 'consent-required')
 
   const revokedStorage = storageDouble({ [MAINTENANCE_REMINDER_OPT_IN_KEY]: 'granted' })
@@ -222,4 +250,15 @@ test('Expo dependencies are SDK-pinned and native adapter injects crypto and per
   assert.match(adapter, /CryptoDigestAlgorithm\.SHA256/)
   assert.match(adapter, /AsyncStorage/)
   assert.doesNotMatch(startup, /requestMaintenanceReminderPermission|requestPermissionsAsync|setNotificationChannelAsync/)
+})
+
+test('Maintenance UI exposes due reminders and an explicit resilient local-only opt-in', () => {
+  const detail = source('src/screens/MyStuffDetailScreen.js')
+  assert.match(detail,/Maintenance reminders/)
+  assert.match(detail,/Enable local reminders/)
+  assert.match(detail,/listDueMaintenanceReminders\(definitions,dueStates\)/)
+  assert.match(detail,/requestMaintenanceReminderPermission\(\)/)
+  assert.match(detail,/syncMaintenanceReminders/)
+  assert.match(detail,/accessibilityLiveRegion="polite"/)
+  assert.doesNotMatch(detail,/push token|expo push|fetch\(|axios/i)
 })

@@ -7,6 +7,46 @@ const GENERIC_CONTENT = Object.freeze({
   data: Object.freeze({ type: 'my-stuff-maintenance' }),
 })
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+const DUE_REMINDER_STATUSES = new Set(['overdue','due_now'])
+
+function dueDetail(value = {}) {
+  const parts = []
+  if (value.next_due_at) parts.push(`Date ${String(value.next_due_at).slice(0,10)}`)
+  if (value.next_due_mileage != null) parts.push(`${Number(value.next_due_mileage).toLocaleString()} mi`)
+  if (value.next_due_hours != null) parts.push(`${Number(value.next_due_hours).toLocaleString()} hr`)
+  if (value.next_due_cycles != null) parts.push(`${Number(value.next_due_cycles).toLocaleString()} cycles`)
+  return parts.join(' · ')
+}
+
+export function listDueMaintenanceReminders(definitions = [], dueStates = []) {
+  const dueByDefinition = new Map((Array.isArray(dueStates) ? dueStates : []).map(value => [value.definition_id,value]))
+  return (Array.isArray(definitions) ? definitions : []).flatMap(definition => {
+    const due = dueByDefinition.get(definition.id)
+    if (definition.enabled === false || !DUE_REMINDER_STATUSES.has(due?.due_status)) return []
+    return [{ id:definition.id, name:definition.name || 'Maintenance', status:due.due_status, detail:dueDetail(due) }]
+  })
+}
+
+export function buildMaintenanceReminderValues(definition = {}, dueState = {}, item = {}) {
+  const currentUsage = item.currentUsage || {}
+  return {
+    schedule:{
+      id:definition.id,
+      enabled:definition.enabled,
+      deleted_at:definition.deleted_at,
+      due_status:dueState?.due_status,
+      next_due_at:dueState?.next_due_at,
+      next_due_mileage:dueState?.next_due_mileage,
+      next_due_hours:dueState?.next_due_hours,
+      next_due_cycles:dueState?.next_due_cycles,
+    },
+    item:{
+      current_mileage:currentUsage.miles ?? item.current_mileage,
+      current_hours:currentUsage.hours ?? item.current_hours,
+      current_cycles:currentUsage.cycles ?? item.current_cycles,
+    },
+  }
+}
 
 export async function maintenanceReminderId(scheduleId, deriveDigest) {
   let id
@@ -39,10 +79,13 @@ function localReminderDate(value) {
 }
 
 function readingIsDue(schedule, item) {
-  const trackingType = schedule?.tracking_type
-  if (trackingType !== 'mileage' && trackingType !== 'hours') return false
-  const dueRaw = schedule?.next_due_value
-  const currentRaw = trackingType === 'mileage' ? item?.current_mileage : item?.current_hours
+  let trackingType = schedule?.tracking_type
+  let dueRaw = schedule?.next_due_value
+  if (!trackingType && schedule?.next_due_mileage != null) { trackingType = 'mileage'; dueRaw = schedule.next_due_mileage }
+  else if (!trackingType && schedule?.next_due_hours != null) { trackingType = 'hours'; dueRaw = schedule.next_due_hours }
+  else if (!trackingType && schedule?.next_due_cycles != null) { trackingType = 'cycles'; dueRaw = schedule.next_due_cycles }
+  if (trackingType !== 'mileage' && trackingType !== 'hours' && trackingType !== 'cycles') return false
+  const currentRaw = trackingType === 'mileage' ? item?.current_mileage : trackingType === 'hours' ? item?.current_hours : item?.current_cycles
   if (dueRaw == null || currentRaw == null) return false
   const due = Number(dueRaw)
   const current = Number(currentRaw)
@@ -61,7 +104,9 @@ export async function buildMaintenanceReminderRequest({
   if (!identifier || schedule?.enabled === false || schedule?.deleted_at) return null
 
   let trigger
-  if (schedule?.tracking_type === 'calendar') {
+  if (DUE_REMINDER_STATUSES.has(schedule?.due_status)) {
+    trigger = null
+  } else if (schedule?.tracking_type === 'calendar' || schedule?.next_due_at) {
     const dueDate = localReminderDate(schedule.next_due_at)
     if (!dueDate) return null
     trigger = dueDate.getTime() > now.getTime()

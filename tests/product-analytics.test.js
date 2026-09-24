@@ -62,7 +62,6 @@ test('My Stuff V2 analytics allow only privacy-safe lifecycle event names', () =
   for (const event of [
     'my_stuff_opened', 'my_stuff_item_created', 'my_stuff_project_transferred',
     'my_stuff_free_limit_reached', 'my_stuff_upgrade_prompt_viewed',
-    'my_stuff_research_started', 'my_stuff_research_completed', 'my_stuff_research_failed',
     'my_stuff_maintenance_completed', 'my_stuff_report_generated',
     'project_report_generated', 'vin_decode_requested', 'vin_decode_succeeded',
     'vin_decode_failed',

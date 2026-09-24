@@ -32,21 +32,25 @@ export function createMaintenanceReminderRuntime({
     await persistOptIn(OPTED_OUT)
   }
 
+  async function ensureAndroidChannel() {
+    if (platform !== 'android') return true
+    if (!notifications?.setNotificationChannelAsync) return false
+    await notifications.setNotificationChannelAsync(MAINTENANCE_REMINDER_CHANNEL_ID, {
+      name: 'Maintenance reminders',
+      importance: notifications.AndroidImportance?.DEFAULT ?? 3,
+    })
+    return true
+  }
+
   async function requestMaintenanceReminderPermission() {
     try {
       if (!notifications?.requestPermissionsAsync || !storage?.setItem) {
         await denyOptIn()
         return { status: 'unavailable' }
       }
-      if (platform === 'android') {
-        if (!notifications.setNotificationChannelAsync) {
-          await denyOptIn()
-          return { status: 'unavailable' }
-        }
-        await notifications.setNotificationChannelAsync(MAINTENANCE_REMINDER_CHANNEL_ID, {
-          name: 'Maintenance reminders',
-          importance: notifications.AndroidImportance?.DEFAULT ?? 3,
-        })
+      if (!await ensureAndroidChannel()) {
+        await denyOptIn()
+        return { status: 'unavailable' }
       }
 
       const permission = await notifications.requestPermissionsAsync()
@@ -67,11 +71,11 @@ export function createMaintenanceReminderRuntime({
   }
 
   async function hasMaintenanceOptIn() {
-    if (locallyBlocked) return { status: 'not-opted-in' }
+    if (locallyBlocked) return { status: 'denied' }
     if (!storage?.getItem) return { status: 'unavailable' }
     try {
       const value = await storage.getItem(MAINTENANCE_REMINDER_OPT_IN_KEY)
-      return { status: value === OPTED_IN ? 'opted-in' : 'not-opted-in' }
+      return { status: value === OPTED_IN ? 'opted-in' : value === OPTED_OUT ? 'denied' : 'not-opted-in' }
     } catch {
       return { status: 'unavailable' }
     }
@@ -117,6 +121,7 @@ export function createMaintenanceReminderRuntime({
         await denyOptIn()
         return { status: 'permission-denied', reminderId }
       }
+      if (!await ensureAndroidChannel()) return { status: 'unavailable', reminderId }
       await notifications.scheduleNotificationAsync(request)
       return { status: 'scheduled', reminderId }
     } catch {
@@ -126,6 +131,7 @@ export function createMaintenanceReminderRuntime({
 
   return {
     requestMaintenanceReminderPermission,
+    getMaintenanceReminderStatus: hasMaintenanceOptIn,
     createMaintenanceReminder: syncMaintenanceReminder,
     updateMaintenanceReminder: syncMaintenanceReminder,
     cancelMaintenanceReminder,
